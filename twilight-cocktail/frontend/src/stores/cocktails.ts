@@ -27,8 +27,19 @@ export const useCocktailStore = defineStore('cocktails', {
       this.loading = true
       try {
         const response = await fetchCocktails()
-        this.items = response.items
-        this.loadedFromApi = true
+        try {
+          const staticResponse = await fetchStaticCocktailCatalog()
+          if (staticResponse.items.length > response.items.length) {
+            this.items = staticResponse.items
+            this.loadedFromApi = false
+          } else {
+            this.items = response.items
+            this.loadedFromApi = true
+          }
+        } catch {
+          this.items = response.items
+          this.loadedFromApi = true
+        }
         this.error = ''
       } catch {
         try {
