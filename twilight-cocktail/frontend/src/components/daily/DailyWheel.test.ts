@@ -84,6 +84,21 @@ describe('DailyWheel', () => {
     expect(wrapper.findAll('.keyword-star')).toHaveLength(150)
   })
 
+  it('shows labels only for the first twenty visual bubbles', () => {
+    const fullCatalog = Array.from({ length: 30 }, (_item, index) =>
+      makeCocktail(`cocktail-${index}`, `酒款${index}`),
+    )
+    const wrapper = mount(DailyWheel, {
+      props: { candidates: fullCatalog, spinning: false },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    expect(wrapper.findAll('.keyword-star.is-labeled')).toHaveLength(20)
+    expect(wrapper.findAll('.keyword-star.is-dot-only')).toHaveLength(10)
+    expect(wrapper.findAll('.keyword-star__label')).toHaveLength(20)
+    expect(wrapper.findAll('.keyword-star__point')).toHaveLength(10)
+  })
+
   it('sizes keyword bubbles from popularity and label length', () => {
     const popular = { ...makeCocktail('popular', '莫吉托'), popularityWeight: 10 }
     const longName = { ...makeCocktail('long', '非常长的鸡尾酒名字'), popularityWeight: 1 }
@@ -95,5 +110,6 @@ describe('DailyWheel', () => {
 
     expect(styles[0]).toContain('--bubble-size:')
     expect(styles[1]).toContain('--bubble-size:')
+    expect(styles[0]).toContain('--bubble-size: 3.')
   })
 })

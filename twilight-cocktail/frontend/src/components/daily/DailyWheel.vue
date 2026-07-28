@@ -11,11 +11,17 @@
         v-for="node in keywordNodes"
         :key="node.slug"
         class="keyword-star"
-        :class="{ 'is-selected': selected?.slug === node.slug }"
+        :class="{
+          'is-selected': selected?.slug === node.slug,
+          'is-labeled': node.showLabel,
+          'is-dot-only': !node.showLabel,
+        }"
         :style="node.style"
+        :aria-label="node.nameZh"
       >
         <span class="keyword-star__glow" />
-        <span class="keyword-star__text">{{ node.nameZh }}</span>
+        <span v-if="node.showLabel" class="keyword-star__label">{{ node.nameZh }}</span>
+        <span v-else class="keyword-star__point" />
       </span>
 
       <div v-if="spinning" class="selection-current" aria-live="polite">
@@ -78,25 +84,26 @@ defineEmits<{
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const MAX_VISIBLE_KEYWORDS = 150
 const KEYWORD_COLUMNS = 15
+const LABELED_KEYWORDS = 20
 
 const positionForIndex = (index: number, total: number) => {
   const rows = Math.ceil(total / KEYWORD_COLUMNS)
-  const slot = (index * 47) % Math.max(total, 1)
+  const slot = (index * 73) % Math.max(total, 1)
   const row = Math.floor(slot / KEYWORD_COLUMNS)
   const column = slot % KEYWORD_COLUMNS
-  const rowOffset = row % 2 ? 0.46 : 0
-  const xBase = 5.8 + ((column + rowOffset) / KEYWORD_COLUMNS) * 88.4
+  const rowOffset = row % 2 ? 0.42 : -0.14
+  const xBase = 5.2 + ((column + rowOffset) / KEYWORD_COLUMNS) * 89.8
   const yBase = rows <= 1 ? 52 : 8.5 + (row / (rows - 1)) * 83
-  const wave = Math.sin(index * GOLDEN_ANGLE) * 0.34
-  const jitterX = (((index * 29) % 9) - 4) * 0.14 + wave
-  const jitterY = (((index * 31) % 9) - 4) * 0.12 + Math.cos(index * GOLDEN_ANGLE) * 0.26
+  const wave = Math.sin(index * GOLDEN_ANGLE) * 0.76
+  const jitterX = (((index * 29) % 11) - 5) * 0.22 + wave
+  const jitterY = (((index * 31) % 11) - 5) * 0.24 + Math.cos(index * GOLDEN_ANGLE) * 0.62
   return [Math.min(97, Math.max(3, xBase + jitterX)), Math.min(94, Math.max(8, yBase + jitterY))]
 }
 
 const bubbleSizeFor = (item: Cocktail) => {
-  const popularityBoost = Math.min(10, Math.max(1, item.popularityWeight || 1)) * 0.05
-  const lengthBoost = Math.min(0.3, Math.max(0, item.nameZh.length - 3) * 0.04)
-  return 2.25 + popularityBoost + lengthBoost
+  const popularityBoost = Math.min(10, Math.max(1, item.popularityWeight || 1)) * 0.12
+  const lengthBoost = Math.min(0.36, Math.max(0, item.nameZh.length - 3) * 0.055)
+  return 1.88 + popularityBoost + lengthBoost
 }
 
 const visibleCandidates = computed(() => {
@@ -114,12 +121,13 @@ const keywordNodes = computed(() =>
     const [x, y] = positionForIndex(index, visibleCandidates.value.length)
     return {
       ...item,
+      showLabel: index < LABELED_KEYWORDS,
       style: {
         '--x': `${x}%`,
         '--y': `${y}%`,
         '--delay': `${(index % 8) * 0.18}s`,
         '--drift': `${4.2 + (index % 5) * 0.42}s`,
-        '--scale': `${0.74 + (index % 5) * 0.055}`,
+        '--scale': `${0.72 + (index % 7) * 0.046}`,
         '--bubble-size': `${bubbleSizeFor(item).toFixed(2)}rem`,
       },
     }
@@ -236,7 +244,8 @@ const stageState = computed(() => {
     0 0 calc(var(--bubble-size) * 0.64) rgba(249, 237, 208, 0.34);
 }
 
-.keyword-star__text {
+.keyword-star__label,
+.keyword-star__point {
   position: relative;
   display: inline-flex;
   width: var(--bubble-size);
@@ -252,14 +261,34 @@ const stageState = computed(() => {
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 0.8rem 2rem rgba(0, 0, 0, 0.08);
   color: rgba(250, 244, 225, 0.78);
+  backdrop-filter: blur(14px);
+}
+
+.keyword-star__label {
   font-size: clamp(0.58rem, calc(var(--bubble-size) * 0.16), 0.78rem);
   line-height: 1.12;
   padding: 0.36rem;
-  backdrop-filter: blur(14px);
   overflow: hidden;
   text-align: center;
   white-space: normal;
   word-break: break-word;
+}
+
+.keyword-star__point::after {
+  width: calc(var(--bubble-size) * 0.25);
+  height: calc(var(--bubble-size) * 0.25);
+  border-radius: 999px;
+  background: rgba(255, 248, 232, 0.78);
+  box-shadow: 0 0 calc(var(--bubble-size) * 0.36) rgba(255, 248, 232, 0.5);
+  content: '';
+}
+
+.is-labeled .keyword-star__glow {
+  opacity: 0.58;
+}
+
+.is-dot-only .keyword-star__glow {
+  opacity: 0.88;
 }
 
 .is-searching .keyword-star {
@@ -268,7 +297,8 @@ const stageState = computed(() => {
     keyword-twinkle 920ms var(--delay) ease-in-out infinite;
 }
 
-.is-searching .keyword-star__text {
+.is-searching .keyword-star__label,
+.is-searching .keyword-star__point {
   background: rgba(250, 244, 225, 0.13);
   color: #fff8e8;
 }
@@ -566,7 +596,7 @@ const stageState = computed(() => {
     min-height: 32rem;
   }
 
-  .keyword-star__text {
+  .keyword-star__label {
     font-size: 0.7rem;
     padding: 0.32rem;
   }
