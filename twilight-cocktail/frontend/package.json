@@ -11,7 +11,8 @@
     "test": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "catalog:build": "node scripts/build-cocktail-catalog.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^6.0.1",

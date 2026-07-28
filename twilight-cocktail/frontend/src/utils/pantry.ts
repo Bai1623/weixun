@@ -1,5 +1,17 @@
 import type { Cocktail, PantryMatches, PantryMatchItem } from '@/types/cocktail'
 
+const substituteIngredientSlugs: Record<string, string[]> = {
+  'vitamin-c-tablet': ['lemon-juice', 'lime-juice', 'citrus-juice'],
+}
+
+const expandOwnedIngredients = (pantryIngredientSlugs: readonly string[]) =>
+  new Set(
+    [...pantryIngredientSlugs, 'ice', 'water'].flatMap((slug) => [
+      slug,
+      ...(substituteIngredientSlugs[slug] ?? []),
+    ]),
+  )
+
 const toMatchItem = (cocktail: Cocktail, owned: Set<string>): PantryMatchItem => {
   const required = cocktail.ingredients.filter((item) => item.requirement === 'required')
   const optional = cocktail.ingredients.filter((item) => item.requirement !== 'required')
@@ -26,7 +38,7 @@ export const getPantryMatches = (
   cocktails: readonly Cocktail[],
   pantryIngredientSlugs: readonly string[],
 ): PantryMatches => {
-  const owned = new Set([...pantryIngredientSlugs, 'ice', 'water'])
+  const owned = expandOwnedIngredients(pantryIngredientSlugs)
   const result: PantryMatches = {
     ready: [],
     missingOne: [],
