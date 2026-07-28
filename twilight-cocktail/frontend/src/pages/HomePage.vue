@@ -39,7 +39,7 @@
             {{ daily.selected?.nameZh ?? '今日酒单尚未揭晓' }}
           </h2>
           <p class="mt-2 text-sm leading-6 text-muted">
-            {{ daily.selected?.shortDescription ?? '轮盘会从热门经典酒款中，为你选择一杯。' }}
+            {{ daily.selected?.shortDescription ?? '星屑会从完整酒单中，为你筛选一杯。' }}
           </p>
         </div>
       </div>

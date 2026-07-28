@@ -46,8 +46,8 @@
   <StateBlock
     v-else
     title="今日酒单尚未揭晓"
-    message="先前往每日轮盘，为今晚选择一杯。"
-    action-label="去轮盘"
+    message="先前往每日酒单，让星屑为今晚筛选一杯。"
+    action-label="去每日酒单"
     @action="router.push('/daily')"
   />
 </template>
