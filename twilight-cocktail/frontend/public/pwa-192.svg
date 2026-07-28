@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" role="img" aria-label="暮色酒单图标">
+  <rect width="192" height="192" rx="24" fill="#0d0b0a"/>
+  <circle cx="96" cy="96" r="62" fill="#171311" stroke="#c8a96a" stroke-width="4"/>
+  <path d="M58 54h76l-28 44v42H86V98L58 54Z" fill="#f3ebdd"/>
+  <path d="M70 66h52L102 96H90L70 66Z" fill="#b66c32"/>
+</svg>
