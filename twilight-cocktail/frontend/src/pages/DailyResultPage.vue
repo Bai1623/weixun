@@ -21,7 +21,7 @@
         </div>
       </div>
       <p class="mt-6 rounded-lg bg-gold/10 p-4 text-sm leading-6 text-cream">
-        推荐理由：经典热门酒款，制作步骤少，适合作为今日练习。
+        推荐理由：{{ daily.reason || '经典热门酒款，制作步骤少，适合作为今日练习。' }}
       </p>
       <div class="mt-6 flex flex-col gap-3 sm:flex-row">
         <RouterLink

@@ -49,27 +49,32 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import CocktailCard from '@/components/cocktail/CocktailCard.vue'
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
-import { cocktails } from '@/data/cocktails'
+import { useCocktailStore } from '@/stores/cocktails'
 import type { DifficultyLevel } from '@/types/cocktail'
 
 const route = useRoute()
 const router = useRouter()
+const store = useCocktailStore()
 const keyword = ref(String(route.query.keyword ?? ''))
 const baseSpirit = ref(String(route.query.baseSpirit ?? ''))
 const difficulty = ref(String(route.query.difficulty ?? ''))
 const sort = ref(String(route.query.sort ?? 'popular'))
 
-const baseSpirits = Array.from(new Set(cocktails.map((cocktail) => cocktail.baseSpirit)))
+const baseSpirits = computed(() =>
+  Array.from(new Set(store.items.map((cocktail) => cocktail.baseSpirit))),
+)
 
 const filtered = computed(() => {
   const search = keyword.value.trim().toLowerCase()
-  const items = cocktails.filter((cocktail) => {
+  const routeIsAlcoholic =
+    route.query.isAlcoholic === undefined ? undefined : route.query.isAlcoholic === 'true'
+  const items = store.items.filter((cocktail) => {
     const matchesKeyword =
       !search ||
       cocktail.nameZh.includes(search) ||
@@ -78,7 +83,9 @@ const filtered = computed(() => {
     const matchesSpirit = !baseSpirit.value || cocktail.baseSpirit === baseSpirit.value
     const matchesDifficulty =
       !difficulty.value || cocktail.difficulty === (difficulty.value as DifficultyLevel)
-    return matchesKeyword && matchesSpirit && matchesDifficulty
+    const matchesAlcohol =
+      routeIsAlcoholic === undefined || cocktail.isAlcoholic === routeIsAlcoholic
+    return matchesKeyword && matchesSpirit && matchesDifficulty && matchesAlcohol
   })
   return [...items].sort((a, b) => {
     if (sort.value === 'beginner') return Number(b.beginnerFriendly) - Number(a.beginnerFriendly)
@@ -97,5 +104,9 @@ watch([keyword, baseSpirit, difficulty, sort], () => {
       sort: sort.value === 'popular' ? undefined : sort.value,
     },
   })
+})
+
+onMounted(() => {
+  void store.fetchAll()
 })
 </script>

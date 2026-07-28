@@ -19,7 +19,7 @@
           <button
             class="rounded-md border border-gold/30 px-5 py-3 text-gold"
             type="button"
-            @click="favorites.toggle(cocktail.slug)"
+            @click="toggleFavorite"
           >
             {{ favorites.has(cocktail.slug) ? '取消收藏' : '收藏酒款' }}
           </button>
@@ -92,31 +92,54 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
+import { recordCocktailHistory } from '@/api/cocktails'
 import CocktailVisual from '@/components/common/CocktailVisual.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import FlavorRadar from '@/components/cocktail/FlavorRadar.vue'
 import { useCocktailStore } from '@/stores/cocktails'
 import { useFavoriteStore } from '@/stores/favorites'
+import { useUserStore } from '@/stores/user'
+import type { Cocktail } from '@/types/cocktail'
 
 const route = useRoute()
 const router = useRouter()
 const store = useCocktailStore()
 const favorites = useFavoriteStore()
-const cocktail = computed(() => store.bySlug(String(route.params.slug))).value
+const user = useUserStore()
+const cocktail = ref<Cocktail | undefined>(store.bySlug(String(route.params.slug)))
 const stats = computed(() =>
-  cocktail
+  cocktail.value
     ? [
-        { label: '难度', value: cocktail.difficulty },
-        { label: '时间', value: `${cocktail.prepMinutes} 分钟` },
-        { label: '调制', value: cocktail.method },
-        { label: '杯型', value: cocktail.glassType },
-        { label: '强度', value: cocktail.alcoholLevel },
-        { label: '材料', value: `${cocktail.ingredients.length} 种` },
+        { label: '难度', value: cocktail.value.difficulty },
+        { label: '时间', value: `${cocktail.value.prepMinutes} 分钟` },
+        { label: '调制', value: cocktail.value.method },
+        { label: '杯型', value: cocktail.value.glassType },
+        { label: '强度', value: cocktail.value.alcoholLevel },
+        { label: '材料', value: `${cocktail.value.ingredients.length} 种` },
       ]
     : [],
 )
+
+const toggleFavorite = () => {
+  if (!cocktail.value) return
+  void favorites.toggle(cocktail.value.slug, user.userId)
+}
+
+onMounted(async () => {
+  const slug = String(route.params.slug)
+  cocktail.value = await store.fetchBySlug(slug)
+  const userId = await user.ensureRemoteUser()
+  await favorites.loadRemote(userId)
+  if (userId && cocktail.value) {
+    try {
+      await recordCocktailHistory(userId, cocktail.value.slug)
+    } catch {
+      return
+    }
+  }
+})
 </script>

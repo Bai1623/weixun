@@ -13,5 +13,6 @@ __pycache__/
 *.pyc
 *.tsbuildinfo
 postgres-data/
+backend/twilight.db
 
 *.egg-info/

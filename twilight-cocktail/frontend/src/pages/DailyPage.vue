@@ -29,12 +29,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import DailyWheel from '@/components/daily/DailyWheel.vue'
-import { cocktails } from '@/data/cocktails'
+import { useCocktailStore } from '@/stores/cocktails'
 import { useDailyPickStore } from '@/stores/daily'
 import { useUserStore } from '@/stores/user'
 import type { Cocktail } from '@/types/cocktail'
@@ -42,25 +42,29 @@ import { getWheelRotationForIndex } from '@/utils/dailyPick'
 
 const daily = useDailyPickStore()
 const user = useUserStore()
+const cocktailStore = useCocktailStore()
 const spinning = ref(false)
 const rotation = ref(0)
 const selected = ref<Cocktail | undefined>(daily.selected)
-const wheelCandidates = cocktails.slice(0, 12)
+const wheelCandidates = computed(() => cocktailStore.items.slice(0, 12))
 
 const selectedIndex = computed(() =>
-  selected.value ? wheelCandidates.findIndex((item) => item.slug === selected.value?.slug) : 0,
+  selected.value
+    ? wheelCandidates.value.findIndex((item) => item.slug === selected.value?.slug)
+    : 0,
 )
 
-const spin = () => {
+const spin = async () => {
   if (spinning.value) return
   spinning.value = true
-  const cocktail = daily.reveal(user.anonymousKey)
+  const userId = await user.ensureRemoteUser()
+  const cocktail = await daily.reveal(user.anonymousKey, userId)
   selected.value = cocktail
   const index = Math.max(
     0,
-    wheelCandidates.findIndex((item) => item.slug === cocktail.slug),
+    wheelCandidates.value.findIndex((item) => item.slug === cocktail.slug),
   )
-  rotation.value = getWheelRotationForIndex(index, wheelCandidates.length, 5)
+  rotation.value = getWheelRotationForIndex(index, wheelCandidates.value.length, 5)
   window.setTimeout(() => {
     spinning.value = false
   }, 3300)
@@ -69,8 +73,12 @@ const spin = () => {
 if (selected.value) {
   rotation.value = getWheelRotationForIndex(
     Math.max(0, selectedIndex.value),
-    wheelCandidates.length,
+    wheelCandidates.value.length,
     1,
   )
 }
+
+onMounted(() => {
+  void cocktailStore.fetchAll()
+})
 </script>
