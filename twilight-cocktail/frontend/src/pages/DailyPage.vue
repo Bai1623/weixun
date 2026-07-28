@@ -1,10 +1,12 @@
 <template>
-  <div class="mx-auto max-w-4xl">
-    <SectionHeading
-      eyebrow="Daily Ritual"
-      title="今天会是哪一杯？"
-      description="从热门经典中，选出一款适合今晚练习的酒。"
-    />
+  <div class="daily-page">
+    <div class="daily-page__intro">
+      <SectionHeading
+        eyebrow="Daily Ritual"
+        title="今天会是哪一杯？"
+        description="从完整酒单中，让星屑为今晚筛选一杯。"
+      />
+    </div>
     <DailyWheel
       :candidates="wheelCandidates"
       :selected="selected"
@@ -59,3 +61,26 @@ onMounted(() => {
   void cocktailStore.fetchAll()
 })
 </script>
+
+<style scoped>
+.daily-page {
+  display: grid;
+  min-height: calc(100vh - 8.5rem);
+  grid-template-rows: auto 1fr;
+}
+
+.daily-page__intro {
+  width: min(42rem, 100%);
+  padding-left: clamp(0rem, 2vw, 1.4rem);
+}
+
+@media (max-width: 768px) {
+  .daily-page {
+    min-height: calc(100vh - 8rem);
+  }
+
+  .daily-page__intro {
+    padding-left: 0;
+  }
+}
+</style>

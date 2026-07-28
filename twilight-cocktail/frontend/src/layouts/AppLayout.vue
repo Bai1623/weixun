@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen pb-20 text-cream md:pb-0">
     <header class="sticky top-0 z-40 border-b border-gold/10 bg-obsidian/86 backdrop-blur-xl">
-      <nav class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 md:px-8">
+      <nav class="flex w-full items-center justify-between px-5 py-4 md:px-8 xl:px-10">
         <RouterLink
           class="font-display text-xl text-cream focus:outline-none focus:ring-2 focus:ring-gold"
           to="/home"
@@ -21,7 +21,7 @@
       </nav>
     </header>
 
-    <main class="mx-auto max-w-7xl px-4 py-8 md:px-8 md:py-12">
+    <main class="w-full px-5 py-8 md:px-8 md:py-10 xl:px-10">
       <RouterView />
     </main>
 

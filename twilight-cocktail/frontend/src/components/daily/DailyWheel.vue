@@ -1,6 +1,6 @@
 <template>
-  <div class="daily-oracle mx-auto max-w-4xl text-center" :class="`is-${stageState}`">
-    <div class="constellation-stage relative mx-auto min-h-[31rem] overflow-hidden rounded-lg">
+  <div class="daily-oracle text-center" :class="`is-${stageState}`">
+    <div class="constellation-stage relative min-h-[31rem] overflow-hidden">
       <div class="constellation-wash" />
       <div class="constellation-ring ring-one" />
       <div class="constellation-ring ring-two" />
@@ -73,28 +73,19 @@ defineEmits<{
   reroll: []
 }>()
 
-const ringSettings = [
-  { radiusX: 39, radiusY: 29, offset: -0.22 },
-  { radiusX: 31, radiusY: 21, offset: 0.36 },
-  { radiusX: 22, radiusY: 14, offset: 0.9 },
-]
+const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 
-const positionForIndex = (index: number) => {
-  const ring = ringSettings[index % ringSettings.length] ?? {
-    radiusX: 39,
-    radiusY: 29,
-    offset: -0.22,
-  }
-  const ringIndex = Math.floor(index / ringSettings.length)
-  const angle = ring.offset + ringIndex * 1.31 + index * 0.24
-  const x = 50 + Math.cos(angle) * ring.radiusX
-  const y = 50 + Math.sin(angle) * ring.radiusY
-  return [Math.min(94, Math.max(6, x)), Math.min(90, Math.max(8, y))]
+const positionForIndex = (index: number, total: number) => {
+  const angle = index * GOLDEN_ANGLE + (index % 5) * 0.18
+  const radius = 0.3 + Math.sqrt((index + 0.5) / Math.max(total, 1)) * 0.72
+  const x = 50 + Math.cos(angle) * radius * 47
+  const y = 52 + Math.sin(angle) * radius * 40
+  return [Math.min(96, Math.max(4, x)), Math.min(92, Math.max(10, y))]
 }
 
 const keywordNodes = computed(() =>
   props.candidates.map((item, index) => {
-    const [x, y] = positionForIndex(index)
+    const [x, y] = positionForIndex(index, props.candidates.length)
     return {
       ...item,
       style: {
@@ -115,16 +106,18 @@ const stageState = computed(() => {
 </script>
 
 <style scoped>
+.daily-oracle {
+  display: grid;
+  min-height: 100%;
+  grid-template-rows: 1fr auto;
+}
+
 .constellation-stage {
-  border: 1px solid rgba(223, 199, 141, 0.2);
+  min-height: clamp(34rem, calc(100vh - 15rem), 56rem);
   background:
-    radial-gradient(circle at 50% 46%, rgba(250, 244, 225, 0.26), transparent 20rem),
-    radial-gradient(circle at 16% 18%, rgba(244, 205, 187, 0.18), transparent 13rem),
-    radial-gradient(circle at 86% 78%, rgba(164, 189, 205, 0.18), transparent 15rem),
-    linear-gradient(145deg, rgba(35, 29, 25, 0.78), rgba(18, 17, 18, 0.92));
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 1.6rem 4rem rgba(0, 0, 0, 0.22);
+    radial-gradient(circle at 48% 43%, rgba(250, 244, 225, 0.14), transparent 21rem),
+    radial-gradient(circle at 8% 16%, rgba(244, 205, 187, 0.1), transparent 18rem),
+    radial-gradient(circle at 93% 76%, rgba(164, 189, 205, 0.1), transparent 20rem);
 }
 
 .constellation-wash,
@@ -135,19 +128,19 @@ const stageState = computed(() => {
 }
 
 .constellation-wash {
-  inset: -18%;
+  inset: -14%;
   background:
-    radial-gradient(circle at 50% 50%, rgba(250, 244, 225, 0.16), transparent 21%),
+    radial-gradient(circle at 50% 50%, rgba(250, 244, 225, 0.12), transparent 18%),
     conic-gradient(
       from 125deg,
       rgba(223, 199, 141, 0),
-      rgba(223, 199, 141, 0.12),
-      rgba(244, 205, 187, 0.14),
-      rgba(164, 189, 205, 0.08),
+      rgba(223, 199, 141, 0.08),
+      rgba(244, 205, 187, 0.1),
+      rgba(164, 189, 205, 0.06),
       rgba(223, 199, 141, 0)
     );
-  filter: blur(6px);
-  opacity: 0.8;
+  filter: blur(12px);
+  opacity: 0.72;
   animation: constellation-breathe 7s ease-in-out infinite;
 }
 
@@ -160,14 +153,14 @@ const stageState = computed(() => {
 }
 
 .ring-one {
-  width: 25rem;
-  height: 12rem;
+  width: min(58rem, 88vw);
+  height: min(24rem, 42vw);
   rotate: -10deg;
 }
 
 .ring-two {
-  width: 18rem;
-  height: 30rem;
+  width: min(38rem, 62vw);
+  height: min(48rem, 76vw);
   rotate: 32deg;
 }
 
@@ -202,6 +195,7 @@ const stageState = computed(() => {
   animation:
     keyword-float var(--drift) ease-in-out infinite,
     keyword-twinkle 2.6s var(--delay) ease-in-out infinite;
+  will-change: transform, opacity;
 }
 
 .keyword-star__glow {
@@ -217,13 +211,13 @@ const stageState = computed(() => {
 
 .keyword-star__text {
   position: relative;
-  border: 1px solid rgba(250, 244, 225, 0.16);
+  border: 1px solid rgba(250, 244, 225, 0.12);
   border-radius: 999px;
-  background: rgba(250, 244, 225, 0.1);
+  background: rgba(250, 244, 225, 0.075);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 0.8rem 2rem rgba(0, 0, 0, 0.12);
-  color: rgba(250, 244, 225, 0.86);
+    0 0.8rem 2rem rgba(0, 0, 0, 0.08);
+  color: rgba(250, 244, 225, 0.78);
   font-size: 0.78rem;
   line-height: 1;
   padding: 0.58rem 0.78rem;
@@ -238,7 +232,7 @@ const stageState = computed(() => {
 }
 
 .is-searching .keyword-star__text {
-  background: rgba(250, 244, 225, 0.16);
+  background: rgba(250, 244, 225, 0.13);
   color: #fff8e8;
 }
 
@@ -247,26 +241,23 @@ const stageState = computed(() => {
   left: 50%;
   top: 50%;
   display: grid;
-  width: min(16rem, 70vw);
-  height: min(16rem, 70vw);
+  width: min(18rem, 72vw);
+  height: min(18rem, 72vw);
   place-items: center;
-  border: 1px solid rgba(250, 244, 225, 0.18);
   border-radius: 999px;
-  background:
-    radial-gradient(circle at 40% 32%, rgba(255, 255, 255, 0.24), transparent 20%),
-    rgba(250, 244, 225, 0.08);
+  background: radial-gradient(circle, rgba(250, 244, 225, 0.12), transparent 66%);
   color: #f7ead0;
-  font-size: 0.86rem;
+  font-size: 0.9rem;
   font-weight: 700;
   transform: translate(-50%, -50%);
-  backdrop-filter: blur(18px);
+  text-shadow: 0 0 2rem rgba(255, 248, 232, 0.42);
 }
 
 .selection-current::before,
 .selection-current::after {
   position: absolute;
   inset: -0.8rem;
-  border: 1px solid rgba(223, 199, 141, 0.12);
+  border: 1px solid rgba(223, 199, 141, 0.08);
   border-radius: inherit;
   content: '';
   animation: selection-pulse 1.5s ease-in-out infinite;
@@ -282,7 +273,7 @@ const stageState = computed(() => {
   top: 50%;
   z-index: 5;
   display: grid;
-  width: min(24rem, calc(100% - 2rem));
+  width: min(34rem, calc(100% - 2rem));
   min-height: 23rem;
   place-items: center;
   padding: 3.6rem 2rem 2rem;
@@ -368,14 +359,14 @@ const stageState = computed(() => {
   margin-top: 0.4rem;
   color: #fff8e8;
   font-family: var(--font-display);
-  font-size: clamp(2.6rem, 8vw, 5.2rem);
+  font-size: clamp(3rem, 9vw, 7.2rem);
   line-height: 1;
   text-shadow: 0 1rem 2.8rem rgba(0, 0, 0, 0.28);
 }
 
 .daily-gift p:not(.daily-gift__kicker) {
   position: relative;
-  max-width: 22rem;
+  max-width: 30rem;
   color: rgba(250, 244, 225, 0.76);
   font-size: 0.95rem;
   line-height: 1.8;
@@ -535,7 +526,7 @@ const stageState = computed(() => {
 
 @media (max-width: 640px) {
   .constellation-stage {
-    min-height: 28rem;
+    min-height: 32rem;
   }
 
   .keyword-star__text {
