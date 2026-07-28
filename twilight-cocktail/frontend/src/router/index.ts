@@ -1,5 +1,5 @@
 import type { RouteRecordRaw } from 'vue-router'
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
@@ -15,7 +15,7 @@ export const routes: RouteRecordRaw[] = [
 ]
 
 export default createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
   scrollBehavior: () => ({ top: 0 }),
 })

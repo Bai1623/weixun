@@ -27,9 +27,24 @@ export type HistoryListResponse = {
   items: Cocktail[]
 }
 
+const assetUrl = (path: string) => {
+  const base = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`
+  return `${base}${path.replace(/^\//, '')}`
+}
+
 export const fetchCocktails = async (): Promise<CocktailListResponse> => {
   const response = await apiClient.get<CocktailListResponse>('/cocktails')
   return response.data
+}
+
+export const fetchStaticCocktailCatalog = async (): Promise<CocktailListResponse> => {
+  const response = await fetch(assetUrl('/cocktails/catalog.json'))
+  if (!response.ok) {
+    throw new Error('Static cocktail catalog unavailable')
+  }
+  return (await response.json()) as CocktailListResponse
 }
 
 export const fetchCocktail = async (slug: string): Promise<Cocktail> => {

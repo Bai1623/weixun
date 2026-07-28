@@ -1,0 +1,56 @@
+name: Deploy Twilight Cocktail Pages
+
+on:
+  push:
+    branches:
+      - codex/twilight-cocktail-prototype
+      - main
+      - master
+    paths:
+      - 'twilight-cocktail/frontend/**'
+      - '.github/workflows/deploy-pages.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: twilight-cocktail-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: twilight-cocktail/frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: twilight-cocktail/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build GitHub Pages site
+        run: npm run build:pages
+
+      - name: Publish gh-pages branch
+        run: |
+          cd dist
+          touch .nojekyll
+          git init
+          git checkout -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "deploy github pages"
+          git push --force "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

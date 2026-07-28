@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 
-import { fetchCocktail, fetchCocktails } from '@/api/cocktails'
+import { fetchCocktail, fetchCocktails, fetchStaticCocktailCatalog } from '@/api/cocktails'
 import { cocktails } from '@/data/cocktails'
 import type { Cocktail } from '@/types/cocktail'
 
@@ -31,9 +31,16 @@ export const useCocktailStore = defineStore('cocktails', {
         this.loadedFromApi = true
         this.error = ''
       } catch {
-        this.items = cocktails
-        this.loadedFromApi = false
-        this.error = 'using-local-data'
+        try {
+          const response = await fetchStaticCocktailCatalog()
+          this.items = response.items
+          this.loadedFromApi = false
+          this.error = ''
+        } catch {
+          this.items = cocktails
+          this.loadedFromApi = false
+          this.error = 'using-local-data'
+        }
       } finally {
         this.loading = false
       }

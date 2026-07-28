@@ -4,7 +4,10 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const githubPagesBase = process.env.GITHUB_PAGES === 'true' ? '/weixun/' : '/'
+
 export default defineConfig({
+  base: githubPagesBase,
   plugins: [
     vue(),
     VitePWA({
@@ -18,7 +21,7 @@ export default defineConfig({
         display: 'standalone',
         icons: [
           {
-            src: '/pwa-192.svg',
+            src: 'pwa-192.svg',
             sizes: '192x192',
             type: 'image/svg+xml',
           },

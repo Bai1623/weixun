@@ -9,7 +9,7 @@
       v-if="showPhoto"
       class="h-full w-full object-cover"
       :alt="alt"
-      :src="imageUrl"
+      :src="normalizedImageUrl"
       loading="lazy"
       decoding="async"
       @error="imageFailed = true"
@@ -50,6 +50,16 @@ const tones: Record<string, string> = {
 const toneStyle = computed(() => tones[props.tone] ?? tones.amber)
 const imageFailed = ref(false)
 const showPhoto = computed(() => Boolean(props.imageUrl) && !imageFailed.value)
+const normalizedImageUrl = computed(() => {
+  if (!props.imageUrl) return ''
+  if (/^https?:\/\//.test(props.imageUrl)) return props.imageUrl
+  if (!props.imageUrl.startsWith('/')) return props.imageUrl
+
+  const base = import.meta.env.BASE_URL.endsWith('/')
+    ? import.meta.env.BASE_URL
+    : `${import.meta.env.BASE_URL}/`
+  return `${base}${props.imageUrl.slice(1)}`
+})
 
 watch(
   () => props.imageUrl,

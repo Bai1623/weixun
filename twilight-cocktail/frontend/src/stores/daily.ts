@@ -46,7 +46,9 @@ export const useDailyPickStore = defineStore('daily', {
           this.reason = ''
         }
       }
-      const selected = selectDailyCocktail(cocktails, userKey, date)
+      const cocktailStore = useCocktailStore()
+      const pool = cocktailStore.items.length ? cocktailStore.items : cocktails
+      const selected = selectDailyCocktail(pool, userKey, date)
       this.selectedSlug = selected.slug
       this.selectedDate = today
       this.reason = '经典热门酒款，制作步骤少，适合作为今日练习。'

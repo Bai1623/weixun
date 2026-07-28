@@ -2,6 +2,10 @@
 
 暮色酒单是一款面向调酒初学者和轻度爱好者的响应式 Web/PWA 原型。当前版本完成 PRD 的第一至第三阶段主链路：工程骨架、暗色高级视觉系统、核心页面、SQLAlchemy 数据模型、种子数据、匿名用户、酒谱、每日推荐、收藏和浏览历史 API。
 
+线上静态版链接：
+
+- https://bai1623.github.io/weixun/
+
 ## 当前范围
 
 已实现：
@@ -9,7 +13,7 @@
 - Vue 3 + TypeScript + Vite 前端。
 - FastAPI 后端、Swagger 和 `/api/v1` 核心接口。
 - Docker Compose：frontend、backend、postgres。
-- 25 款酒谱种子数据：20 款经典酒 + 5 款无酒精特调。
+- 61 款酒谱种子数据，覆盖经典酒、热带长饮、酸酒、无酒精特调和基础练习款。
 - 8 节调酒学院课程。
 - 首页、每日轮盘、今日结果、酒谱列表、详情、制作模式、学院、酒柜、我的。
 - 后端同用户同日期幂等每日推荐，前端离线时回落本地推荐。
@@ -126,6 +130,15 @@ npm run lint
 npm run build
 ```
 
+GitHub Pages 静态构建：
+
+```bash
+cd frontend
+npm run build:pages
+```
+
+当前仓库包含 `.github/workflows/deploy-pages.yml`。推送到 `codex/twilight-cocktail-prototype`、`main` 或 `master` 后会自动构建并发布 `gh-pages` 分支。第一次使用时，如果链接没有打开，在 GitHub 仓库 `Settings -> Pages` 中把来源设置为 `Deploy from a branch`，分支选择 `gh-pages`，目录选择 `/root`。
+
 后端：
 
 ```bash
@@ -145,7 +158,7 @@ docker compose config
 ## 设计决策
 
 - 当前工作目录包含多个无关项目和输出包，因此新建独立 `twilight-cocktail/` 目录。
-- 前端优先读取真实 API；API 不可用时回落本地 Mock 数据，保证原型可离线演示。
+- 前端优先读取真实 API；API 不可用时先回落 `public/cocktails/catalog.json` 完整静态酒单，再回落本地 Mock 数据，保证 GitHub Pages 链接可独立演示。
 - 每日推荐以 `daily_picks` 持久化，按 `user_id + pick_date` 保持同日幂等。
 - 视觉避免后台系统风格，采用曜石黑、深咖啡、香槟金、奶油白和少量酒红。
 - 图片阶段性使用 CSS 鸡尾酒视觉占位，并提供清晰文本和失败可用页面结构；后续数据阶段替换为带来源字段的授权图片。
