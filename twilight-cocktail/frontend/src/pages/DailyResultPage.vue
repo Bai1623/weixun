@@ -1,6 +1,10 @@
 <template>
   <div v-if="cocktail" class="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
-    <CocktailVisual :alt="cocktail.nameZh" :tone="cocktail.imageTone" />
+    <CocktailVisual
+      :alt="cocktail.nameZh"
+      :image-url="cocktail.imageUrl"
+      :tone="cocktail.imageTone"
+    />
     <div>
       <p class="text-xs uppercase tracking-[0.22em] text-gold">今日酒单</p>
       <h1 class="mt-3 font-display text-5xl">{{ cocktail.nameZh }}</h1>

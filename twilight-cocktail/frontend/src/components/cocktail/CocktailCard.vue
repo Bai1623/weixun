@@ -3,7 +3,11 @@
     class="group block overflow-hidden rounded-lg border border-gold/15 bg-walnut/80 shadow-card transition hover:border-gold/40 focus:outline-none focus:ring-2 focus:ring-gold"
     :to="`/cocktails/${cocktail.slug}`"
   >
-    <CocktailVisual :alt="cocktail.nameZh" :tone="cocktail.imageTone" />
+    <CocktailVisual
+      :alt="cocktail.nameZh"
+      :image-url="cocktail.imageUrl"
+      :tone="cocktail.imageTone"
+    />
     <div class="p-4">
       <div class="flex items-start justify-between gap-3">
         <div>

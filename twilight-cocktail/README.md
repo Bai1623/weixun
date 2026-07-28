@@ -16,6 +16,7 @@
 - 匿名用户、收藏、最近浏览 API。
 - 酒柜 `可以直接制作 / 只差一种 / 材料不足` 基础匹配。
 - SQLAlchemy 模型、SQLite/PostgreSQL 兼容连接配置和 Alembic 基线迁移。
+- 56 张本地真实酒款照片，覆盖核心经典和流行酒款。
 - Vitest 单元测试、Pytest API 测试、Ruff 和 Mypy。
 
 未完成但已预留：
@@ -151,7 +152,7 @@ docker compose config
 
 ## 数据来源
 
-当前配方为本地审核种子数据，用于产品原型和交互验证。下一阶段会为每条真实种子数据补充更细的来源 URL、许可、校对时间和审核状态。
+当前配方为本地审核种子数据，用于产品原型和交互验证。酒款照片来自 TheCocktailDB 公共 API 的 `strDrinkThumb` 字段，并已保存到 `frontend/public/cocktails/` 供本地稳定展示。下一阶段会为每条真实种子数据补充更细的来源 URL、许可、校对时间和审核状态。
 
 ## 下一阶段
 

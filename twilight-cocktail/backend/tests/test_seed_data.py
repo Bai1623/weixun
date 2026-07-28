@@ -2,7 +2,7 @@ from app.data.seed_cocktails import SEED_COCKTAILS
 
 
 def test_seed_data_contains_required_mvp_volume() -> None:
-    assert len(SEED_COCKTAILS) >= 25
+    assert len(SEED_COCKTAILS) >= 60
     assert sum(1 for cocktail in SEED_COCKTAILS if not cocktail["is_alcoholic"]) >= 5
 
 

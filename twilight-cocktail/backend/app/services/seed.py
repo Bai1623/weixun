@@ -6,14 +6,21 @@ from app.db.models import Cocktail, CocktailIngredient, CocktailStep, Ingredient
 
 
 def seed_cocktails(db: Session) -> int:
-    existing_slugs = set(db.scalars(select(Cocktail.slug)).all())
+    existing_by_slug = {
+        cocktail.slug: cocktail for cocktail in db.scalars(select(Cocktail)).all()
+    }
     ingredients_by_slug = {
         ingredient.slug: ingredient for ingredient in db.scalars(select(Ingredient)).all()
     }
     created = 0
 
     for record in SEED_COCKTAILS:
-        if record["slug"] in existing_slugs:
+        existing = existing_by_slug.get(record["slug"])
+        if existing is not None:
+            existing.image_url = record["image_url"]
+            existing.image_tone = record["image_tone"]
+            existing.source_name = record["source_name"]
+            existing.popularity_weight = record["popularity_weight"]
             continue
 
         flavors = record["flavors"]
@@ -82,7 +89,7 @@ def seed_cocktails(db: Session) -> int:
                 )
             )
 
-        existing_slugs.add(record["slug"])
+        existing_by_slug[record["slug"]] = cocktail
         created += 1
 
     db.commit()

@@ -394,6 +394,11 @@ export const cocktails: Cocktail[] = [
   },
 ]
 
+for (const cocktail of cocktails) {
+  cocktail.imageUrl = `/cocktails/${cocktail.slug}.jpg`
+  cocktail.sourceName = `${cocktail.sourceName} / TheCocktailDB image`
+}
+
 export const allIngredients = Array.from(
   new Map(
     cocktails.flatMap((cocktail) =>

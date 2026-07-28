@@ -25,7 +25,12 @@
         </div>
       </div>
       <div class="relative">
-        <CocktailVisual alt="暮色鸡尾酒主视觉" class="min-h-[34rem]" tone="amber" />
+        <CocktailVisual
+          alt="暮色鸡尾酒主视觉"
+          class="min-h-[34rem]"
+          image-url="/cocktails/negroni.jpg"
+          tone="amber"
+        />
         <div
           class="absolute bottom-4 left-4 right-4 rounded-lg border border-gold/20 bg-obsidian/72 p-4 backdrop-blur-lg"
         >

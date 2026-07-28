@@ -1,7 +1,11 @@
 <template>
   <div v-if="cocktail" class="space-y-10">
     <section class="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
-      <CocktailVisual :alt="cocktail.nameZh" :tone="cocktail.imageTone" />
+      <CocktailVisual
+        :alt="cocktail.nameZh"
+        :image-url="cocktail.imageUrl"
+        :tone="cocktail.imageTone"
+      />
       <div>
         <p class="text-xs uppercase tracking-[0.22em] text-gold">
           {{ cocktail.baseSpirit }} · {{ cocktail.method }}
