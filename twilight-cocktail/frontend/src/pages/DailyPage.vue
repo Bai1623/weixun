@@ -29,7 +29,7 @@ const user = useUserStore()
 const cocktailStore = useCocktailStore()
 const spinning = ref(false)
 const selected = ref<Cocktail | undefined>(daily.selected)
-const wheelCandidates = computed(() => cocktailStore.items.slice(0, 24))
+const wheelCandidates = computed(() => cocktailStore.items)
 
 const spin = async () => {
   if (spinning.value) return

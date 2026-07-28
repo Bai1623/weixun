@@ -59,4 +59,16 @@ describe('DailyWheel', () => {
     expect(wrapper.text()).toContain('代基里')
     expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/daily/result')
   })
+
+  it('renders every candidate as a selectable keyword', () => {
+    const fullCatalog = Array.from({ length: 30 }, (_item, index) =>
+      makeCocktail(`cocktail-${index}`, `酒款${index}`),
+    )
+    const wrapper = mount(DailyWheel, {
+      props: { candidates: fullCatalog, spinning: false },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    expect(wrapper.findAll('.keyword-star')).toHaveLength(fullCatalog.length)
+  })
 })

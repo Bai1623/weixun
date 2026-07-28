@@ -67,36 +67,28 @@ defineEmits<{
   spin: []
 }>()
 
-const positions = [
-  [10, 22],
-  [25, 12],
-  [46, 17],
-  [70, 13],
-  [86, 28],
-  [17, 46],
-  [37, 36],
-  [60, 38],
-  [78, 51],
-  [9, 68],
-  [30, 75],
-  [51, 64],
-  [68, 76],
-  [89, 70],
-  [19, 84],
-  [42, 88],
-  [57, 8],
-  [82, 86],
-  [6, 37],
-  [94, 45],
-  [28, 56],
-  [49, 77],
-  [73, 63],
-  [62, 24],
+const ringSettings = [
+  { radiusX: 39, radiusY: 29, offset: -0.22 },
+  { radiusX: 31, radiusY: 21, offset: 0.36 },
+  { radiusX: 22, radiusY: 14, offset: 0.9 },
 ]
 
+const positionForIndex = (index: number) => {
+  const ring = ringSettings[index % ringSettings.length] ?? {
+    radiusX: 39,
+    radiusY: 29,
+    offset: -0.22,
+  }
+  const ringIndex = Math.floor(index / ringSettings.length)
+  const angle = ring.offset + ringIndex * 1.31 + index * 0.24
+  const x = 50 + Math.cos(angle) * ring.radiusX
+  const y = 50 + Math.sin(angle) * ring.radiusY
+  return [Math.min(94, Math.max(6, x)), Math.min(90, Math.max(8, y))]
+}
+
 const keywordNodes = computed(() =>
-  props.candidates.slice(0, positions.length).map((item, index) => {
-    const [x, y] = positions[index] ?? [50, 50]
+  props.candidates.map((item, index) => {
+    const [x, y] = positionForIndex(index)
     return {
       ...item,
       style: {
@@ -104,7 +96,7 @@ const keywordNodes = computed(() =>
         '--y': `${y}%`,
         '--delay': `${(index % 8) * 0.18}s`,
         '--drift': `${4.2 + (index % 5) * 0.42}s`,
-        '--scale': `${0.86 + (index % 4) * 0.08}`,
+        '--scale': `${0.74 + (index % 5) * 0.055}`,
       },
     }
   }),
