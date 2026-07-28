@@ -49,7 +49,7 @@ describe('DailyWheel', () => {
     expect(wrapper.text()).toContain('开始闪选')
   })
 
-  it('reveals the selected cocktail with a route into the daily result page', () => {
+  it('reveals the selected cocktail with a route directly into its recipe page', () => {
     const wrapper = mount(DailyWheel, {
       props: { candidates, spinning: false, selected: candidates[1] },
       global: { stubs: { RouterLink: RouterLinkStub } },
@@ -57,7 +57,7 @@ describe('DailyWheel', () => {
 
     expect(wrapper.find('.daily-gift').exists()).toBe(true)
     expect(wrapper.text()).toContain('代基里')
-    expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/daily/result')
+    expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/cocktails/daiquiri')
   })
 
   it('offers a reroll action after a cocktail is revealed', async () => {

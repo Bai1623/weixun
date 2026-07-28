@@ -35,7 +35,9 @@
           <h2>{{ selected.nameZh }}</h2>
           <p>{{ selected.shortDescription }}</p>
           <div class="daily-gift__actions">
-            <RouterLink class="daily-gift__link" to="/daily/result"> 查看今日酒单 </RouterLink>
+            <RouterLink class="daily-gift__link" :to="`/cocktails/${selected.slug}`">
+              查看今日酒单
+            </RouterLink>
             <button class="daily-gift__reroll" type="button" @click="$emit('reroll')">
               再摇一杯
             </button>
