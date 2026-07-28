@@ -3,6 +3,7 @@
     <section class="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
       <CocktailVisual
         :alt="cocktail.nameZh"
+        class="aspect-[4/3] min-h-[24rem]"
         :image-url="cocktail.imageUrl"
         :tone="cocktail.imageTone"
       />
