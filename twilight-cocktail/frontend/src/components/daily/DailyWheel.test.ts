@@ -72,8 +72,8 @@ describe('DailyWheel', () => {
     expect(wrapper.emitted('reroll')).toHaveLength(1)
   })
 
-  it('renders every candidate as a selectable keyword', () => {
-    const fullCatalog = Array.from({ length: 30 }, (_item, index) =>
+  it('renders a curated visual sample instead of every candidate', () => {
+    const fullCatalog = Array.from({ length: 180 }, (_item, index) =>
       makeCocktail(`cocktail-${index}`, `酒款${index}`),
     )
     const wrapper = mount(DailyWheel, {
@@ -81,6 +81,19 @@ describe('DailyWheel', () => {
       global: { stubs: { RouterLink: RouterLinkStub } },
     })
 
-    expect(wrapper.findAll('.keyword-star')).toHaveLength(fullCatalog.length)
+    expect(wrapper.findAll('.keyword-star')).toHaveLength(150)
+  })
+
+  it('sizes keyword bubbles from popularity and label length', () => {
+    const popular = { ...makeCocktail('popular', '莫吉托'), popularityWeight: 10 }
+    const longName = { ...makeCocktail('long', '非常长的鸡尾酒名字'), popularityWeight: 1 }
+    const wrapper = mount(DailyWheel, {
+      props: { candidates: [popular, longName], spinning: false },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+    const styles = wrapper.findAll('.keyword-star').map((node) => node.attributes('style'))
+
+    expect(styles[0]).toContain('--bubble-size:')
+    expect(styles[1]).toContain('--bubble-size:')
   })
 })

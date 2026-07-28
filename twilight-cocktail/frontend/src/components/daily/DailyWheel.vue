@@ -76,18 +76,42 @@ defineEmits<{
 }>()
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
+const MAX_VISIBLE_KEYWORDS = 150
+const KEYWORD_COLUMNS = 15
 
 const positionForIndex = (index: number, total: number) => {
-  const angle = index * GOLDEN_ANGLE + (index % 5) * 0.18
-  const radius = 0.3 + Math.sqrt((index + 0.5) / Math.max(total, 1)) * 0.72
-  const x = 50 + Math.cos(angle) * radius * 47
-  const y = 52 + Math.sin(angle) * radius * 40
-  return [Math.min(96, Math.max(4, x)), Math.min(92, Math.max(10, y))]
+  const rows = Math.ceil(total / KEYWORD_COLUMNS)
+  const slot = (index * 47) % Math.max(total, 1)
+  const row = Math.floor(slot / KEYWORD_COLUMNS)
+  const column = slot % KEYWORD_COLUMNS
+  const rowOffset = row % 2 ? 0.46 : 0
+  const xBase = 5.8 + ((column + rowOffset) / KEYWORD_COLUMNS) * 88.4
+  const yBase = rows <= 1 ? 52 : 8.5 + (row / (rows - 1)) * 83
+  const wave = Math.sin(index * GOLDEN_ANGLE) * 0.34
+  const jitterX = (((index * 29) % 9) - 4) * 0.14 + wave
+  const jitterY = (((index * 31) % 9) - 4) * 0.12 + Math.cos(index * GOLDEN_ANGLE) * 0.26
+  return [Math.min(97, Math.max(3, xBase + jitterX)), Math.min(94, Math.max(8, yBase + jitterY))]
 }
 
+const bubbleSizeFor = (item: Cocktail) => {
+  const popularityBoost = Math.min(10, Math.max(1, item.popularityWeight || 1)) * 0.05
+  const lengthBoost = Math.min(0.3, Math.max(0, item.nameZh.length - 3) * 0.04)
+  return 2.25 + popularityBoost + lengthBoost
+}
+
+const visibleCandidates = computed(() => {
+  const selected = props.selected
+  const ranked = [...props.candidates].sort((a, b) => b.popularityWeight - a.popularityWeight)
+  const sample = ranked.slice(0, MAX_VISIBLE_KEYWORDS)
+  if (selected && sample.length && !sample.some((item) => item.slug === selected.slug)) {
+    sample[sample.length - 1] = selected
+  }
+  return sample
+})
+
 const keywordNodes = computed(() =>
-  props.candidates.map((item, index) => {
-    const [x, y] = positionForIndex(index, props.candidates.length)
+  visibleCandidates.value.map((item, index) => {
+    const [x, y] = positionForIndex(index, visibleCandidates.value.length)
     return {
       ...item,
       style: {
@@ -96,6 +120,7 @@ const keywordNodes = computed(() =>
         '--delay': `${(index % 8) * 0.18}s`,
         '--drift': `${4.2 + (index % 5) * 0.42}s`,
         '--scale': `${0.74 + (index % 5) * 0.055}`,
+        '--bubble-size': `${bubbleSizeFor(item).toFixed(2)}rem`,
       },
     }
   }),
@@ -202,29 +227,39 @@ const stageState = computed(() => {
 
 .keyword-star__glow {
   position: absolute;
-  width: 0.45rem;
-  height: 0.45rem;
+  width: calc(var(--bubble-size) * 0.34);
+  height: calc(var(--bubble-size) * 0.34);
   border-radius: 999px;
-  background: #f9edd0;
+  background: rgba(249, 237, 208, 0.76);
   box-shadow:
-    0 0 0 0.25rem rgba(249, 237, 208, 0.08),
-    0 0 1.6rem rgba(249, 237, 208, 0.44);
+    0 0 0 calc(var(--bubble-size) * 0.22) rgba(249, 237, 208, 0.04),
+    0 0 calc(var(--bubble-size) * 0.64) rgba(249, 237, 208, 0.34);
 }
 
 .keyword-star__text {
   position: relative;
+  display: inline-flex;
+  width: var(--bubble-size);
+  height: var(--bubble-size);
+  align-items: center;
+  justify-content: center;
   border: 1px solid rgba(250, 244, 225, 0.12);
   border-radius: 999px;
-  background: rgba(250, 244, 225, 0.075);
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.18), transparent 26%),
+    rgba(250, 244, 225, 0.075);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 0.8rem 2rem rgba(0, 0, 0, 0.08);
   color: rgba(250, 244, 225, 0.78);
-  font-size: 0.78rem;
-  line-height: 1;
-  padding: 0.58rem 0.78rem;
+  font-size: clamp(0.58rem, calc(var(--bubble-size) * 0.16), 0.78rem);
+  line-height: 1.12;
+  padding: 0.36rem;
   backdrop-filter: blur(14px);
-  white-space: nowrap;
+  overflow: hidden;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .is-searching .keyword-star {
@@ -533,7 +568,7 @@ const stageState = computed(() => {
 
   .keyword-star__text {
     font-size: 0.7rem;
-    padding: 0.48rem 0.6rem;
+    padding: 0.32rem;
   }
 
   .ring-one {
