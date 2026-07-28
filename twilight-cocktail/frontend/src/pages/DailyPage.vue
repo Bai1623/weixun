@@ -9,6 +9,7 @@
       :candidates="wheelCandidates"
       :selected="selected"
       :spinning="spinning"
+      @reroll="reroll"
       @spin="spin"
     />
   </div>
@@ -37,6 +38,17 @@ const spin = async () => {
   selected.value = undefined
   const userId = await user.ensureRemoteUser()
   const cocktail = await daily.reveal(user.anonymousKey, userId)
+  window.setTimeout(() => {
+    selected.value = cocktail
+    spinning.value = false
+  }, 3300)
+}
+
+const reroll = () => {
+  if (spinning.value) return
+  spinning.value = true
+  selected.value = undefined
+  const cocktail = daily.reroll(user.anonymousKey)
   window.setTimeout(() => {
     selected.value = cocktail
     spinning.value = false

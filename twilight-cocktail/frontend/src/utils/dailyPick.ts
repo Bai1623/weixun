@@ -48,6 +48,27 @@ export const selectDailyCocktail = (
   return fallback
 }
 
+export const selectAlternateDailyCocktail = (
+  candidates: readonly Cocktail[],
+  userKey: string,
+  previousSlug: string,
+  rerollCount: number,
+  date = new Date(),
+): Cocktail => {
+  const selected = selectDailyCocktail(candidates, `${userKey}:reroll:${rerollCount}`, date)
+  if (selected.slug !== previousSlug || candidates.length <= 1) return selected
+
+  const nextCandidate = candidates.find((cocktail) => cocktail.slug !== previousSlug)
+  if (!nextCandidate) return selected
+
+  for (let attempt = 1; attempt <= candidates.length * 2; attempt += 1) {
+    const next = selectDailyCocktail(candidates, `${userKey}:reroll:${rerollCount + attempt}`, date)
+    if (next.slug !== previousSlug) return next
+  }
+
+  return nextCandidate
+}
+
 export const getWheelRotationForIndex = (index: number, total: number, spins = 5): number => {
   if (total <= 0) {
     throw new Error('Wheel total must be greater than zero.')

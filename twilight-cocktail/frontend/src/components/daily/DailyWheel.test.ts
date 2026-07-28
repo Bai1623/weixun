@@ -60,6 +60,18 @@ describe('DailyWheel', () => {
     expect(wrapper.findComponent(RouterLinkStub).props('to')).toBe('/daily/result')
   })
 
+  it('offers a reroll action after a cocktail is revealed', async () => {
+    const wrapper = mount(DailyWheel, {
+      props: { candidates, spinning: false, selected: candidates[1] },
+      global: { stubs: { RouterLink: RouterLinkStub } },
+    })
+
+    await wrapper.get('button').trigger('click')
+
+    expect(wrapper.text()).toContain('再摇一杯')
+    expect(wrapper.emitted('reroll')).toHaveLength(1)
+  })
+
   it('renders every candidate as a selectable keyword', () => {
     const fullCatalog = Array.from({ length: 30 }, (_item, index) =>
       makeCocktail(`cocktail-${index}`, `酒款${index}`),

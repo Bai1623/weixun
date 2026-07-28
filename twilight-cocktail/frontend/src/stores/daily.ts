@@ -4,14 +4,17 @@ import { fetchDailyPick } from '@/api/cocktails'
 import { cocktails } from '@/data/cocktails'
 import { useCocktailStore } from '@/stores/cocktails'
 import type { Cocktail } from '@/types/cocktail'
-import { getTodayKey, selectDailyCocktail } from '@/utils/dailyPick'
+import { getTodayKey, selectAlternateDailyCocktail, selectDailyCocktail } from '@/utils/dailyPick'
 import { getStoredString, setStoredString } from '@/utils/storage'
+
+const getStoredNumber = (key: string): number => Number(getStoredString(key, '0')) || 0
 
 export const useDailyPickStore = defineStore('daily', {
   state: () => ({
     selectedSlug: getStoredString('daily_pick_slug', ''),
     selectedDate: getStoredString('daily_pick_date', ''),
     reason: getStoredString('daily_pick_reason', ''),
+    rerollCount: getStoredNumber('daily_pick_reroll_count'),
     spinning: false,
   }),
   getters: {
@@ -38,9 +41,11 @@ export const useDailyPickStore = defineStore('daily', {
           this.selectedSlug = response.cocktail.slug
           this.selectedDate = today
           this.reason = response.reason
+          this.rerollCount = 0
           setStoredString('daily_pick_slug', response.cocktail.slug)
           setStoredString('daily_pick_date', today)
           setStoredString('daily_pick_reason', response.reason)
+          setStoredString('daily_pick_reroll_count', '0')
           return response.cocktail
         } catch {
           this.reason = ''
@@ -52,9 +57,34 @@ export const useDailyPickStore = defineStore('daily', {
       this.selectedSlug = selected.slug
       this.selectedDate = today
       this.reason = '经典热门酒款，制作步骤少，适合作为今日练习。'
+      this.rerollCount = 0
       setStoredString('daily_pick_slug', selected.slug)
       setStoredString('daily_pick_date', today)
       setStoredString('daily_pick_reason', this.reason)
+      setStoredString('daily_pick_reroll_count', '0')
+      return selected
+    },
+    reroll(userKey: string, date = new Date()): Cocktail {
+      const today = getTodayKey(date)
+      const cocktailStore = useCocktailStore()
+      const pool = cocktailStore.items.length ? cocktailStore.items : cocktails
+      const nextRerollCount = this.rerollCount + 1
+      const selected = selectAlternateDailyCocktail(
+        pool,
+        userKey,
+        this.selectedSlug,
+        nextRerollCount,
+        date,
+      )
+
+      this.selectedSlug = selected.slug
+      this.selectedDate = today
+      this.rerollCount = nextRerollCount
+      this.reason = '重新摇出的今日酒单，适合换一种心情再练习。'
+      setStoredString('daily_pick_slug', selected.slug)
+      setStoredString('daily_pick_date', today)
+      setStoredString('daily_pick_reason', this.reason)
+      setStoredString('daily_pick_reroll_count', `${nextRerollCount}`)
       return selected
     },
   },

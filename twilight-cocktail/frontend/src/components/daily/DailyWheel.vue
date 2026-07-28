@@ -34,7 +34,12 @@
           <p class="daily-gift__kicker">今日酒单</p>
           <h2>{{ selected.nameZh }}</h2>
           <p>{{ selected.shortDescription }}</p>
-          <RouterLink class="daily-gift__link" to="/daily/result"> 查看今日酒单 </RouterLink>
+          <div class="daily-gift__actions">
+            <RouterLink class="daily-gift__link" to="/daily/result"> 查看今日酒单 </RouterLink>
+            <button class="daily-gift__reroll" type="button" @click="$emit('reroll')">
+              再摇一杯
+            </button>
+          </div>
         </div>
       </Transition>
     </div>
@@ -65,6 +70,7 @@ const props = defineProps<{
 
 defineEmits<{
   spin: []
+  reroll: []
 }>()
 
 const ringSettings = [
@@ -375,6 +381,15 @@ const stageState = computed(() => {
   line-height: 1.8;
 }
 
+.daily-gift__actions {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 1.2rem;
+}
+
 .daily-gift__link,
 .oracle-action {
   position: relative;
@@ -391,16 +406,39 @@ const stageState = computed(() => {
 }
 
 .daily-gift__link {
-  margin-top: 1.2rem;
   border-radius: 0.45rem;
   font-size: 0.9rem;
   font-weight: 800;
   padding: 0.9rem 1.2rem;
 }
 
+.daily-gift__reroll {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 248, 232, 0.22);
+  border-radius: 0.45rem;
+  background: rgba(255, 248, 232, 0.08);
+  color: #fff8e8;
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding: 0.9rem 1.2rem;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
 .oracle-action:hover,
-.daily-gift__link:hover {
+.daily-gift__link:hover,
+.daily-gift__reroll:hover {
   transform: translateY(-1px);
+}
+
+.daily-gift__reroll:hover {
+  border-color: rgba(255, 248, 232, 0.4);
+  background: rgba(255, 248, 232, 0.14);
 }
 
 .gift-reveal-enter-active {
