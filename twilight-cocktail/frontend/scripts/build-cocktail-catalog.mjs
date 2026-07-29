@@ -334,6 +334,38 @@ const methodFromDrink = (drink) => {
   return '兑和'
 }
 
+const techniqueFromInstruction = (instruction, fallback) => {
+  const text = instruction.toLowerCase()
+  if (/blend|blender/.test(text)) return '搅拌机'
+  if (/muddle|crush/.test(text)) return '捣压'
+  if (/shake|shaker/.test(text)) return '摇和'
+  if (/stir/.test(text)) return '搅拌'
+  if (/strain/.test(text)) return '过滤'
+  if (/garnish|decorate/.test(text)) return '装饰'
+  if (/pour|add|top|fill/.test(text)) return '兑和'
+  return fallback
+}
+
+const sourceInstructionsToSteps = (instructions, fallbackMethod) => {
+  const normalized = instructions
+    ?.replace(/\r/g, '\n')
+    .replace(/\s*\n+\s*/g, '. ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!normalized) return []
+
+  return normalized
+    .split(/(?<=[.!?])\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 4)
+    .slice(0, 8)
+    .map((instruction, index) => ({
+      stepNumber: index + 1,
+      instruction,
+      technique: techniqueFromInstruction(instruction, fallbackMethod),
+    }))
+}
+
 const baseSpiritFromIngredients = (ingredients, alcoholic) => {
   const spirits = [
     'gin',
@@ -409,6 +441,110 @@ const stepsFor = (nameZh, method) => [
   },
 ]
 
+const amountLine = (items) =>
+  items
+    .map(
+      (item) => `${item.nameZh}${item.amount && item.amount !== '适量' ? ` ${item.amount}` : ''}`,
+    )
+    .join('、')
+
+const trendStepsFor = (nameZh, ingredients, method) => {
+  if (!ingredients.length) return stepsFor(nameZh, method)
+
+  const garnishNames = new Set(['ice', 'lemon-slice', 'mint', 'rosemary', 'sea-salt', 'cucumber'])
+  const baseSpirits = new Set([
+    'vodka',
+    'white-rum',
+    'rum',
+    'gin',
+    'whiskey',
+    'bourbon',
+    'brandy',
+    'tequila',
+    'triple-sec',
+    'blue-curacao',
+    'peach-schnapps',
+    'baileys-irish-cream',
+    'coffee-liqueur',
+    'beer',
+  ])
+  const acidsAndPowders = new Set([
+    'vitamin-c-tablet',
+    'lemon-juice',
+    'lime-juice',
+    'matcha-powder',
+    'blueberry-jam',
+    'honey',
+    'simple-syrup',
+    'rose-syrup',
+    'osmanthus-syrup',
+    'grenadine',
+    'pomelo-tea',
+  ])
+  const carbonated = new Set([
+    'grape-sparkling-water',
+    'white-peach-sparkling-water',
+    'lemon-sparkling-water',
+    'soda-water',
+    'tonic-water',
+    'sprite',
+    'cola',
+    'red-bull',
+    'beer',
+  ])
+
+  const ice = ingredients.find((item) => item.slug === 'ice')
+  const spirits = ingredients.filter((item) => baseSpirits.has(item.slug))
+  const mixers = ingredients.filter(
+    (item) =>
+      !baseSpirits.has(item.slug) && !garnishNames.has(item.slug) && !carbonated.has(item.slug),
+  )
+  const fizz = ingredients.filter((item) => carbonated.has(item.slug))
+  const garnish = ingredients.filter((item) => garnishNames.has(item.slug) && item.slug !== 'ice')
+  const dissolve = ingredients.filter((item) => acidsAndPowders.has(item.slug))
+  const dissolveBase = mixers.find((item) => !dissolve.includes(item)) ?? fizz[0]
+
+  const steps = []
+  steps.push({
+    stepNumber: 1,
+    instruction: ice
+      ? `杯中加满${ice.nameZh}，让杯壁先降温。`
+      : `准备高球杯或常用饮杯，先把${nameZh}需要的材料量好。`,
+    technique: '准备',
+  })
+  if (dissolve.length && dissolveBase) {
+    steps.push({
+      stepNumber: steps.length + 1,
+      instruction: `先用少量${dissolveBase.nameZh}把${amountLine(dissolve)}搅匀，避免粉剂或糖浆沉底。`,
+      technique: '搅拌',
+    })
+  }
+  if (spirits.length || mixers.length) {
+    steps.push({
+      stepNumber: steps.length + 1,
+      instruction: `倒入${amountLine([...spirits, ...mixers].filter((item) => !dissolve.includes(item)))}，轻轻搅拌 6-8 秒。`,
+      technique: method,
+    })
+  }
+  if (fizz.length) {
+    steps.push({
+      stepNumber: steps.length + 1,
+      instruction: `最后沿杯壁补入${amountLine(fizz)}，保留气泡感。`,
+      technique: '兑和',
+    })
+  }
+  steps.push({
+    stepNumber: steps.length + 1,
+    instruction: garnish.length
+      ? `用${amountLine(garnish)}完成装饰，立即品饮。`
+      : `轻轻提拉搅拌一次，完成${nameZh}后立即品饮。`,
+    technique: '出品',
+    tip: '气泡类和便利店特调不要大力摇晃，避免气泡流失或溢出。',
+  })
+
+  return steps.map((step, index) => ({ ...step, stepNumber: index + 1 }))
+}
+
 const trendIngredientsFor = (ingredients) =>
   ingredients.map(([nameZh, amount], index) => {
     const catalogEntry = chineseIngredientCatalog.get(nameZh)
@@ -472,7 +608,7 @@ const trendCocktailToCatalogItem = (record) => {
     isAlcoholic: alcoholic,
     sourceName: 'Chinese social cocktail trend / public web cleanup',
     ingredients,
-    steps: stepsFor(record.nameZh, method),
+    steps: trendStepsFor(record.nameZh, ingredients, method),
   }
 }
 
@@ -526,7 +662,9 @@ const drinkToCocktail = (drink) => {
     isAlcoholic: alcoholic,
     sourceName: 'TheCocktailDB API / generated pantry catalog',
     ingredients: rawIngredients,
-    steps: stepsFor(nameZh, method),
+    steps: sourceInstructionsToSteps(drink.strInstructions, method).length
+      ? sourceInstructionsToSteps(drink.strInstructions, method)
+      : stepsFor(nameZh, method),
   }
 }
 

@@ -20,4 +20,20 @@ describe('cocktail catalog data', () => {
     expect(ingredientNames.has('果立方')).toBe(true)
     expect(ingredientNames.has('水溶C')).toBe(true)
   })
+
+  it('uses recipe-specific steps when source instructions or ingredients are available', () => {
+    const missYou = cocktails.find((cocktail) => cocktail.nameZh === '想见你')
+    const generated = cocktails.find(
+      (cocktail) =>
+        cocktail.sourceName.includes('TheCocktailDB API') && cocktail.nameEn === 'Derby',
+    )
+
+    expect(missYou?.steps.map((step) => step.instruction).join(' ')).toContain('水溶C')
+    expect(missYou?.steps.map((step) => step.instruction).join(' ')).toContain('葡萄气泡水')
+    expect(missYou?.steps[0].instruction).not.toContain('准备杯具、冰块和所有材料')
+
+    expect(generated?.steps.length).toBeGreaterThan(3)
+    expect(generated?.steps.map((step) => step.instruction).join(' ')).toMatch(/pour|shake|shaker/i)
+    expect(generated?.steps[0].instruction).not.toContain('准备杯具、冰块和所有材料')
+  })
 })
