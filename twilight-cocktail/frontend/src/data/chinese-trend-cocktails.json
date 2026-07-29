@@ -1,0 +1,562 @@
+[
+  {
+    "slug": "xiang-jian-ni",
+    "nameZh": "想见你",
+    "nameEn": "Miss You",
+    "popularityWeight": 10,
+    "ingredients": [["伏特加", "30 ml"], ["葡萄气泡水", "120 ml"], ["水溶C", "1 片"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "iceland",
+    "nameZh": "冰岛",
+    "nameEn": "Iceland",
+    "popularityWeight": 10,
+    "ingredients": [["白朗姆酒", "25 ml"], ["金酒", "15 ml"], ["蓝橙力娇酒", "15 ml"], ["雪碧", "120 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "possessive",
+    "nameZh": "占有欲",
+    "nameEn": "Possessive",
+    "popularityWeight": 10,
+    "ingredients": [["伏特加", "30 ml"], ["葡萄汁", "90 ml"], ["水溶C", "1 片"], ["柠檬汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "midnight-galaxy",
+    "nameZh": "午夜星河",
+    "nameEn": "Midnight Galaxy",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "30 ml"], ["蓝橙力娇酒", "15 ml"], ["葡萄气泡水", "100 ml"], ["柠檬汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "sunset-driver",
+    "nameZh": "落日飞车",
+    "nameEn": "Sunset Driver",
+    "popularityWeight": 9,
+    "ingredients": [["龙舌兰", "30 ml"], ["橙汁", "100 ml"], ["红石榴糖浆", "10 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "july-seventh-sun",
+    "nameZh": "七月七日晴",
+    "nameEn": "July Seventh Sun",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "25 ml"], ["白桃气泡水", "120 ml"], ["水溶C", "1 片"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "firefly-forest",
+    "nameZh": "萤火之森",
+    "nameEn": "Firefly Forest",
+    "popularityWeight": 9,
+    "ingredients": [["金酒", "30 ml"], ["青柠汁", "15 ml"], ["薄荷叶", "6 片"], ["苏打水", "120 ml"], ["糖浆", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "sea-salt-grapefruit",
+    "nameZh": "海盐柚子",
+    "nameEn": "Sea Salt Grapefruit",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "30 ml"], ["西柚汁", "90 ml"], ["苏打水", "80 ml"], ["海盐", "1 小撮"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "green-tea-crush",
+    "nameZh": "绿茶表妹",
+    "nameEn": "Green Tea Crush",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "25 ml"], ["绿茶", "130 ml"], ["蜂蜜", "10 ml"], ["柠檬汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "first-love",
+    "nameZh": "国民初恋",
+    "nameEn": "First Love",
+    "popularityWeight": 9,
+    "ingredients": [["蜜桃利口酒", "25 ml"], ["白桃气泡水", "120 ml"], ["养乐多", "50 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "white-peach-oolong",
+    "nameZh": "白桃乌龙",
+    "nameEn": "White Peach Oolong",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "25 ml"], ["白桃乌龙茶", "130 ml"], ["蜜桃汁", "50 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grape-wild-ice",
+    "nameZh": "葡萄冰野",
+    "nameEn": "Grape Wild Ice",
+    "popularityWeight": 9,
+    "ingredients": [["金酒", "30 ml"], ["葡萄汁", "90 ml"], ["葡萄气泡水", "80 ml"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "yakult-tipsy",
+    "nameZh": "微醺养乐多",
+    "nameEn": "Yakult Tipsy",
+    "popularityWeight": 9,
+    "ingredients": [["伏特加", "25 ml"], ["养乐多", "100 ml"], ["苏打水", "60 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "adult-orange-juice",
+    "nameZh": "成人版橙汁",
+    "nameEn": "Adult Orange Juice",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "30 ml"], ["橙汁", "140 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grapefruit-vodka",
+    "nameZh": "西柚伏特加",
+    "nameEn": "Grapefruit Vodka",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "35 ml"], ["西柚汁", "110 ml"], ["汤力水", "50 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "double-c-vodka",
+    "nameZh": "双C伏特加",
+    "nameEn": "Double C Vodka",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "30 ml"], ["水溶C", "1 片"], ["橙汁", "90 ml"], ["柠檬气泡水", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "white-grape-vitamin-c",
+    "nameZh": "白葡萄水溶C",
+    "nameEn": "White Grape Vitamin C",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "25 ml"], ["白葡萄汁", "100 ml"], ["水溶C", "1 片"], ["苏打水", "80 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "peach-vitamin-c",
+    "nameZh": "蜜桃水溶C",
+    "nameEn": "Peach Vitamin C",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "25 ml"], ["蜜桃汁", "90 ml"], ["水溶C", "1 片"], ["白桃气泡水", "80 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "pomelo-vitamin-c",
+    "nameZh": "柚子水溶C",
+    "nameEn": "Pomelo Vitamin C",
+    "popularityWeight": 8,
+    "ingredients": [["金酒", "25 ml"], ["柚子茶", "25 ml"], ["水溶C", "1 片"], ["苏打水", "120 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "green-grape-fizz",
+    "nameZh": "青提气泡",
+    "nameEn": "Green Grape Fizz",
+    "popularityWeight": 8,
+    "ingredients": [["金酒", "30 ml"], ["青提汁", "90 ml"], ["苏打水", "90 ml"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lychee-rose",
+    "nameZh": "荔枝玫瑰",
+    "nameEn": "Lychee Rose",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "25 ml"], ["荔枝汁", "100 ml"], ["玫瑰糖浆", "10 ml"], ["苏打水", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "strawberry-rum",
+    "nameZh": "草莓白朗姆",
+    "nameEn": "Strawberry Rum",
+    "popularityWeight": 8,
+    "ingredients": [["白朗姆酒", "30 ml"], ["草莓汁", "100 ml"], ["青柠汁", "12 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "blueberry-yogurt",
+    "nameZh": "蓝莓酸奶",
+    "nameEn": "Blueberry Yogurt",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "20 ml"], ["蓝莓酱", "20 g"], ["乳酸菌饮料", "120 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "matcha-vodka",
+    "nameZh": "抹茶伏特加",
+    "nameEn": "Matcha Vodka",
+    "popularityWeight": 8,
+    "ingredients": [["伏特加", "25 ml"], ["抹茶粉", "2 g"], ["牛奶", "120 ml"], ["糖浆", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "oolong-highball",
+    "nameZh": "乌龙嗨棒",
+    "nameEn": "Oolong Highball",
+    "popularityWeight": 8,
+    "ingredients": [["威士忌", "35 ml"], ["乌龙茶", "120 ml"], ["苏打水", "40 ml"], ["柠檬片", "1 片"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "jasmine-gin-tonic",
+    "nameZh": "茉莉金汤力",
+    "nameEn": "Jasmine Gin Tonic",
+    "popularityWeight": 8,
+    "ingredients": [["金酒", "35 ml"], ["茉莉花茶", "70 ml"], ["汤力水", "90 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lemon-tea-mojito",
+    "nameZh": "柠檬茶莫吉托",
+    "nameEn": "Lemon Tea Mojito",
+    "popularityWeight": 8,
+    "ingredients": [["白朗姆酒", "30 ml"], ["柠檬茶", "120 ml"], ["薄荷叶", "6 片"], ["青柠汁", "12 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "ice-tea-whiskey",
+    "nameZh": "冰红茶威士忌",
+    "nameEn": "Iced Tea Whiskey",
+    "popularityWeight": 8,
+    "ingredients": [["威士忌", "35 ml"], ["冰红茶", "140 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "herbal-tea-whiskey",
+    "nameZh": "王老吉威士忌",
+    "nameEn": "Herbal Tea Whiskey",
+    "popularityWeight": 7,
+    "ingredients": [["威士忌", "30 ml"], ["凉茶", "140 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "wangzai-baileys",
+    "nameZh": "旺仔百利甜",
+    "nameEn": "Wangzai Baileys",
+    "popularityWeight": 7,
+    "ingredients": [["百利甜酒", "35 ml"], ["旺仔牛奶", "120 ml"], ["咖啡", "30 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "ad-calcium-milk-mix",
+    "nameZh": "AD钙奶特调",
+    "nameEn": "AD Calcium Milk Mix",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "20 ml"], ["AD钙奶", "120 ml"], ["苏打水", "40 ml"], ["柠檬汁", "6 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "coconut-coast",
+    "nameZh": "椰子海岸",
+    "nameEn": "Coconut Coast",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "30 ml"], ["椰子水", "120 ml"], ["菠萝汁", "40 ml"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "peach-oolong-fizz",
+    "nameZh": "桃桃乌龙",
+    "nameEn": "Peach Oolong Fizz",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "25 ml"], ["白桃乌龙茶", "100 ml"], ["白桃气泡水", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "watermelon-vodka",
+    "nameZh": "西瓜伏特加",
+    "nameEn": "Watermelon Vodka",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "30 ml"], ["西瓜汁", "130 ml"], ["青柠汁", "8 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "mango-pomelo-tipsy",
+    "nameZh": "杨枝甘露微醺",
+    "nameEn": "Mango Pomelo Tipsy",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "25 ml"], ["芒果汁", "90 ml"], ["西柚汁", "40 ml"], ["椰奶", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "tropical-fruit-cube",
+    "nameZh": "热带果立方",
+    "nameEn": "Tropical Fruit Cube",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "25 ml"], ["果立方", "130 ml"], ["菠萝汁", "40 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "passionfruit-gin-tonic",
+    "nameZh": "百香果金汤力",
+    "nameEn": "Passionfruit Gin Tonic",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "35 ml"], ["百香果汁", "40 ml"], ["汤力水", "120 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "cucumber-gin-tonic",
+    "nameZh": "黄瓜金汤力",
+    "nameEn": "Cucumber Gin Tonic",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "35 ml"], ["黄瓜", "3 片"], ["汤力水", "130 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "rosemary-grapefruit",
+    "nameZh": "迷迭香柚子",
+    "nameEn": "Rosemary Grapefruit",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "30 ml"], ["西柚汁", "90 ml"], ["迷迭香", "1 枝"], ["苏打水", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "vodka-red-bull",
+    "nameZh": "红牛伏特加",
+    "nameEn": "Vodka Red Bull",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "35 ml"], ["红牛", "140 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "maidong-vodka",
+    "nameZh": "脉动伏特加",
+    "nameEn": "Mizone Vodka",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "30 ml"], ["脉动", "150 ml"], ["青柠汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "coke-bucket",
+    "nameZh": "可乐桶",
+    "nameEn": "Coke Bucket",
+    "popularityWeight": 8,
+    "ingredients": [["威士忌", "45 ml"], ["可乐", "150 ml"], ["柠檬片", "1 片"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "plum-whiskey",
+    "nameZh": "梅子威士忌",
+    "nameEn": "Plum Whiskey",
+    "popularityWeight": 7,
+    "ingredients": [["威士忌", "35 ml"], ["梅子汁", "90 ml"], ["苏打水", "80 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "green-plum-soda",
+    "nameZh": "青梅苏打",
+    "nameEn": "Green Plum Soda",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "25 ml"], ["青梅汁", "80 ml"], ["苏打水", "100 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "osmanthus-oolong",
+    "nameZh": "桂花乌龙",
+    "nameEn": "Osmanthus Oolong",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "25 ml"], ["乌龙茶", "110 ml"], ["桂花糖浆", "10 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lemon-sea-salt",
+    "nameZh": "柠檬海盐",
+    "nameEn": "Lemon Sea Salt",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "25 ml"], ["柠檬汁", "18 ml"], ["雪碧", "120 ml"], ["海盐", "1 小撮"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "orange-blossom-sunset",
+    "nameZh": "橙花日落",
+    "nameEn": "Orange Blossom Sunset",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "30 ml"], ["橙汁", "110 ml"], ["玫瑰糖浆", "8 ml"], ["苏打水", "50 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "easy-blue-hawaii",
+    "nameZh": "蓝色夏威夷便利版",
+    "nameEn": "Easy Blue Hawaii",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "25 ml"], ["蓝橙力娇酒", "15 ml"], ["菠萝汁", "80 ml"], ["雪碧", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "easy-long-island",
+    "nameZh": "低配长岛",
+    "nameEn": "Easy Long Island",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "15 ml"], ["金酒", "15 ml"], ["白朗姆酒", "15 ml"], ["君度", "10 ml"], ["可乐", "120 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "easy-margarita",
+    "nameZh": "便利店玛格丽特",
+    "nameEn": "Easy Margarita",
+    "popularityWeight": 7,
+    "ingredients": [["龙舌兰", "35 ml"], ["青柠汁", "18 ml"], ["橙味利口酒", "15 ml"], ["雪碧", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "pomelo-beer",
+    "nameZh": "柚子啤酒",
+    "nameEn": "Pomelo Beer",
+    "popularityWeight": 7,
+    "ingredients": [["啤酒", "180 ml"], ["柚子茶", "20 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grapefruit-beer-fizz",
+    "nameZh": "西柚气泡啤酒",
+    "nameEn": "Grapefruit Beer Fizz",
+    "popularityWeight": 7,
+    "ingredients": [["啤酒", "160 ml"], ["西柚汁", "60 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "strawberry-beer",
+    "nameZh": "草莓啤酒",
+    "nameEn": "Strawberry Beer",
+    "popularityWeight": 7,
+    "ingredients": [["啤酒", "170 ml"], ["草莓汁", "70 ml"], ["柠檬汁", "6 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "coffee-baileys",
+    "nameZh": "咖啡百利甜",
+    "nameEn": "Coffee Baileys",
+    "popularityWeight": 7,
+    "ingredients": [["百利甜酒", "35 ml"], ["咖啡", "90 ml"], ["牛奶", "50 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "coconut-milk-coffee",
+    "nameZh": "椰奶咖啡酒",
+    "nameEn": "Coconut Milk Coffee",
+    "popularityWeight": 7,
+    "ingredients": [["咖啡利口酒", "25 ml"], ["咖啡", "70 ml"], ["椰奶", "80 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "cream-top-vodka",
+    "nameZh": "奶盖伏特加",
+    "nameEn": "Cream Top Vodka",
+    "popularityWeight": 6,
+    "ingredients": [["伏特加", "20 ml"], ["绿茶", "100 ml"], ["奶油", "25 ml"], ["糖浆", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lychee-gin",
+    "nameZh": "荔枝金酒",
+    "nameEn": "Lychee Gin",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "30 ml"], ["荔枝汁", "110 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grape-gin",
+    "nameZh": "葡萄金酒",
+    "nameEn": "Grape Gin",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "30 ml"], ["葡萄汁", "110 ml"], ["汤力水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "peach-gin-fizz",
+    "nameZh": "桃气泡金酒",
+    "nameEn": "Peach Gin Fizz",
+    "popularityWeight": 7,
+    "ingredients": [["金酒", "30 ml"], ["蜜桃汁", "80 ml"], ["白桃气泡水", "90 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "rose-lychee-vodka",
+    "nameZh": "玫瑰荔枝伏特加",
+    "nameEn": "Rose Lychee Vodka",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "25 ml"], ["荔枝汁", "100 ml"], ["玫瑰糖浆", "10 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lemon-yakult",
+    "nameZh": "柠檬养乐多",
+    "nameEn": "Lemon Yakult",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "20 ml"], ["养乐多", "100 ml"], ["柠檬汁", "12 ml"], ["苏打水", "50 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "orange-yakult",
+    "nameZh": "橙子养乐多",
+    "nameEn": "Orange Yakult",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "20 ml"], ["养乐多", "80 ml"], ["橙汁", "70 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grape-yakult",
+    "nameZh": "葡萄养乐多",
+    "nameEn": "Grape Yakult",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "20 ml"], ["养乐多", "80 ml"], ["葡萄汁", "70 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "sprite-white-rum",
+    "nameZh": "雪碧白朗姆",
+    "nameEn": "Sprite White Rum",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "35 ml"], ["雪碧", "140 ml"], ["青柠汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "tequila-soda",
+    "nameZh": "苏打龙舌兰",
+    "nameEn": "Tequila Soda",
+    "popularityWeight": 7,
+    "ingredients": [["龙舌兰", "35 ml"], ["苏打水", "140 ml"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grapefruit-tequila",
+    "nameZh": "西柚龙舌兰",
+    "nameEn": "Grapefruit Tequila",
+    "popularityWeight": 7,
+    "ingredients": [["龙舌兰", "35 ml"], ["西柚汁", "100 ml"], ["苏打水", "60 ml"], ["海盐", "1 小撮"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "pineapple-rum",
+    "nameZh": "菠萝朗姆",
+    "nameEn": "Pineapple Rum",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "35 ml"], ["菠萝汁", "120 ml"], ["青柠汁", "10 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "cranberry-vodka",
+    "nameZh": "蔓越莓伏特加",
+    "nameEn": "Cranberry Vodka",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "35 ml"], ["蔓越莓汁", "130 ml"], ["青柠汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "peach-vodka",
+    "nameZh": "蜜桃伏特加",
+    "nameEn": "Peach Vodka",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "30 ml"], ["蜜桃汁", "120 ml"], ["苏打水", "50 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "apple-whiskey",
+    "nameZh": "苹果威士忌",
+    "nameEn": "Apple Whiskey",
+    "popularityWeight": 7,
+    "ingredients": [["威士忌", "35 ml"], ["苹果汁", "120 ml"], ["苏打水", "40 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "peach-baileys",
+    "nameZh": "水蜜桃百利甜",
+    "nameEn": "Peach Baileys",
+    "popularityWeight": 6,
+    "ingredients": [["百利甜酒", "30 ml"], ["蜜桃汁", "80 ml"], ["牛奶", "70 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "frozen-lemon-tea-whiskey",
+    "nameZh": "冻柠茶威士忌",
+    "nameEn": "Frozen Lemon Tea Whiskey",
+    "popularityWeight": 7,
+    "ingredients": [["威士忌", "35 ml"], ["柠檬茶", "130 ml"], ["柠檬片", "1 片"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "lime-coke-rum",
+    "nameZh": "青柠可乐朗姆",
+    "nameEn": "Lime Coke Rum",
+    "popularityWeight": 7,
+    "ingredients": [["白朗姆酒", "35 ml"], ["可乐", "140 ml"], ["青柠汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "blue-curacao-sprite",
+    "nameZh": "蓝橙雪碧",
+    "nameEn": "Blue Curacao Sprite",
+    "popularityWeight": 7,
+    "ingredients": [["伏特加", "20 ml"], ["蓝橙力娇酒", "15 ml"], ["雪碧", "140 ml"], ["柠檬汁", "8 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "berry-fizz",
+    "nameZh": "莓果气泡酒",
+    "nameEn": "Berry Fizz",
+    "popularityWeight": 6,
+    "ingredients": [["伏特加", "25 ml"], ["蓝莓酱", "15 g"], ["草莓汁", "60 ml"], ["苏打水", "90 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "grape-iced-tea",
+    "nameZh": "葡萄冰茶",
+    "nameEn": "Grape Iced Tea",
+    "popularityWeight": 6,
+    "ingredients": [["伏特加", "25 ml"], ["葡萄汁", "80 ml"], ["冰红茶", "80 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "sea-salt-lychee",
+    "nameZh": "海盐荔枝",
+    "nameEn": "Sea Salt Lychee",
+    "popularityWeight": 6,
+    "ingredients": [["金酒", "25 ml"], ["荔枝汁", "110 ml"], ["苏打水", "60 ml"], ["海盐", "1 小撮"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "blackcurrant-vodka",
+    "nameZh": "黑加仑伏特加",
+    "nameEn": "Blackcurrant Vodka",
+    "popularityWeight": 6,
+    "ingredients": [["伏特加", "30 ml"], ["黑加仑汁", "110 ml"], ["苏打水", "60 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "pomelo-see-you",
+    "nameZh": "柚见你",
+    "nameEn": "Pomelo See You",
+    "popularityWeight": 6,
+    "ingredients": [["伏特加", "25 ml"], ["柚子茶", "20 ml"], ["水溶C", "1 片"], ["苏打水", "120 ml"], ["冰块", "适量"]]
+  },
+  {
+    "slug": "no-work-today",
+    "nameZh": "不想上班",
+    "nameEn": "No Work Today",
+    "popularityWeight": 6,
+    "ingredients": [["威士忌", "30 ml"], ["咖啡", "80 ml"], ["可乐", "80 ml"], ["柠檬汁", "6 ml"], ["冰块", "适量"]]
+  }
+]

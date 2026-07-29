@@ -6,7 +6,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const publicCatalogPath = path.join(rootDir, 'public/cocktails/catalog.json')
 const generatedCatalogPath = path.join(rootDir, 'src/data/cocktails.generated.json')
-const targetCount = Number(process.env.COCKTAIL_TARGET_COUNT ?? 300)
+const chineseTrendCatalogPath = path.join(rootDir, 'src/data/chinese-trend-cocktails.json')
+const targetCount = Number(process.env.COCKTAIL_TARGET_COUNT ?? 420)
 
 const letters = 'abcdefghijklmnopqrstuvwxyz'.split('')
 
@@ -211,6 +212,84 @@ const ingredientAliases = new Map([
   ['mint leaf', 'mint'],
 ])
 
+const chineseIngredientCatalog = new Map([
+  ['伏特加', ['vodka', 'Vodka']],
+  ['白朗姆酒', ['white-rum', 'White rum']],
+  ['朗姆酒', ['rum', 'Rum']],
+  ['金酒', ['gin', 'Gin']],
+  ['威士忌', ['whiskey', 'Whiskey']],
+  ['波本威士忌', ['bourbon', 'Bourbon whiskey']],
+  ['白兰地', ['brandy', 'Brandy']],
+  ['龙舌兰', ['tequila', 'Tequila']],
+  ['君度', ['triple-sec', 'Triple sec']],
+  ['橙味利口酒', ['triple-sec', 'Triple sec']],
+  ['蓝橙力娇酒', ['blue-curacao', 'Blue curacao']],
+  ['蜜桃利口酒', ['peach-schnapps', 'Peach schnapps']],
+  ['百利甜酒', ['baileys-irish-cream', 'Baileys Irish Cream']],
+  ['咖啡利口酒', ['coffee-liqueur', 'Coffee liqueur']],
+  ['啤酒', ['beer', 'Beer']],
+  ['葡萄气泡水', ['grape-sparkling-water', 'Grape sparkling water']],
+  ['白桃气泡水', ['white-peach-sparkling-water', 'White peach sparkling water']],
+  ['柠檬气泡水', ['lemon-sparkling-water', 'Lemon sparkling water']],
+  ['葡萄汁', ['grape-juice', 'Grape juice']],
+  ['白葡萄汁', ['white-grape-juice', 'White grape juice']],
+  ['青提汁', ['green-grape-juice', 'Green grape juice']],
+  ['西柚汁', ['grapefruit-juice', 'Grapefruit juice']],
+  ['橙汁', ['orange-juice', 'Orange juice']],
+  ['苹果汁', ['apple-juice', 'Apple juice']],
+  ['蜜桃汁', ['peach-juice', 'Peach juice']],
+  ['芒果汁', ['mango-juice', 'Mango juice']],
+  ['荔枝汁', ['lychee-juice', 'Lychee juice']],
+  ['菠萝汁', ['pineapple-juice', 'Pineapple juice']],
+  ['蔓越莓汁', ['cranberry-juice', 'Cranberry juice']],
+  ['草莓汁', ['strawberry-juice', 'Strawberry juice']],
+  ['西瓜汁', ['watermelon-juice', 'Watermelon juice']],
+  ['百香果汁', ['passionfruit-juice', 'Passionfruit juice']],
+  ['梅子汁', ['plum-juice', 'Plum juice']],
+  ['青梅汁', ['green-plum-juice', 'Green plum juice']],
+  ['黑加仑汁', ['blackcurrant-juice', 'Blackcurrant juice']],
+  ['柠檬汁', ['lemon-juice', 'Lemon juice']],
+  ['青柠汁', ['lime-juice', 'Lime juice']],
+  ['雪碧', ['sprite', 'Sprite']],
+  ['苏打水', ['soda-water', 'Soda water']],
+  ['汤力水', ['tonic-water', 'Tonic water']],
+  ['可乐', ['cola', 'Cola']],
+  ['养乐多', ['yakult', 'Yakult']],
+  ['AD钙奶', ['ad-calcium-milk', 'AD calcium milk']],
+  ['旺仔牛奶', ['wangzai-milk', 'Wangzai milk']],
+  ['牛奶', ['milk', 'Milk']],
+  ['乳酸菌饮料', ['lactic-acid-drink', 'Lactic acid drink']],
+  ['果立方', ['fruit-cube-drink', 'Fruit cube drink']],
+  ['红牛', ['red-bull', 'Red Bull']],
+  ['脉动', ['mizone', 'Mizone']],
+  ['椰子水', ['coconut-water', 'Coconut water']],
+  ['椰奶', ['coconut-milk', 'Coconut milk']],
+  ['咖啡', ['coffee', 'Coffee']],
+  ['绿茶', ['green-tea', 'Green tea']],
+  ['乌龙茶', ['oolong-tea', 'Oolong tea']],
+  ['白桃乌龙茶', ['white-peach-oolong-tea', 'White peach oolong tea']],
+  ['茉莉花茶', ['jasmine-tea', 'Jasmine tea']],
+  ['柠檬茶', ['lemon-tea', 'Lemon tea']],
+  ['冰红茶', ['iced-black-tea', 'Iced black tea']],
+  ['凉茶', ['herbal-tea', 'Herbal tea']],
+  ['柚子茶', ['pomelo-tea', 'Pomelo tea']],
+  ['抹茶粉', ['matcha-powder', 'Matcha powder']],
+  ['蓝莓酱', ['blueberry-jam', 'Blueberry jam']],
+  ['红石榴糖浆', ['grenadine', 'Grenadine']],
+  ['玫瑰糖浆', ['rose-syrup', 'Rose syrup']],
+  ['桂花糖浆', ['osmanthus-syrup', 'Osmanthus syrup']],
+  ['糖浆', ['simple-syrup', 'Simple syrup']],
+  ['蜂蜜', ['honey', 'Honey']],
+  ['奶油', ['cream', 'Cream']],
+  ['水溶C', ['vitamin-c-tablet', 'Water soluble vitamin C tablet']],
+  ['黄瓜', ['cucumber', 'Cucumber']],
+  ['薄荷叶', ['mint', 'Mint leaves']],
+  ['迷迭香', ['rosemary', 'Rosemary']],
+  ['柠檬片', ['lemon-slice', 'Lemon slice']],
+  ['海盐', ['sea-salt', 'Sea salt']],
+  ['冰块', ['ice', 'Ice']],
+])
+
 const slugify = (value) =>
   value
     .normalize('NFKD')
@@ -330,6 +409,73 @@ const stepsFor = (nameZh, method) => [
   },
 ]
 
+const trendIngredientsFor = (ingredients) =>
+  ingredients.map(([nameZh, amount], index) => {
+    const catalogEntry = chineseIngredientCatalog.get(nameZh)
+    const fallbackSlug = slugify(nameZh)
+    const slug = (catalogEntry?.[0] ?? fallbackSlug) || `cn-ingredient-${index + 1}`
+    const nameEn = catalogEntry?.[1] ?? nameZh
+    return {
+      slug,
+      nameZh,
+      nameEn,
+      amount,
+      requirement: ['冰块', '柠檬片', '薄荷叶', '迷迭香', '海盐', '黄瓜'].includes(nameZh)
+        ? 'garnish'
+        : 'required',
+      displayOrder: index + 1,
+    }
+  })
+
+const trendCocktailToCatalogItem = (record) => {
+  const ingredients = trendIngredientsFor(record.ingredients)
+  const method = record.method ?? '兑和'
+  const alcoholic = ingredients.some((item) =>
+    [
+      'vodka',
+      'white-rum',
+      'rum',
+      'gin',
+      'whiskey',
+      'bourbon',
+      'brandy',
+      'tequila',
+      'triple-sec',
+      'blue-curacao',
+      'peach-schnapps',
+      'baileys-irish-cream',
+      'coffee-liqueur',
+      'beer',
+    ].includes(item.slug),
+  )
+  const tags = ['中文特调', '网红酒单', '便利店调酒', ...(record.tags ?? [])]
+  return {
+    id: `cn-${record.slug}`,
+    slug: record.slug,
+    nameZh: record.nameZh,
+    nameEn: record.nameEn,
+    shortDescription: `${record.nameZh}来自中文网红调酒清洗数据，适合用常见饮料和酒柜材料快速筛选。`,
+    story: `${record.nameZh}按公开可见的中文社交酒单线索清洗成结构化配方，优先保留名字、基酒、饮料、酸甜平衡和可替代原料。`,
+    imageUrl: '',
+    imageTone: toneFromIngredients(ingredients, alcoholic),
+    baseSpirit: baseSpiritFromIngredients(ingredients, alcoholic),
+    glassType: record.glassType ?? '高球杯',
+    method,
+    difficulty: difficultyFromIngredients(ingredients),
+    prepMinutes: ingredients.length <= 4 ? 5 : 7,
+    alcoholLevel: alcoholic ? (ingredients.length <= 4 ? 'medium' : 'low') : 'none',
+    flavors: flavorsFromIngredients(ingredients, alcoholic),
+    tags,
+    popularityWeight: record.popularityWeight ?? 6,
+    beginnerFriendly: true,
+    isIba: false,
+    isAlcoholic: alcoholic,
+    sourceName: 'Chinese social cocktail trend / public web cleanup',
+    ingredients,
+    steps: stepsFor(record.nameZh, method),
+  }
+}
+
 const drinkToCocktail = (drink) => {
   const rawIngredients = []
   for (let index = 1; index <= 15; index += 1) {
@@ -411,12 +557,19 @@ const fetchAllCocktailDbDrinks = async () => {
 
 const main = async () => {
   const existingCatalog = JSON.parse(await fs.readFile(publicCatalogPath, 'utf8'))
-  const curatedItems = existingCatalog.items
-    .filter((item) => !item.sourceName?.includes('generated pantry catalog'))
+  const chineseTrendRecords = JSON.parse(await fs.readFile(chineseTrendCatalogPath, 'utf8'))
+  const existingCuratedItems = existingCatalog.items
+    .filter(
+      (item) =>
+        !item.sourceName?.includes('generated pantry catalog') &&
+        !item.sourceName?.includes('Chinese social cocktail trend'),
+    )
     .map((item) => ({
       ...item,
       popularityWeight: Math.max(item.popularityWeight ?? 0, 8),
     }))
+  const trendItems = chineseTrendRecords.map(trendCocktailToCatalogItem)
+  const curatedItems = [...existingCuratedItems, ...trendItems]
   const curatedSlugs = new Set(curatedItems.map((item) => item.slug))
   const remoteDrinks = await fetchAllCocktailDbDrinks()
   const generated = remoteDrinks
@@ -437,7 +590,8 @@ const main = async () => {
   console.log(
     JSON.stringify(
       {
-        curated: curatedItems.length,
+        curated: existingCuratedItems.length,
+        chineseTrend: trendItems.length,
         remote: remoteDrinks.length,
         generated: generated.length,
         written: items.length,
