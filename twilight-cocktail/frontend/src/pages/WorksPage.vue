@@ -12,14 +12,17 @@
           <label class="space-y-2 text-sm text-muted">
             <span>调酒日期</span>
             <input
+              ref="dateInput"
               v-model="form.madeAt"
-              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
               type="date"
+              @click="openDatePicker"
+              @focus="openDatePicker"
             />
           </label>
 
           <label class="space-y-2 text-sm text-muted">
-            <span>关联酒款</span>
+            <span>酒单</span>
             <select
               v-model="selectedSlug"
               class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
@@ -46,14 +49,97 @@
           />
         </label>
 
-        <label class="mt-4 block space-y-2 text-sm text-muted">
+        <div class="mt-4 space-y-4 rounded-lg border border-gold/10 bg-obsidian/35 p-4">
           <span>原材料</span>
-          <textarea
-            v-model="form.ingredientsText"
-            class="min-h-28 w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
-            placeholder="每行写一种材料，例如：伏特加 30 ml"
-          />
-        </label>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-xs text-muted">基酒，必填，最多 4 种</p>
+              <p class="text-xs text-gold">{{ selectedBaseLiquorCount }}/4</p>
+            </div>
+            <div class="grid gap-2 sm:grid-cols-4">
+              <select
+                v-for="index in 4"
+                :key="index"
+                v-model="form.ingredientGroups.baseLiquors[index - 1]"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                :aria-label="`基酒 ${index}`"
+              >
+                <option value="">{{ index === 1 ? '选择基酒' : '可选' }}</option>
+                <option
+                  v-for="option in baseLiquorOptions"
+                  :key="option"
+                  :value="option"
+                  :disabled="isBaseOptionDisabled(option, index - 1)"
+                >
+                  {{ option }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="text-xs text-muted">调味酒</p>
+            <select
+              v-model="selectedFlavorLiquor"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              @change="addFlavorLiquor"
+            >
+              <option value="">选择调味酒</option>
+              <option v-for="option in flavorLiquorOptions" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+            <div v-if="form.ingredientGroups.flavorLiquors.length" class="flex flex-wrap gap-2">
+              <button
+                v-for="item in form.ingredientGroups.flavorLiquors"
+                :key="item"
+                class="rounded-full bg-cream/10 px-3 py-1 text-xs text-cream transition hover:bg-wine/30"
+                type="button"
+                @click="removeFlavorLiquor(item)"
+              >
+                {{ item }} ×
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <p class="text-xs text-muted">饮料类型</p>
+            <select
+              v-model="selectedBeverage"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              @change="addBeverage"
+            >
+              <option value="">选择饮料</option>
+              <option v-for="option in beverageOptions" :key="option" :value="option">
+                {{ option }}
+              </option>
+            </select>
+            <div v-if="form.ingredientGroups.beverages.length" class="flex flex-wrap gap-2">
+              <button
+                v-for="item in form.ingredientGroups.beverages"
+                :key="item"
+                class="rounded-full bg-gold/15 px-3 py-1 text-xs text-cream transition hover:bg-wine/30"
+                type="button"
+                @click="removeBeverage(item)"
+              >
+                {{ item }} ×
+              </button>
+            </div>
+          </div>
+
+          <label class="block space-y-2 text-sm text-muted">
+            <span>其他</span>
+            <textarea
+              v-model="form.ingredientGroups.other"
+              class="min-h-24 w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              placeholder="自由记录，例如：冰块、柠檬片、薄荷叶，或补充具体用量。"
+            />
+          </label>
+        </div>
+
+        <p v-if="formError" class="mt-3 rounded-md bg-wine/20 px-3 py-2 text-sm text-cream">
+          {{ formError }}
+        </p>
 
         <div class="mt-4 grid gap-4 sm:grid-cols-2">
           <label class="space-y-2 text-sm text-muted">
@@ -196,7 +282,7 @@
               </div>
 
               <p class="mt-3 whitespace-pre-line text-sm leading-6 text-muted">
-                {{ item.ingredientsText }}
+                {{ formatWorkIngredients(item) }}
               </p>
               <p v-if="item.selfReview" class="mt-3 text-sm leading-6 text-cream">
                 {{ item.selfReview }}
@@ -222,38 +308,240 @@ import { Camera, Plus, Sparkles, Trash2 } from 'lucide-vue-next'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
-import { cocktails } from '@/data/cocktails'
-import { useWorkStore, type WorkRecordInput } from '@/stores/works'
+import { allIngredients, cocktails } from '@/data/cocktails'
+import {
+  formatWorkIngredients,
+  useWorkStore,
+  type WorkIngredientGroups,
+  type WorkRecordInput,
+} from '@/stores/works'
 
 const works = useWorkStore()
 const selectedSlug = ref('')
-const today = new Date().toISOString().slice(0, 10)
-const form = reactive<WorkRecordInput>({
-  madeAt: today,
+const selectedFlavorLiquor = ref('')
+const selectedBeverage = ref('')
+const formError = ref('')
+const dateInput = ref<HTMLInputElement | null>(null)
+const getToday = () => new Date().toISOString().slice(0, 10)
+const createIngredientGroups = (): WorkIngredientGroups => ({
+  baseLiquors: ['', '', '', ''],
+  flavorLiquors: [],
+  beverages: [],
+  other: '',
+})
+
+type WorkForm = WorkRecordInput & {
+  ingredientGroups: WorkIngredientGroups
+}
+
+const form = reactive<WorkForm>({
+  madeAt: getToday(),
   cocktailSlug: '',
   cocktailName: '',
   photoDataUrl: '',
   ingredientsText: '',
+  ingredientGroups: createIngredientGroups(),
   rating: 0,
   mood: '',
   selfReview: '',
   notes: '',
 })
 
+const baseLiquorOptions = ['金酒', '朗姆酒', '伏特加', '龙舌兰', '威士忌', '白兰地']
+const priorityBeverages = ['柠檬水溶C', '葡萄味气泡水', '橙汁', '东方树叶', '西柚汁']
+const extraBeverages = [
+  '水溶C',
+  '葡萄气泡水',
+  '白葡萄汁',
+  '白桃气泡水',
+  '雪碧',
+  '苏打水',
+  '汤力水',
+  '可乐',
+  '绿茶',
+  '红茶',
+  '乌龙茶',
+  '养乐多',
+  '菠萝汁',
+  '蔓越莓汁',
+  '苹果汁',
+  '葡萄汁',
+  '柠檬汁',
+  '青柠汁',
+  '姜汁汽水',
+  '姜汁啤酒',
+  '咖啡',
+  '牛奶',
+  '椰奶',
+]
+const beverageKeywords = [
+  '汁',
+  '水',
+  '茶',
+  '咖啡',
+  '气泡',
+  '雪碧',
+  '可乐',
+  '汤力',
+  '苏打',
+  '养乐多',
+  '牛奶',
+  '椰奶',
+  '姜汁',
+  'Water',
+  'Juice',
+  'Soda',
+  'Tea',
+  'Coffee',
+  'Cola',
+  'Tonic',
+  'Milk',
+]
+const flavorLiquorKeywords = [
+  '利口酒',
+  '力娇酒',
+  '苦精',
+  '味美思',
+  '香槟',
+  '葡萄酒',
+  '雪利',
+  '波特',
+  '啤酒',
+  'Liqueur',
+  'Bitters',
+  'Vermouth',
+  'Wine',
+  'Champagne',
+  'Sherry',
+  'Beer',
+]
+
+const uniqueNames = (names: readonly string[]) =>
+  Array.from(new Set(names.map((item) => item.trim()).filter(Boolean)))
+
+const isBaseLiquorName = (name: string) =>
+  [
+    /金酒|琴酒|Gin/i,
+    /朗姆|Rum/i,
+    /伏特加|Vodka/i,
+    /龙舌兰|Tequila/i,
+    /威士忌|威士忌|Whisk|Bourbon|Scotch|Rye/i,
+    /白兰地|Brandy|Cognac/i,
+  ].some((pattern) => pattern.test(name))
+
+const getBaseLiquorLabel = (name: string) => {
+  if (/金酒|琴酒|Gin/i.test(name)) return '金酒'
+  if (/朗姆|Rum/i.test(name)) return '朗姆酒'
+  if (/伏特加|Vodka/i.test(name)) return '伏特加'
+  if (/龙舌兰|Tequila/i.test(name)) return '龙舌兰'
+  if (/威士忌|威士忌|Whisk|Bourbon|Scotch|Rye/i.test(name)) return '威士忌'
+  if (/白兰地|Brandy|Cognac/i.test(name)) return '白兰地'
+  return ''
+}
+
+const isBeverageName = (name: string) =>
+  priorityBeverages.includes(name) ||
+  extraBeverages.includes(name) ||
+  beverageKeywords.some((keyword) => name.includes(keyword))
+
+const isFlavorLiquorName = (name: string) =>
+  flavorLiquorKeywords.some((keyword) => name.includes(keyword))
+
 const cocktailOptions = computed(() =>
   [...cocktails].sort((a, b) => b.popularityWeight - a.popularityWeight),
 )
+const ingredientNames = computed(() => uniqueNames(allIngredients.map((item) => item.nameZh)))
+const beverageOptions = computed(() =>
+  uniqueNames([
+    ...priorityBeverages,
+    ...extraBeverages,
+    ...ingredientNames.value.filter((name) => isBeverageName(name) && !isBaseLiquorName(name)),
+  ]),
+)
+const flavorLiquorOptions = computed(() =>
+  uniqueNames(
+    ingredientNames.value
+      .filter((name) => !isBaseLiquorName(name) && !isBeverageName(name))
+      .filter((name) => isFlavorLiquorName(name) || !['冰块', '水'].includes(name))
+      .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')),
+  ),
+)
+const selectedBaseLiquorCount = computed(
+  () => form.ingredientGroups.baseLiquors.filter(Boolean).length,
+)
 const averageRatingText = computed(() => (works.averageRating ? `${works.averageRating}` : '-'))
 const latestDateText = computed(() => works.latestItems[0]?.madeAt.slice(5) ?? '-')
+
+const openDatePicker = () => {
+  const input = dateInput.value as (HTMLInputElement & { showPicker?: () => void }) | null
+  input?.showPicker?.()
+}
+
+const isBaseOptionDisabled = (option: string, index: number) =>
+  form.ingredientGroups.baseLiquors.some(
+    (item, itemIndex) => item === option && itemIndex !== index,
+  )
+
+const addUnique = (items: string[], value: string) => {
+  const next = value.trim()
+  if (next && !items.includes(next)) items.push(next)
+}
+
+const removeFrom = (items: string[], value: string) => {
+  const index = items.indexOf(value)
+  if (index >= 0) items.splice(index, 1)
+}
+
+const addFlavorLiquor = () => {
+  addUnique(form.ingredientGroups.flavorLiquors, selectedFlavorLiquor.value)
+  selectedFlavorLiquor.value = ''
+}
+
+const removeFlavorLiquor = (value: string) => {
+  removeFrom(form.ingredientGroups.flavorLiquors, value)
+}
+
+const addBeverage = () => {
+  addUnique(form.ingredientGroups.beverages, selectedBeverage.value)
+  selectedBeverage.value = ''
+}
+
+const removeBeverage = (value: string) => {
+  removeFrom(form.ingredientGroups.beverages, value)
+}
 
 const applyCocktail = () => {
   const cocktail = cocktails.find((item) => item.slug === selectedSlug.value)
   form.cocktailSlug = cocktail?.slug ?? ''
   if (!cocktail) return
   form.cocktailName = cocktail.nameZh
-  form.ingredientsText = cocktail.ingredients
-    .map((item) => `${item.nameZh}${item.amount ? ` ${item.amount}` : ''}`)
-    .join('\n')
+  const groups = createIngredientGroups()
+  const otherItems: string[] = []
+
+  cocktail.ingredients.forEach((item) => {
+    const baseLiquor = getBaseLiquorLabel(item.nameZh || item.nameEn)
+    if (baseLiquor && !groups.baseLiquors.includes(baseLiquor)) {
+      const slot = groups.baseLiquors.findIndex((value) => !value)
+      if (slot >= 0) groups.baseLiquors[slot] = baseLiquor
+      return
+    }
+
+    if (isBeverageName(item.nameZh)) {
+      addUnique(groups.beverages, item.nameZh)
+      return
+    }
+
+    if (isFlavorLiquorName(item.nameZh) || isFlavorLiquorName(item.nameEn)) {
+      addUnique(groups.flavorLiquors, item.nameZh)
+      return
+    }
+
+    otherItems.push(`${item.nameZh}${item.amount ? ` ${item.amount}` : ''}`)
+  })
+
+  groups.other = otherItems.join('\n')
+  form.ingredientGroups = groups
+  form.ingredientsText = formatWorkIngredients({ ingredientsText: '', ingredientGroups: groups })
 }
 
 const readPhoto = (event: Event) => {
@@ -271,12 +559,16 @@ const readPhoto = (event: Event) => {
 
 const resetForm = () => {
   selectedSlug.value = ''
+  selectedFlavorLiquor.value = ''
+  selectedBeverage.value = ''
+  formError.value = ''
   Object.assign(form, {
-    madeAt: today,
+    madeAt: getToday(),
     cocktailSlug: '',
     cocktailName: '',
     photoDataUrl: '',
     ingredientsText: '',
+    ingredientGroups: createIngredientGroups(),
     rating: 0,
     mood: '',
     selfReview: '',
@@ -285,11 +577,29 @@ const resetForm = () => {
 }
 
 const submit = () => {
-  if (!form.cocktailName.trim()) return
+  formError.value = ''
+  if (!form.cocktailName.trim()) {
+    formError.value = '请先填写作品名称。'
+    return
+  }
+  if (!form.madeAt) {
+    formError.value = '请选择调酒日期。'
+    return
+  }
+  if (!form.ingredientGroups.baseLiquors.some(Boolean)) {
+    formError.value = '请至少选择一种基酒。'
+    return
+  }
+
+  const ingredientsText = formatWorkIngredients({
+    ingredientsText: form.ingredientsText,
+    ingredientGroups: form.ingredientGroups,
+  })
+
   works.add({
     ...form,
     cocktailName: form.cocktailName.trim(),
-    ingredientsText: form.ingredientsText.trim(),
+    ingredientsText,
     mood: form.mood.trim(),
     selfReview: form.selfReview.trim(),
     notes: form.notes.trim(),

@@ -8,6 +8,7 @@ export type WorkRecordInput = {
   cocktailName: string
   photoDataUrl: string
   ingredientsText: string
+  ingredientGroups?: WorkIngredientGroups
   rating: number
   mood: string
   selfReview: string
@@ -17,6 +18,13 @@ export type WorkRecordInput = {
 export type WorkRecord = WorkRecordInput & {
   id: string
   createdAt: string
+}
+
+export type WorkIngredientGroups = {
+  baseLiquors: string[]
+  flavorLiquors: string[]
+  beverages: string[]
+  other: string
 }
 
 const createId = () => {
@@ -48,6 +56,42 @@ const readRecords = (): WorkRecord[] => {
   }
 }
 
+const normalizeIngredientGroups = (
+  groups: WorkIngredientGroups | undefined,
+): WorkIngredientGroups | undefined => {
+  if (!groups) return undefined
+  return {
+    baseLiquors: groups.baseLiquors
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .slice(0, 4),
+    flavorLiquors: Array.from(
+      new Set(groups.flavorLiquors.map((item) => item.trim()).filter(Boolean)),
+    ),
+    beverages: Array.from(new Set(groups.beverages.map((item) => item.trim()).filter(Boolean))),
+    other: groups.other.trim(),
+  }
+}
+
+const formatLine = (label: string, values: readonly string[]) =>
+  values.length ? `${label}：${values.join('、')}` : ''
+
+export const formatWorkIngredients = (
+  record: Pick<WorkRecordInput, 'ingredientsText' | 'ingredientGroups'>,
+) => {
+  const groups = normalizeIngredientGroups(record.ingredientGroups)
+  if (!groups) return record.ingredientsText.trim()
+
+  return [
+    formatLine('基酒', groups.baseLiquors),
+    formatLine('调味酒', groups.flavorLiquors),
+    formatLine('饮料', groups.beverages),
+    groups.other,
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 const writeRecords = (records: WorkRecord[]) => {
   window.localStorage.setItem(storageKey, JSON.stringify(records))
 }
@@ -73,6 +117,8 @@ export const useWorkStore = defineStore('works', {
     add(input: WorkRecordInput): WorkRecord {
       const record: WorkRecord = {
         ...input,
+        ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
+        ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
         id: createId(),
         createdAt: new Date().toISOString(),
       }
