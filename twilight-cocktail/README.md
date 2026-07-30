@@ -1,39 +1,50 @@
-# 暮色酒单 Twilight Cocktail
+# 暮调 Twilight Mixbook
 
-暮色酒单是一款面向调酒初学者和轻度爱好者的响应式 Web/PWA 原型。当前版本完成 PRD 的第一至第三阶段主链路：工程骨架、暗色高级视觉系统、核心页面、SQLAlchemy 数据模型、种子数据、匿名用户、酒谱、每日推荐、收藏和浏览历史 API。
+每晚一杯的私人调酒手账。
 
-线上静态版链接：
+暮调是一款面向日常调酒爱好者的响应式 Web/PWA 应用。它把酒单浏览、每日推荐、酒柜匹配、调酒学院和个人作品记录放在同一个系统里，适合每天调酒时记录灵感、配方、照片和复盘。
+
+线上体验：
 
 - https://bai1623.github.io/weixun/
 
-## 当前范围
+## 功能概览
 
-已实现：
-
-- Vue 3 + TypeScript + Vite 前端。
-- FastAPI 后端、Swagger 和 `/api/v1` 核心接口。
-- Docker Compose：frontend、backend、postgres。
-- 61 款酒谱种子数据，覆盖经典酒、热带长饮、酸酒、无酒精特调和基础练习款。
-- 8 节调酒学院课程。
-- 首页、每日轮盘、今日结果、酒谱列表、详情、制作模式、学院、酒柜、我的。
-- 后端同用户同日期幂等每日推荐，前端离线时回落本地推荐。
-- 匿名用户、收藏、最近浏览 API。
-- 酒柜 `可以直接制作 / 只差一种 / 材料不足` 基础匹配。
-- SQLAlchemy 模型、SQLite/PostgreSQL 兼容连接配置和 Alembic 基线迁移。
-- 56 张本地真实酒款照片，覆盖核心经典和流行酒款。
-- Vitest 单元测试、Pytest API 测试、Ruff 和 Mypy。
-
-未完成但已预留：
-
-- 后端酒柜、学院、搜索联想、用户偏好和管理审核 API。
-- 真实图片资源、来源许可字段精细化和配方二次校对流程。
-- 完整 E2E、PWA 安装验收、生产部署和监控。
+- **酒谱**：420 款酒单数据，包含经典鸡尾酒、TheCocktailDB 扩展酒款和 80 款中文网红特调。
+- **真实步骤**：359 款酒已有来源说明或配方特定制作步骤，其余无可靠来源的酒款保留兜底步骤。
+- **每日酒单**：星图式随机推荐，不喜欢可以“再摇一杯”。
+- **我的酒柜**：登记已有原料，筛选可以直接制作、只差一种材料和部分匹配的酒。
+- **调酒学院**：8 节入门课程，本地记录学习进度。
+- **我的作品**：记录每天调过的酒，包括日期、照片、原材料、评分、自我评价、口感关键词和备注。
+- **收藏与历史**：支持本地收藏、浏览记录和匿名用户 API。
+- **离线静态演示**：GitHub Pages 版本优先读取静态 catalog，后端不可用时仍可独立使用。
 
 ## 技术栈
 
-前端：Vue 3、TypeScript、Vite、Vue Router、Pinia、Tailwind CSS、Axios、ECharts、Vite PWA、Vitest、Playwright。
+前端：
 
-后端：FastAPI、Pydantic、SQLAlchemy、Alembic、PostgreSQL/SQLite、Pytest、Ruff、Mypy。Docker 使用 Python 3.12。
+- Vue 3
+- TypeScript
+- Vite
+- Vue Router
+- Pinia
+- Tailwind CSS
+- Axios
+- ECharts
+- lucide-vue-next
+- Vite PWA
+- Vitest
+
+后端：
+
+- FastAPI
+- Pydantic
+- SQLAlchemy
+- Alembic
+- PostgreSQL / SQLite
+- Pytest
+- Ruff
+- Mypy
 
 ## 目录结构
 
@@ -42,6 +53,8 @@ twilight-cocktail/
 ├── docker-compose.yml
 ├── .env.example
 ├── frontend/
+│   ├── public/cocktails/
+│   ├── scripts/
 │   ├── src/
 │   │   ├── components/
 │   │   ├── data/
@@ -54,19 +67,25 @@ twilight-cocktail/
 │   └── package.json
 └── backend/
     ├── app/
-    │   ├── api/
-    │   ├── core/
-    │   ├── data/
-    │   ├── db/
-    │   ├── repositories/
-    │   ├── schemas/
-    │   ├── services/
-    │   └── main.py
     ├── alembic/
     └── tests/
 ```
 
 ## 本地启动
+
+只运行前端：
+
+```bash
+cd frontend
+npm install
+npm run dev -- --host 127.0.0.1 --port 5173
+```
+
+访问：
+
+- http://127.0.0.1:5173/
+
+完整 Docker 环境：
 
 ```bash
 cp .env.example .env
@@ -79,13 +98,7 @@ docker compose up --build
 - 后端健康检查：http://localhost:8000/health
 - Swagger：http://localhost:8000/docs
 
-也可以本地开发启动：
-
-```bash
-cd frontend
-npm install
-npm run dev -- --host 127.0.0.1
-```
+后端本地开发：
 
 ```bash
 cd backend
@@ -94,7 +107,7 @@ cd backend
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-默认本地后端会创建 `backend/twilight.db` 并导入种子数据。要连接 PostgreSQL，可设置：
+默认本地后端会创建 `backend/twilight.db` 并导入种子数据。连接 PostgreSQL 时设置：
 
 ```bash
 export DATABASE_URL="postgresql+psycopg://twilight:twilight@localhost:5432/twilight"
@@ -107,17 +120,19 @@ cd backend
 .venv/bin/alembic upgrade head
 ```
 
-核心 API：
+## 数据与来源
 
-- `POST /api/v1/users/anonymous`
-- `GET /api/v1/cocktails`
-- `GET /api/v1/cocktails/{slug}`
-- `GET /api/v1/daily-pick`
-- `GET /api/v1/favorites`
-- `POST /api/v1/favorites/{slug}`
-- `DELETE /api/v1/favorites/{slug}`
-- `GET /api/v1/history/cocktails`
-- `POST /api/v1/history/cocktails/{slug}`
+- 经典酒单和图片来自本地审核数据与 TheCocktailDB 公共 API。
+- 中文网红特调来自公开中文酒单与社交搜索线索清洗，不登录、不绕过平台反爬。
+- `frontend/src/data/chinese-trend-cocktails.json` 保存中文特调结构化源数据。
+- `frontend/scripts/build-cocktail-catalog.mjs` 负责合并、清洗并生成 `catalog.json`。
+
+重新生成酒单：
+
+```bash
+cd frontend
+npm run catalog:build
+```
 
 ## 验证命令
 
@@ -127,17 +142,8 @@ cd backend
 cd frontend
 npm run test -- --run
 npm run lint
-npm run build
-```
-
-GitHub Pages 静态构建：
-
-```bash
-cd frontend
 npm run build:pages
 ```
-
-当前仓库包含 `.github/workflows/deploy-pages.yml`。推送到 `codex/twilight-cocktail-prototype`、`main` 或 `master` 后会自动构建并发布 `gh-pages` 分支。第一次使用时，如果链接没有打开，在 GitHub 仓库 `Settings -> Pages` 中把来源设置为 `Deploy from a branch`，分支选择 `gh-pages`，目录选择 `/root`。
 
 后端：
 
@@ -149,27 +155,19 @@ cd backend
 .venv/bin/alembic upgrade head
 ```
 
-Docker 配置：
+## GitHub Pages
+
+静态构建命令：
 
 ```bash
-docker compose config
+cd frontend
+npm run build:pages
 ```
 
-## 设计决策
+仓库包含 `.github/workflows/deploy-pages.yml`。推送到 `codex/twilight-cocktail-prototype`、`main` 或 `master` 后会自动构建并发布 `gh-pages` 分支。也可以手动把 `frontend/dist` 推送到 `gh-pages`。
 
-- 当前工作目录包含多个无关项目和输出包，因此新建独立 `twilight-cocktail/` 目录。
-- 前端优先读取真实 API；API 不可用时先回落 `public/cocktails/catalog.json` 完整静态酒单，再回落本地 Mock 数据，保证 GitHub Pages 链接可独立演示。
-- 每日推荐以 `daily_picks` 持久化，按 `user_id + pick_date` 保持同日幂等。
-- 视觉避免后台系统风格，采用曜石黑、深咖啡、香槟金、奶油白和少量酒红。
-- 图片阶段性使用 CSS 鸡尾酒视觉占位，并提供清晰文本和失败可用页面结构；后续数据阶段替换为带来源字段的授权图片。
+## 当前限制
 
-## 数据来源
-
-当前配方为本地审核种子数据，用于产品原型和交互验证。酒款照片来自 TheCocktailDB 公共 API 的 `strDrinkThumb` 字段，并已保存到 `frontend/public/cocktails/` 供本地稳定展示。下一阶段会为每条真实种子数据补充更细的来源 URL、许可、校对时间和审核状态。
-
-## 下一阶段
-
-1. 实现酒柜、学院、偏好和审核后台 API。
-2. 引入真实授权图片和配方来源详情。
-3. 补齐 Playwright E2E 主链路和 PWA 安装验收。
-4. 接入生产环境配置、部署和基础监控。
+- “我的作品”、收藏、酒柜和课程进度当前主要保存在浏览器本地，换设备需要后续接入账号和云同步。
+- 部分无可靠来源的酒款仍使用兜底制作步骤。
+- 图片授权、来源 URL、校对时间和审核状态还可以继续精细化。
