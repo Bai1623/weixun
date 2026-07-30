@@ -17,6 +17,7 @@ describe('application routes', () => {
         '/cocktails/:slug/make',
         '/academy',
         '/pantry',
+        '/works',
         '/profile',
       ]),
     )

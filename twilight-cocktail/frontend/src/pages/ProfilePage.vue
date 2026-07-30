@@ -9,7 +9,7 @@
       <p class="text-xs text-muted">匿名用户</p>
       <p class="mt-2 break-all font-mono text-sm text-cream">{{ user.anonymousKey }}</p>
     </div>
-    <div class="grid gap-4 sm:grid-cols-3">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
         <p class="text-muted">收藏</p>
         <p class="mt-2 font-display text-3xl">{{ favorites.slugs.length }}</p>
@@ -22,6 +22,13 @@
         <p class="text-muted">课程</p>
         <p class="mt-2 font-display text-3xl">{{ academy.completedCount }}/8</p>
       </div>
+      <RouterLink
+        class="rounded-lg border border-gold/25 bg-gold/10 p-5 transition hover:border-gold/50 hover:bg-gold/15"
+        to="/works"
+      >
+        <p class="text-muted">我的作品</p>
+        <p class="mt-2 font-display text-3xl">{{ works.totalCount }}</p>
+      </RouterLink>
     </div>
     <button
       class="rounded-md border border-wine px-5 py-3 text-sm text-cream"
@@ -37,16 +44,20 @@
 </template>
 
 <script setup lang="ts">
+import { RouterLink } from 'vue-router'
+
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import { useAcademyStore } from '@/stores/academy'
 import { useFavoriteStore } from '@/stores/favorites'
 import { usePantryStore } from '@/stores/pantry'
 import { useUserStore } from '@/stores/user'
+import { useWorkStore } from '@/stores/works'
 
 const user = useUserStore()
 const favorites = useFavoriteStore()
 const pantry = usePantryStore()
 const academy = useAcademyStore()
+const works = useWorkStore()
 
 const clearLocal = () => {
   localStorage.clear()

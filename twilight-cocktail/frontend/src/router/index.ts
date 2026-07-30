@@ -11,6 +11,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/cocktails/:slug/make', component: () => import('@/pages/MakeModePage.vue') },
   { path: '/academy', component: () => import('@/pages/AcademyPage.vue') },
   { path: '/pantry', component: () => import('@/pages/PantryPage.vue') },
+  { path: '/works', component: () => import('@/pages/WorksPage.vue') },
   { path: '/profile', component: () => import('@/pages/ProfilePage.vue') },
 ]
 
