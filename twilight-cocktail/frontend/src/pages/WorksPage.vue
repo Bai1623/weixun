@@ -726,14 +726,44 @@ const applyCocktail = () => {
   form.ingredientsText = formatWorkIngredients({ ingredientsText: '', ingredientGroups: groups })
 }
 
+const loadImage = (dataUrl: string) =>
+  new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.addEventListener('load', () => resolve(image))
+    image.addEventListener('error', () => reject(new Error('image load failed')))
+    image.src = dataUrl
+  })
+
+const compressPhotoDataUrl = async (dataUrl: string) => {
+  const image = await loadImage(dataUrl)
+  const maxSize = 1280
+  const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight))
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const context = canvas.getContext('2d')
+  if (!context) return dataUrl
+
+  context.drawImage(image, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.82)
+}
+
 const readPhoto = (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
 
   const reader = new FileReader()
-  reader.addEventListener('load', () => {
-    form.photoDataUrl = typeof reader.result === 'string' ? reader.result : ''
+  reader.addEventListener('load', async () => {
+    const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+    if (!dataUrl) return
+    try {
+      form.photoDataUrl = await compressPhotoDataUrl(dataUrl)
+    } catch {
+      form.photoDataUrl = dataUrl
+    }
   })
   reader.readAsDataURL(file)
   input.value = ''
@@ -852,6 +882,16 @@ const closeSaveDialog = () => {
   saveDialog.value = null
 }
 
+const getSaveErrorMessage = (error: unknown) => {
+  if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+    return '浏览器本地存储空间不足，作品没有保存成功。请先导出备份，删除一些旧作品或减少照片大小后再试。'
+  }
+  if (error instanceof Error && /quota|storage/i.test(error.message)) {
+    return '浏览器本地存储空间不足，作品没有保存成功。请先导出备份，删除一些旧作品或减少照片大小后再试。'
+  }
+  return '保存时出现异常，作品没有写入本地数据。请稍后重试。'
+}
+
 const submit = () => {
   formError.value = ''
   closeSaveDialog()
@@ -882,15 +922,21 @@ const submit = () => {
     notes: form.notes.trim(),
   }
 
-  if (editingWorkId.value) {
-    const updated = works.update(editingWorkId.value, payload)
-    if (!updated) {
-      formError.value = '没有找到要编辑的作品，请刷新后重试。'
-      showSaveDialog('error', formError.value)
-      return
+  try {
+    if (editingWorkId.value) {
+      const updated = works.update(editingWorkId.value, payload)
+      if (!updated) {
+        formError.value = '没有找到要编辑的作品，请刷新后重试。'
+        showSaveDialog('error', formError.value)
+        return
+      }
+    } else {
+      works.add(payload)
     }
-  } else {
-    works.add(payload)
+  } catch (error) {
+    formError.value = getSaveErrorMessage(error)
+    showSaveDialog('error', formError.value)
+    return
   }
 
   if (!isKnownCocktailName(cocktailName)) {

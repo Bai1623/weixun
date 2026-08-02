@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WorksPage from './WorksPage.vue'
 import { useWorkStore } from '@/stores/works'
@@ -61,6 +61,31 @@ describe('WorksPage', () => {
     expect(works.items).toHaveLength(0)
     expect(wrapper.get('[role="dialog"]').text()).toContain('保存失败')
     expect(wrapper.get('[role="dialog"]').text()).toContain('请先填写作品名称。')
+  })
+
+  it('shows a storage error dialog and keeps the form when browser persistence fails', async () => {
+    const wrapper = mount(WorksPage)
+    const works = useWorkStore()
+    const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError')
+    })
+
+    try {
+      await wrapper
+        .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
+        .setValue('大图作品')
+      await wrapper.get('[data-testid="work-save-button"]').trigger('click')
+
+      expect(works.items).toHaveLength(0)
+      expect(wrapper.get('[role="dialog"]').text()).toContain('保存失败')
+      expect(wrapper.get('[role="dialog"]').text()).toContain('浏览器本地存储空间不足')
+      expect(
+        wrapper.get<HTMLInputElement>('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
+          .element.value,
+      ).toBe('大图作品')
+    } finally {
+      setItem.mockRestore()
+    }
   })
 
   it('shows a success dialog after saving and keeps edited custom cocktail records after reload', async () => {

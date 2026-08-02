@@ -224,13 +224,15 @@ export const useWorkStore = defineStore('works', {
         id: createId(),
         createdAt: new Date().toISOString(),
       }
-      this.items = [record, ...this.items]
-      writeRecords(this.items)
+      const nextItems = [record, ...this.items]
+      writeRecords(nextItems)
+      this.items = nextItems
       return record
     },
     remove(id: string) {
-      this.items = this.items.filter((item) => item.id !== id)
-      writeRecords(this.items)
+      const nextItems = this.items.filter((item) => item.id !== id)
+      writeRecords(nextItems)
+      this.items = nextItems
     },
     update(id: string, input: WorkRecordInput): WorkRecord | undefined {
       const existing = this.items.find((item) => item.id === id)
@@ -242,16 +244,18 @@ export const useWorkStore = defineStore('works', {
         ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
         ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
       }
-      this.items = this.items.map((item) => (item.id === id ? record : item))
-      writeRecords(this.items)
+      const nextItems = this.items.map((item) => (item.id === id ? record : item))
+      writeRecords(nextItems)
+      this.items = nextItems
       return record
     },
     importFromJson(json: string): WorkImportResult {
       const imported = importWorkRecords(json)
       const existingIds = new Set(this.items.map((item) => item.id))
       const nextRecords = imported.records.filter((item) => !existingIds.has(item.id))
-      this.items = [...nextRecords, ...this.items]
-      writeRecords(this.items)
+      const nextItems = [...nextRecords, ...this.items]
+      writeRecords(nextItems)
+      this.items = nextItems
       return {
         importedCount: nextRecords.length,
         skippedCount: imported.skippedCount + imported.records.length - nextRecords.length,

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
@@ -198,6 +198,43 @@ describe('work store', () => {
     setActivePinia(createPinia())
     const restored = useWorkStore()
     expect(restored.items[0].cocktailName).toBe('修改后的作品')
+  })
+
+  it('does not mutate in-memory records when local persistence fails', () => {
+    const works = useWorkStore()
+    const item = works.add({
+      madeAt: '2026-07-30',
+      cocktailSlug: '',
+      cocktailName: '自由特调',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded', 'QuotaExceededError')
+    })
+
+    try {
+      expect(() =>
+        works.update(item.id, {
+          madeAt: '2026-08-01',
+          cocktailSlug: '',
+          cocktailName: '未能保存的修改',
+          photoDataUrl: 'data:image/jpeg;base64,large',
+          ingredientsText: '饮料：葡萄味气泡水',
+          rating: 5,
+          mood: '',
+          selfReview: '',
+          notes: '',
+        }),
+      ).toThrow('Quota exceeded')
+      expect(works.items[0].cocktailName).toBe('自由特调')
+    } finally {
+      setItem.mockRestore()
+    }
   })
 
   it('exports work records as a versioned JSON document', () => {
