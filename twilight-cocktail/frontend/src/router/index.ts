@@ -13,6 +13,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/pantry', component: () => import('@/pages/PantryPage.vue') },
   { path: '/works', component: () => import('@/pages/WorksPage.vue') },
   { path: '/profile', component: () => import('@/pages/ProfilePage.vue') },
+  { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
 export default createRouter({

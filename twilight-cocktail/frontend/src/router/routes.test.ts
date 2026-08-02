@@ -19,6 +19,7 @@ describe('application routes', () => {
         '/pantry',
         '/works',
         '/profile',
+        '/:pathMatch(.*)*',
       ]),
     )
   })
