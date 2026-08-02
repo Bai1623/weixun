@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
 import type { WorkRecord } from '@/stores/works'
-import { filterWorkRecords, getWorkExportBatches, hasActiveWorkFilters } from './workShare'
+import {
+  filterWorkRecords,
+  getWorkExportBatches,
+  getWorkLongImageText,
+  hasActiveWorkFilters,
+} from './workShare'
 
 const createRecord = (overrides: Partial<WorkRecord>): WorkRecord => ({
   id: overrides.id ?? 'work',
@@ -13,8 +18,8 @@ const createRecord = (overrides: Partial<WorkRecord>): WorkRecord => ({
   ingredientGroups: overrides.ingredientGroups,
   rating: overrides.rating ?? 0,
   mood: '',
-  selfReview: '',
-  notes: '',
+  selfReview: overrides.selfReview ?? '',
+  notes: overrides.notes ?? '',
   createdAt: '2026-08-01T12:00:00.000Z',
 })
 
@@ -81,5 +86,21 @@ describe('work share helpers', () => {
       hasActiveWorkFilters({ startDate: '', endDate: '', baseLiquor: '金酒', minRating: 0 }),
     ).toBe(true)
     expect(getWorkExportBatches(records).map((batch) => batch.length)).toEqual([10, 10, 3])
+  })
+
+  it('never includes notes in long-image export text', () => {
+    const record = createRecord({
+      ingredientsText: '饮料：葡萄味气泡水',
+      selfReview: '复盘可以选择导出',
+      notes: '备注不应该出现在长图里',
+    })
+
+    expect(getWorkLongImageText(record, { includeSelfReview: true })).toEqual([
+      '饮料：葡萄味气泡水',
+      '复盘可以选择导出',
+    ])
+    expect(getWorkLongImageText(record, { includeSelfReview: false })).toEqual([
+      '饮料：葡萄味气泡水',
+    ])
   })
 })

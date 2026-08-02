@@ -16,10 +16,11 @@ const imageWidth = 1080
 const horizontalPadding = 56
 const topPadding = 60
 const bottomPadding = 56
-const cardGap = 22
+const cardGap = 30
 const cardPadding = 24
 const photoSize = 176
 const lineHeight = 27
+const recordBottomBreathingRoom = 34
 
 export const hasActiveWorkFilters = (filters: WorkFilterState) =>
   Boolean(filters.startDate || filters.endDate || filters.baseLiquor || filters.minRating)
@@ -48,6 +49,13 @@ export const getWorkExportBatches = (records: readonly WorkRecord[]) => {
     batches.push(records.slice(index, index + maxRecordsPerImage))
   }
   return batches
+}
+
+export const getWorkLongImageText = (record: WorkRecord, options: WorkLongImageOptions) => {
+  const ingredientsText = formatWorkIngredients(record)
+  return [ingredientsText, options.includeSelfReview ? record.selfReview.trim() : ''].filter(
+    Boolean,
+  )
 }
 
 const splitTextByWidth = (context: CanvasRenderingContext2D, text: string, maxWidth: number) => {
@@ -80,11 +88,9 @@ const getRecordTextLines = (
 ) => {
   context.font = '28px sans-serif'
   const ingredients = splitTextByWidth(context, formatWorkIngredients(record), maxWidth)
-  const notes = splitTextByWidth(context, record.notes, maxWidth)
   const selfReview = includeSelfReview ? splitTextByWidth(context, record.selfReview, maxWidth) : []
   return {
     ingredients,
-    notes,
     selfReview,
   }
 }
@@ -100,8 +106,8 @@ const estimateRecordHeight = (
   const textHeight =
     96 +
     Math.max(1, lines.ingredients.length) * lineHeight +
-    lines.notes.length * lineHeight +
-    lines.selfReview.length * lineHeight
+    lines.selfReview.length * lineHeight +
+    recordBottomBreathingRoom
   return Math.max(photoSize + cardPadding * 2, textHeight + cardPadding * 2)
 }
 
@@ -214,14 +220,10 @@ const drawRecord = async (
   const lines = getRecordTextLines(context, record, options.includeSelfReview, textWidth)
   context.fillStyle = '#d8cec1'
   context.font = '24px sans-serif'
-  let nextY = drawTextLines(context, lines.ingredients, textX, y + 170, 4)
+  const nextY = drawTextLines(context, lines.ingredients, textX, y + 160, 4)
   if (options.includeSelfReview && lines.selfReview.length) {
     context.fillStyle = '#fff8eb'
-    nextY = drawTextLines(context, lines.selfReview, textX, nextY + 12, 3)
-  }
-  if (lines.notes.length) {
-    context.fillStyle = '#a99d90'
-    drawTextLines(context, lines.notes, textX, nextY + 12, 2)
+    drawTextLines(context, lines.selfReview, textX, nextY + 16, 3)
   }
 }
 
