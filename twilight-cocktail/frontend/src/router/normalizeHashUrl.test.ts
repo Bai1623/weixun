@@ -6,27 +6,27 @@ describe('getNormalizedHashUrl', () => {
   it('moves cache query params after the hash route for GitHub Pages links', () => {
     expect(
       getNormalizedHashUrl({
-        pathname: '/weixun/',
+        pathname: '/weixun-Twilight-Mixbook/',
         search: '?v=storage-fix-local',
         hash: '#/works',
       }),
-    ).toBe('/weixun/#/works?v=storage-fix-local')
+    ).toBe('/weixun-Twilight-Mixbook/#/works?v=storage-fix-local')
   })
 
   it('keeps existing hash query params and appends the pre-hash query', () => {
     expect(
       getNormalizedHashUrl({
-        pathname: '/weixun/',
+        pathname: '/weixun-Twilight-Mixbook/',
         search: '?v=1',
         hash: '#/works?tab=mine',
       }),
-    ).toBe('/weixun/#/works?tab=mine&v=1')
+    ).toBe('/weixun-Twilight-Mixbook/#/works?tab=mine&v=1')
   })
 
   it('does not rewrite ordinary hash route URLs', () => {
     expect(
       getNormalizedHashUrl({
-        pathname: '/weixun/',
+        pathname: '/weixun-Twilight-Mixbook/',
         search: '',
         hash: '#/works',
       }),

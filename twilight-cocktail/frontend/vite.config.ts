@@ -4,7 +4,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vitest/config'
 import { VitePWA } from 'vite-plugin-pwa'
 
-const githubPagesBase = process.env.GITHUB_PAGES === 'true' ? '/weixun/' : '/'
+const githubPagesBase = process.env.GITHUB_PAGES === 'true' ? '/weixun-Twilight-Mixbook/' : '/'
 
 export default defineConfig({
   base: githubPagesBase,
