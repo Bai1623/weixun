@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { getNormalizedHashUrl } from './normalizeHashUrl'
+import { getNormalizedHashUrl, resetInitialScrollPosition } from './normalizeHashUrl'
 
 describe('getNormalizedHashUrl', () => {
   it('moves cache query params after the hash route for GitHub Pages links', () => {
@@ -31,5 +31,26 @@ describe('getNormalizedHashUrl', () => {
         hash: '#/works',
       }),
     ).toBe('')
+  })
+})
+
+describe('resetInitialScrollPosition', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete (window.history as Partial<History>).scrollRestoration
+  })
+
+  it('disables browser scroll restoration and returns the app to the top', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    Object.defineProperty(window.history, 'scrollRestoration', {
+      configurable: true,
+      value: 'auto',
+      writable: true,
+    })
+
+    resetInitialScrollPosition()
+
+    expect(window.history.scrollRestoration).toBe('manual')
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
   })
 })

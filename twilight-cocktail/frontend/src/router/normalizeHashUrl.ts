@@ -18,3 +18,10 @@ export const normalizeHashUrl = () => {
   const nextUrl = getNormalizedHashUrl(window.location)
   if (nextUrl) window.history.replaceState(null, '', nextUrl)
 }
+
+export const resetInitialScrollPosition = () => {
+  if ('scrollRestoration' in window.history) {
+    window.history.scrollRestoration = 'manual'
+  }
+  window.scrollTo(0, 0)
+}
