@@ -350,6 +350,15 @@
                 <Download class="h-4 w-4" />
                 导出 JSON
               </button>
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                :disabled="!filteredWorks.length || isExportingLongImage"
+                @click="exportLongImages"
+              >
+                <Download class="h-4 w-4" />
+                {{ isExportingLongImage ? '生成中' : '导出长图' }}
+              </button>
               <label
                 class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream"
               >
@@ -372,6 +381,72 @@
           </p>
         </div>
 
+        <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+          <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p class="text-sm text-muted">作品筛选</p>
+              <p class="mt-1 text-sm leading-6 text-cream/80">
+                导出长图会使用当前筛选结果，每张图最多 10 条作品。
+              </p>
+            </div>
+            <button
+              class="inline-flex items-center justify-center rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10"
+              type="button"
+              @click="resetWorkFilters"
+            >
+              清空筛选
+            </button>
+          </div>
+
+          <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <label class="space-y-2 text-sm text-muted">
+              <span>开始日期</span>
+              <input
+                v-model="workFilters.startDate"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
+                type="date"
+              />
+            </label>
+            <label class="space-y-2 text-sm text-muted">
+              <span>结束日期</span>
+              <input
+                v-model="workFilters.endDate"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
+                type="date"
+              />
+            </label>
+            <label class="space-y-2 text-sm text-muted">
+              <span>包含基酒</span>
+              <select
+                v-model="workFilters.baseLiquor"
+                data-testid="work-filter-base"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              >
+                <option value="">全部基酒</option>
+                <option v-for="option in baseLiquorOptions" :key="option" :value="option">
+                  {{ option }}
+                </option>
+              </select>
+            </label>
+            <label class="space-y-2 text-sm text-muted">
+              <span>评分</span>
+              <select
+                v-model.number="workFilters.minRating"
+                data-testid="work-filter-rating"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              >
+                <option :value="0">全部评分</option>
+                <option v-for="score in [5, 4, 3, 2, 1]" :key="score" :value="score">
+                  至少 {{ score }} 星
+                </option>
+              </select>
+            </label>
+          </div>
+          <p class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
+            当前显示 {{ filteredWorks.length }} 条 / 共 {{ works.totalCount }} 条
+          </p>
+        </div>
+
         <div class="grid gap-4 sm:grid-cols-3">
           <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
             <p class="text-sm text-muted">作品数</p>
@@ -387,9 +462,9 @@
           </div>
         </div>
 
-        <div v-if="works.latestItems.length" class="space-y-4">
+        <div v-if="filteredWorks.length" class="space-y-4">
           <article
-            v-for="item in works.latestItems"
+            v-for="item in filteredWorks"
             :key="item.id"
             class="grid gap-4 rounded-lg border border-gold/15 bg-walnut/70 p-4 sm:grid-cols-[8rem_1fr]"
           >
@@ -452,8 +527,12 @@
 
         <StateBlock
           v-else
-          title="还没有作品"
-          message="保存第一杯，今晚的味道就不会只留在记忆里。"
+          :title="works.totalCount ? '没有匹配作品' : '还没有作品'"
+          :message="
+            works.totalCount
+              ? '调整筛选条件后再导出长图。'
+              : '保存第一杯，今晚的味道就不会只留在记忆里。'
+          "
         />
       </div>
     </section>
@@ -486,6 +565,12 @@ import {
   getFlavorLiquorSelectOptions,
   isFlavorLiquorOption,
 } from '@/utils/workFormOptions'
+import {
+  exportWorkLongImages,
+  filterWorkRecords,
+  hasActiveWorkFilters,
+  type WorkFilterState,
+} from '@/utils/workShare'
 
 const works = useWorkStore()
 const selectedSlug = ref('')
@@ -504,6 +589,7 @@ const isAddingBeverage = ref(false)
 const formError = ref('')
 const shareMessage = ref('')
 const editingWorkId = ref<string | null>(null)
+const isExportingLongImage = ref(false)
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
@@ -531,6 +617,12 @@ const form = reactive<WorkForm>({
   mood: '',
   selfReview: '',
   notes: '',
+})
+const workFilters = reactive<WorkFilterState>({
+  startDate: '',
+  endDate: '',
+  baseLiquor: '',
+  minRating: 0,
 })
 
 const baseLiquorOptions = ['金酒', '朗姆酒', '伏特加', '龙舌兰', '威士忌', '白兰地']
@@ -599,6 +691,7 @@ const flavorLiquorOptions = computed(() =>
 const selectedBaseLiquorCount = computed(
   () => form.ingredientGroups.baseLiquors.filter(Boolean).length,
 )
+const filteredWorks = computed(() => filterWorkRecords(works.latestItems, workFilters))
 const averageRatingText = computed(() => (works.averageRating ? `${works.averageRating}` : '-'))
 const latestDateText = computed(() => works.latestItems[0]?.madeAt.slice(5) ?? '-')
 
@@ -786,6 +879,41 @@ const exportWorks = () => {
   link.remove()
   URL.revokeObjectURL(url)
   shareMessage.value = `已导出 ${works.totalCount} 条作品。`
+}
+
+const resetWorkFilters = () => {
+  Object.assign(workFilters, {
+    startDate: '',
+    endDate: '',
+    baseLiquor: '',
+    minRating: 0,
+  })
+}
+
+const exportLongImages = async () => {
+  shareMessage.value = ''
+  if (!filteredWorks.value.length) {
+    shareMessage.value = '当前没有可导出的作品。'
+    return
+  }
+  if (!hasActiveWorkFilters(workFilters) && !window.confirm('当前导出为全部，确定要导出？')) {
+    return
+  }
+
+  const includeSelfReview = window.confirm('长图是否包含复盘内容？')
+  isExportingLongImage.value = true
+  try {
+    const pageCount = await exportWorkLongImages(
+      filteredWorks.value,
+      { includeSelfReview },
+      `twilight-mixbook-works-${getToday()}`,
+    )
+    shareMessage.value = `已导出 ${filteredWorks.value.length} 条作品，共 ${pageCount} 张长图。`
+  } catch (error) {
+    shareMessage.value = error instanceof Error ? error.message : '生成长图失败，请稍后重试。'
+  } finally {
+    isExportingLongImage.value = false
+  }
 }
 
 const importWorks = (event: Event) => {

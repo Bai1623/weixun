@@ -143,4 +143,68 @@ describe('WorksPage', () => {
       notes: '加了新照片和备注',
     })
   })
+
+  it('filters visible work records before sharing', async () => {
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-01',
+      cocktailSlug: '',
+      cocktailName: '金酒高分',
+      photoDataUrl: '',
+      ingredientsText: '',
+      ingredientGroups: {
+        baseLiquors: ['金酒'],
+        flavorLiquors: [],
+        beverages: [],
+        other: '柠檬片',
+      },
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    works.add({
+      madeAt: '2026-08-02',
+      cocktailSlug: '',
+      cocktailName: '伏特加高分',
+      photoDataUrl: '',
+      ingredientsText: '',
+      ingredientGroups: {
+        baseLiquors: ['伏特加'],
+        flavorLiquors: [],
+        beverages: [],
+        other: '',
+      },
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '金酒低分',
+      photoDataUrl: '',
+      ingredientsText: '',
+      ingredientGroups: {
+        baseLiquors: ['金酒'],
+        flavorLiquors: [],
+        beverages: [],
+        other: '',
+      },
+      rating: 2,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const wrapper = mount(WorksPage)
+
+    await wrapper.get('[data-testid="work-filter-base"]').setValue('金酒')
+    await wrapper.get('[data-testid="work-filter-rating"]').setValue('4')
+
+    expect(wrapper.text()).toContain('金酒高分')
+    expect(wrapper.text()).not.toContain('伏特加高分')
+    expect(wrapper.text()).not.toContain('金酒低分')
+    expect(wrapper.text()).toContain('当前显示 1 条')
+  })
 })
