@@ -10,7 +10,7 @@
       <form
         ref="workFormEl"
         class="rounded-lg border border-gold/15 bg-walnut/70 p-5"
-        @submit.prevent="submit"
+        @submit.prevent
       >
         <div
           v-if="editingWorkId"
@@ -279,8 +279,10 @@
         </div>
 
         <button
+          data-testid="work-save-button"
           class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-gold px-5 py-3 font-semibold text-obsidian transition hover:bg-cream"
-          type="submit"
+          type="button"
+          @click="submit"
         >
           <Save v-if="editingWorkId" class="h-4 w-4" />
           <Plus v-else class="h-4 w-4" />

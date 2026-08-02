@@ -11,7 +11,19 @@ describe('WorksPage', () => {
     setActivePinia(createPinia())
   })
 
-  it('saves a work record without base liquor and clears the form after submit', async () => {
+  it('does not save a work record from the form submit event', async () => {
+    const wrapper = mount(WorksPage)
+    const works = useWorkStore()
+
+    await wrapper
+      .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
+      .setValue('无酒精晚杯')
+    await wrapper.get('form').trigger('submit')
+
+    expect(works.items).toHaveLength(0)
+  })
+
+  it('saves a work record without base liquor and clears the form after clicking save', async () => {
     const wrapper = mount(WorksPage)
     const works = useWorkStore()
 
@@ -21,7 +33,7 @@ describe('WorksPage', () => {
     await wrapper
       .get('textarea[placeholder="自由记录，例如：冰块、柠檬片、薄荷叶，或补充具体用量。"]')
       .setValue('柠檬片\n冰块')
-    await wrapper.get('form').trigger('submit')
+    await wrapper.get('[data-testid="work-save-button"]').trigger('click')
 
     expect(works.items).toHaveLength(1)
     expect(works.items[0]).toMatchObject({
