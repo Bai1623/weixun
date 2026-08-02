@@ -153,7 +153,15 @@ export const addCustomWorkCocktailOption = (
 
   const current = safeReadCustomCocktails()
   const existing = current.find((item) => item.nameZh === nameZh)
-  if (existing) return existing
+  if (existing) {
+    const updated: CustomWorkCocktailOption = {
+      ...existing,
+      ingredientsText: input.ingredientsText.trim(),
+      ingredientGroups: input.ingredientGroups,
+    }
+    writeCustomCocktails(current.map((item) => (item.value === existing.value ? updated : item)))
+    return updated
+  }
 
   const record: CustomWorkCocktailOption = {
     value: `custom:${slugifyCustomName(nameZh)}:${Date.now()}`,

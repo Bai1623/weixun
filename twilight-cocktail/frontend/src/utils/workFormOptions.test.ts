@@ -92,6 +92,37 @@ describe('work form option helpers', () => {
     expect(options[0].value).toContain('custom:')
   })
 
+  it('updates an existing custom cocktail option when the same name is saved again', () => {
+    const original = addCustomWorkCocktailOption({
+      nameZh: '我的荔枝特调',
+      ingredientsText: '基酒：金酒',
+      ingredientGroups: {
+        baseLiquors: ['金酒'],
+        flavorLiquors: [],
+        beverages: [],
+        other: '',
+      },
+    })
+
+    const updated = addCustomWorkCocktailOption({
+      nameZh: '我的荔枝特调',
+      ingredientsText: '饮料：荔枝气泡水',
+      ingredientGroups: {
+        baseLiquors: [],
+        flavorLiquors: [],
+        beverages: ['荔枝气泡水'],
+        other: '海盐',
+      },
+    })
+
+    const restored = getCustomWorkCocktailOptions()
+    expect(restored).toHaveLength(1)
+    expect(updated?.value).toBe(original?.value)
+    expect(restored[0].ingredientsText).toBe('饮料：荔枝气泡水')
+    expect(restored[0].ingredientGroups?.beverages).toEqual(['荔枝气泡水'])
+    expect(restored[0].ingredientGroups?.other).toBe('海盐')
+  })
+
   it('keeps real flavor liquors, removes non-liquor ingredients, and pins blue curacao first', () => {
     const options = getFlavorLiquorSelectOptions([
       ingredient('薄荷叶', 'Mint'),

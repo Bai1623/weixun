@@ -6,6 +6,47 @@
       description="记录每天调过的酒、照片、原料和复盘。"
     />
 
+    <div
+      v-if="saveDialog"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-obsidian/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      @click.self="closeSaveDialog"
+    >
+      <div
+        class="w-full max-w-sm rounded-lg border border-gold/20 bg-walnut p-5 shadow-2xl shadow-black/40"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="saveDialogTitleId"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-gold">
+              {{ saveDialog.kind === 'success' ? 'Saved' : 'Notice' }}
+            </p>
+            <h3 :id="saveDialogTitleId" class="mt-2 font-display text-2xl text-cream">
+              {{ saveDialog.title }}
+            </h3>
+          </div>
+          <button
+            class="rounded-md border border-gold/20 p-2 text-gold transition hover:bg-gold/10"
+            type="button"
+            aria-label="关闭提示"
+            @click="closeSaveDialog"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-muted">{{ saveDialog.message }}</p>
+        <button
+          class="mt-5 inline-flex w-full items-center justify-center rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream"
+          type="button"
+          @click="closeSaveDialog"
+        >
+          知道了
+        </button>
+      </div>
+    </div>
+
     <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <form
         ref="workFormEl"
@@ -465,6 +506,8 @@ const shareMessage = ref('')
 const editingWorkId = ref<string | null>(null)
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
+const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
+const saveDialogTitleId = 'work-save-dialog-title'
 const getToday = () => new Date().toISOString().slice(0, 10)
 const createIngredientGroups = (): WorkIngredientGroups => ({
   baseLiquors: ['', '', '', ''],
@@ -790,21 +833,36 @@ const editWork = (item: WorkRecord) => {
     selfReview: item.selfReview,
     notes: item.notes,
   })
-  workFormEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  workFormEl.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
 const cancelEdit = () => {
   resetForm()
 }
 
+const showSaveDialog = (kind: 'success' | 'error', message: string) => {
+  saveDialog.value = {
+    kind,
+    title: kind === 'success' ? '保存成功' : '保存失败',
+    message,
+  }
+}
+
+const closeSaveDialog = () => {
+  saveDialog.value = null
+}
+
 const submit = () => {
   formError.value = ''
+  closeSaveDialog()
   if (!form.cocktailName.trim()) {
     formError.value = '请先填写作品名称。'
+    showSaveDialog('error', formError.value)
     return
   }
   if (!form.madeAt) {
     formError.value = '请选择调酒日期。'
+    showSaveDialog('error', formError.value)
     return
   }
   const ingredientsText = formatWorkIngredients({
@@ -813,6 +871,7 @@ const submit = () => {
   })
   const cocktailName = form.cocktailName.trim()
   const ingredientGroups = cloneIngredientGroups(form.ingredientGroups)
+  const wasEditing = Boolean(editingWorkId.value)
 
   const payload: WorkRecordInput = {
     ...form,
@@ -827,6 +886,7 @@ const submit = () => {
     const updated = works.update(editingWorkId.value, payload)
     if (!updated) {
       formError.value = '没有找到要编辑的作品，请刷新后重试。'
+      showSaveDialog('error', formError.value)
       return
     }
   } else {
@@ -843,5 +903,6 @@ const submit = () => {
   }
 
   resetForm()
+  showSaveDialog('success', wasEditing ? '作品修改已保存。' : '作品已保存到我的作品。')
 }
 </script>
