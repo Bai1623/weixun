@@ -232,6 +232,20 @@ export const useWorkStore = defineStore('works', {
       this.items = this.items.filter((item) => item.id !== id)
       writeRecords(this.items)
     },
+    update(id: string, input: WorkRecordInput): WorkRecord | undefined {
+      const existing = this.items.find((item) => item.id === id)
+      if (!existing) return undefined
+
+      const record: WorkRecord = {
+        ...existing,
+        ...input,
+        ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
+        ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
+      }
+      this.items = this.items.map((item) => (item.id === id ? record : item))
+      writeRecords(this.items)
+      return record
+    },
     importFromJson(json: string): WorkImportResult {
       const imported = importWorkRecords(json)
       const existingIds = new Set(this.items.map((item) => item.id))

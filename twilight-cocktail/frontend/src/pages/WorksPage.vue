@@ -7,7 +7,26 @@
     />
 
     <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-      <form class="rounded-lg border border-gold/15 bg-walnut/70 p-5" @submit.prevent="submit">
+      <form
+        ref="workFormEl"
+        class="rounded-lg border border-gold/15 bg-walnut/70 p-5"
+        @submit.prevent="submit"
+      >
+        <div
+          v-if="editingWorkId"
+          class="mb-4 flex flex-col gap-3 rounded-lg border border-gold/15 bg-obsidian/45 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p class="text-sm text-cream">正在编辑作品，保存后会覆盖原记录。</p>
+          <button
+            class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10"
+            type="button"
+            @click="cancelEdit"
+          >
+            <X class="h-4 w-4" />
+            取消编辑
+          </button>
+        </div>
+
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="space-y-2 text-sm text-muted">
             <span>调酒日期</span>
@@ -263,8 +282,9 @@
           class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-gold px-5 py-3 font-semibold text-obsidian transition hover:bg-cream"
           type="submit"
         >
-          <Plus class="h-4 w-4" />
-          保存作品
+          <Save v-if="editingWorkId" class="h-4 w-4" />
+          <Plus v-else class="h-4 w-4" />
+          {{ editingWorkId ? '保存修改' : '保存作品' }}
         </button>
       </form>
 
@@ -347,14 +367,24 @@
                   <p class="text-xs uppercase tracking-[0.18em] text-gold">{{ item.madeAt }}</p>
                   <h2 class="mt-1 font-display text-2xl text-cream">{{ item.cocktailName }}</h2>
                 </div>
-                <button
-                  class="rounded-md border border-wine/70 p-2 text-cream transition hover:bg-wine/20"
-                  type="button"
-                  :aria-label="`删除 ${item.cocktailName}`"
-                  @click="works.remove(item.id)"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </button>
+                <div class="flex shrink-0 gap-2">
+                  <button
+                    class="rounded-md border border-gold/30 p-2 text-gold transition hover:bg-gold/10"
+                    type="button"
+                    :aria-label="`编辑 ${item.cocktailName}`"
+                    @click="editWork(item)"
+                  >
+                    <Pencil class="h-4 w-4" />
+                  </button>
+                  <button
+                    class="rounded-md border border-wine/70 p-2 text-cream transition hover:bg-wine/20"
+                    type="button"
+                    :aria-label="`删除 ${item.cocktailName}`"
+                    @click="works.remove(item.id)"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
               <div class="mt-3 flex flex-wrap gap-2 text-xs">
@@ -389,7 +419,7 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Camera, Download, Plus, Sparkles, Trash2, Upload } from 'lucide-vue-next'
+import { Camera, Download, Pencil, Plus, Save, Sparkles, Trash2, Upload, X } from 'lucide-vue-next'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
@@ -399,6 +429,7 @@ import {
   formatWorkIngredients,
   useWorkStore,
   type WorkIngredientGroups,
+  type WorkRecord,
   type WorkRecordInput,
 } from '@/stores/works'
 import {
@@ -429,7 +460,9 @@ const isAddingFlavorLiquor = ref(false)
 const isAddingBeverage = ref(false)
 const formError = ref('')
 const shareMessage = ref('')
+const editingWorkId = ref<string | null>(null)
 const dateInput = ref<HTMLInputElement | null>(null)
+const workFormEl = ref<HTMLFormElement | null>(null)
 const getToday = () => new Date().toISOString().slice(0, 10)
 const createIngredientGroups = (): WorkIngredientGroups => ({
   baseLiquors: ['', '', '', ''],
@@ -702,6 +735,7 @@ const importWorks = (event: Event) => {
 }
 
 const resetForm = () => {
+  editingWorkId.value = null
   selectedSlug.value = ''
   selectedFlavorLiquor.value = ''
   selectedBeverage.value = ''
@@ -727,6 +761,40 @@ const resetForm = () => {
   })
 }
 
+const editWork = (item: WorkRecord) => {
+  editingWorkId.value = item.id
+  selectedSlug.value = item.cocktailSlug
+  selectedFlavorLiquor.value = ''
+  selectedBeverage.value = ''
+  cocktailSearch.value = ''
+  flavorLiquorSearch.value = ''
+  beverageSearch.value = ''
+  customFlavorLiquorName.value = ''
+  customBeverageName.value = ''
+  isAddingFlavorLiquor.value = false
+  isAddingBeverage.value = false
+  formError.value = ''
+  Object.assign(form, {
+    madeAt: item.madeAt,
+    cocktailSlug: item.cocktailSlug,
+    cocktailName: item.cocktailName,
+    photoDataUrl: item.photoDataUrl,
+    ingredientsText: item.ingredientsText,
+    ingredientGroups: item.ingredientGroups
+      ? cloneIngredientGroups(item.ingredientGroups)
+      : createIngredientGroups(),
+    rating: item.rating,
+    mood: item.mood,
+    selfReview: item.selfReview,
+    notes: item.notes,
+  })
+  workFormEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+const cancelEdit = () => {
+  resetForm()
+}
+
 const submit = () => {
   formError.value = ''
   if (!form.cocktailName.trim()) {
@@ -749,14 +817,24 @@ const submit = () => {
   const cocktailName = form.cocktailName.trim()
   const ingredientGroups = cloneIngredientGroups(form.ingredientGroups)
 
-  works.add({
+  const payload: WorkRecordInput = {
     ...form,
     cocktailName,
     ingredientsText,
     mood: form.mood.trim(),
     selfReview: form.selfReview.trim(),
     notes: form.notes.trim(),
-  })
+  }
+
+  if (editingWorkId.value) {
+    const updated = works.update(editingWorkId.value, payload)
+    if (!updated) {
+      formError.value = '没有找到要编辑的作品，请刷新后重试。'
+      return
+    }
+  } else {
+    works.add(payload)
+  }
 
   if (!isKnownCocktailName(cocktailName)) {
     addCustomWorkCocktailOption({

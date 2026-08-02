@@ -145,6 +145,61 @@ describe('work store', () => {
     expect(window.localStorage.getItem('cocktail_work_records')).toBe('[]')
   })
 
+  it('updates an existing work record without changing its identity', () => {
+    const works = useWorkStore()
+    const item = works.add({
+      madeAt: '2026-07-30',
+      cocktailSlug: '',
+      cocktailName: '自由特调',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      ingredientGroups: {
+        baseLiquors: ['金酒'],
+        flavorLiquors: [],
+        beverages: ['汤力水'],
+        other: '',
+      },
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    const updated = works.update(item.id, {
+      madeAt: '2026-08-01',
+      cocktailSlug: 'custom',
+      cocktailName: '修改后的作品',
+      photoDataUrl: 'data:image/png;base64,next',
+      ingredientsText: '',
+      ingredientGroups: {
+        baseLiquors: ['伏特加'],
+        flavorLiquors: ['蓝橙力娇酒'],
+        beverages: ['葡萄味气泡水'],
+        other: '冰块',
+      },
+      rating: 5,
+      mood: '酸甜',
+      selfReview: '这次比例更好。',
+      notes: '周末补记。',
+    })
+
+    expect(updated?.id).toBe(item.id)
+    expect(updated?.createdAt).toBe(item.createdAt)
+    expect(works.items).toHaveLength(1)
+    expect(works.items[0]).toMatchObject({
+      id: item.id,
+      madeAt: '2026-08-01',
+      cocktailName: '修改后的作品',
+      rating: 5,
+      mood: '酸甜',
+    })
+    expect(formatWorkIngredients(works.items[0])).toContain('基酒：伏特加')
+
+    setActivePinia(createPinia())
+    const restored = useWorkStore()
+    expect(restored.items[0].cocktailName).toBe('修改后的作品')
+  })
+
   it('exports work records as a versioned JSON document', () => {
     const works = useWorkStore()
     works.add({
