@@ -23,6 +23,11 @@
 
           <label class="space-y-2 text-sm text-muted">
             <span>酒单</span>
+            <input
+              v-model.trim="cocktailSearch"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              placeholder="搜索酒单"
+            />
             <select
               v-model="selectedSlug"
               class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
@@ -64,7 +69,7 @@
                 class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
                 :aria-label="`基酒 ${index}`"
               >
-                <option value="">{{ index === 1 ? '选择基酒' : '可选' }}</option>
+                <option value="">无</option>
                 <option
                   v-for="option in baseLiquorOptions"
                   :key="option"
@@ -79,6 +84,11 @@
 
           <div class="space-y-2">
             <p class="text-xs text-muted">调味酒</p>
+            <input
+              v-model.trim="flavorLiquorSearch"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              placeholder="搜索调味酒"
+            />
             <select
               v-model="selectedFlavorLiquor"
               class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
@@ -356,11 +366,18 @@ import {
   type WorkIngredientGroups,
   type WorkRecordInput,
 } from '@/stores/works'
+import {
+  getCocktailSelectOptions,
+  getFlavorLiquorSelectOptions,
+  isFlavorLiquorOption,
+} from '@/utils/workFormOptions'
 
 const works = useWorkStore()
 const selectedSlug = ref('')
 const selectedFlavorLiquor = ref('')
 const selectedBeverage = ref('')
+const cocktailSearch = ref('')
+const flavorLiquorSearch = ref('')
 const formError = ref('')
 const shareMessage = ref('')
 const dateInput = ref<HTMLInputElement | null>(null)
@@ -439,25 +456,6 @@ const beverageKeywords = [
   'Tonic',
   'Milk',
 ]
-const flavorLiquorKeywords = [
-  '利口酒',
-  '力娇酒',
-  '苦精',
-  '味美思',
-  '香槟',
-  '葡萄酒',
-  '雪利',
-  '波特',
-  '啤酒',
-  'Liqueur',
-  'Bitters',
-  'Vermouth',
-  'Wine',
-  'Champagne',
-  'Sherry',
-  'Beer',
-]
-
 const uniqueNames = (names: readonly string[]) =>
   Array.from(new Set(names.map((item) => item.trim()).filter(Boolean)))
 
@@ -486,12 +484,7 @@ const isBeverageName = (name: string) =>
   extraBeverages.includes(name) ||
   beverageKeywords.some((keyword) => name.includes(keyword))
 
-const isFlavorLiquorName = (name: string) =>
-  flavorLiquorKeywords.some((keyword) => name.includes(keyword))
-
-const cocktailOptions = computed(() =>
-  [...cocktails].sort((a, b) => b.popularityWeight - a.popularityWeight),
-)
+const cocktailOptions = computed(() => getCocktailSelectOptions(cocktails, cocktailSearch.value))
 const ingredientNames = computed(() => uniqueNames(allIngredients.map((item) => item.nameZh)))
 const beverageOptions = computed(() =>
   uniqueNames([
@@ -501,12 +494,7 @@ const beverageOptions = computed(() =>
   ]),
 )
 const flavorLiquorOptions = computed(() =>
-  uniqueNames(
-    ingredientNames.value
-      .filter((name) => !isBaseLiquorName(name) && !isBeverageName(name))
-      .filter((name) => isFlavorLiquorName(name) || !['冰块', '水'].includes(name))
-      .sort((a, b) => a.localeCompare(b, 'zh-Hans-CN')),
-  ),
+  getFlavorLiquorSelectOptions(allIngredients, flavorLiquorSearch.value),
 )
 const selectedBaseLiquorCount = computed(
   () => form.ingredientGroups.baseLiquors.filter(Boolean).length,
@@ -573,7 +561,7 @@ const applyCocktail = () => {
       return
     }
 
-    if (isFlavorLiquorName(item.nameZh) || isFlavorLiquorName(item.nameEn)) {
+    if (isFlavorLiquorOption({ nameZh: item.nameZh, nameEn: item.nameEn })) {
       addUnique(groups.flavorLiquors, item.nameZh)
       return
     }
@@ -643,6 +631,8 @@ const resetForm = () => {
   selectedSlug.value = ''
   selectedFlavorLiquor.value = ''
   selectedBeverage.value = ''
+  cocktailSearch.value = ''
+  flavorLiquorSearch.value = ''
   formError.value = ''
   Object.assign(form, {
     madeAt: getToday(),
