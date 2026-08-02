@@ -77,7 +77,7 @@
           <span>原材料</span>
           <div class="space-y-2">
             <div class="flex items-center justify-between gap-3">
-              <p class="text-xs text-muted">基酒，必填，最多 4 种</p>
+              <p class="text-xs text-muted">基酒，可选，最多 4 种</p>
               <p class="text-xs text-gold">{{ selectedBaseLiquorCount }}/4</p>
             </div>
             <div class="grid gap-2 sm:grid-cols-4">
@@ -805,11 +805,6 @@ const submit = () => {
     formError.value = '请选择调酒日期。'
     return
   }
-  if (!form.ingredientGroups.baseLiquors.some(Boolean)) {
-    formError.value = '请至少选择一种基酒。'
-    return
-  }
-
   const ingredientsText = formatWorkIngredients({
     ingredientsText: form.ingredientsText,
     ingredientGroups: form.ingredientGroups,
