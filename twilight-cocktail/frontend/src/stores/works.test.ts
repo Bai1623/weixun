@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
-import { formatWorkIngredients, useWorkStore } from './works'
+import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
 
 describe('work store', () => {
   beforeEach(() => {
@@ -99,6 +99,32 @@ describe('work store', () => {
     expect(formatWorkIngredients(works.items[0])).toBe('金酒、汤力水')
   })
 
+  it('fills safe defaults for early local work records', () => {
+    window.localStorage.setItem(
+      'cocktail_work_records',
+      JSON.stringify([
+        {
+          id: 'early-work',
+          madeAt: '2026-07-20',
+          cocktailName: '早期作品',
+          ingredientsText: '朗姆酒、可乐',
+          createdAt: '2026-07-20T12:00:00.000Z',
+        },
+      ]),
+    )
+
+    const works = useWorkStore()
+
+    expect(works.items[0]).toMatchObject({
+      cocktailSlug: '',
+      photoDataUrl: '',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+  })
+
   it('removes a work record from local storage', () => {
     const works = useWorkStore()
     const item = works.add({
@@ -117,5 +143,72 @@ describe('work store', () => {
 
     expect(works.items).toHaveLength(0)
     expect(window.localStorage.getItem('cocktail_work_records')).toBe('[]')
+  })
+
+  it('exports work records as a versioned JSON document', () => {
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-02',
+      cocktailSlug: '',
+      cocktailName: '分享用作品',
+      photoDataUrl: '',
+      ingredientsText: '基酒：金酒',
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    const exported = JSON.parse(exportWorkRecords(works.items)) as {
+      version: number
+      records: unknown[]
+    }
+
+    expect(exported.version).toBe(1)
+    expect(exported.records).toHaveLength(1)
+    expect(exported.records[0]).toMatchObject({ cocktailName: '分享用作品' })
+  })
+
+  it('imports valid work records and skips duplicate ids', () => {
+    const works = useWorkStore()
+    const existing = works.add({
+      madeAt: '2026-08-01',
+      cocktailSlug: '',
+      cocktailName: '已有作品',
+      photoDataUrl: '',
+      ingredientsText: '基酒：伏特加',
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    const result = works.importFromJson(
+      JSON.stringify({
+        version: 1,
+        records: [
+          existing,
+          {
+            id: 'friend-work',
+            madeAt: '2026-08-02',
+            cocktailSlug: '',
+            cocktailName: '朋友作品',
+            photoDataUrl: '',
+            ingredientsText: '基酒：朗姆酒',
+            rating: 5,
+            mood: '清爽',
+            selfReview: '',
+            notes: '',
+            createdAt: '2026-08-02T10:00:00.000Z',
+          },
+        ],
+      }),
+    )
+
+    expect(result).toEqual({ importedCount: 1, skippedCount: 1 })
+    expect(works.items).toHaveLength(2)
+    expect(works.items[0].cocktailName).toBe('朋友作品')
+
+    expect(importWorkRecords('{bad json')).toEqual({ records: [], skippedCount: 0 })
   })
 })

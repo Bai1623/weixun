@@ -224,6 +224,46 @@
       </form>
 
       <div class="space-y-5">
+        <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p class="text-sm text-muted">作品分享</p>
+              <p class="mt-1 text-sm leading-6 text-cream/80">
+                用 JSON 备份或发给朋友，导入时会合并新记录。
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-3">
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                :disabled="!works.totalCount"
+                @click="exportWorks"
+              >
+                <Download class="h-4 w-4" />
+                导出 JSON
+              </button>
+              <label
+                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream"
+              >
+                <Upload class="h-4 w-4" />
+                导入 JSON
+                <input
+                  class="sr-only"
+                  type="file"
+                  accept="application/json,.json"
+                  @change="importWorks"
+                />
+              </label>
+            </div>
+          </div>
+          <p
+            v-if="shareMessage"
+            class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream"
+          >
+            {{ shareMessage }}
+          </p>
+        </div>
+
         <div class="grid gap-4 sm:grid-cols-3">
           <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
             <p class="text-sm text-muted">作品数</p>
@@ -304,12 +344,13 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue'
-import { Camera, Plus, Sparkles, Trash2 } from 'lucide-vue-next'
+import { Camera, Download, Plus, Sparkles, Trash2, Upload } from 'lucide-vue-next'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
 import { allIngredients, cocktails } from '@/data/cocktails'
 import {
+  exportWorkRecords,
   formatWorkIngredients,
   useWorkStore,
   type WorkIngredientGroups,
@@ -321,6 +362,7 @@ const selectedSlug = ref('')
 const selectedFlavorLiquor = ref('')
 const selectedBeverage = ref('')
 const formError = ref('')
+const shareMessage = ref('')
 const dateInput = ref<HTMLInputElement | null>(null)
 const getToday = () => new Date().toISOString().slice(0, 10)
 const createIngredientGroups = (): WorkIngredientGroups => ({
@@ -554,6 +596,46 @@ const readPhoto = (event: Event) => {
     form.photoDataUrl = typeof reader.result === 'string' ? reader.result : ''
   })
   reader.readAsDataURL(file)
+  input.value = ''
+}
+
+const exportWorks = () => {
+  shareMessage.value = ''
+  if (!works.totalCount) {
+    shareMessage.value = '当前还没有可导出的作品。'
+    return
+  }
+
+  const blob = new Blob([exportWorkRecords(works.items)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `twilight-mixbook-works-${getToday()}.json`
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  shareMessage.value = `已导出 ${works.totalCount} 条作品。`
+}
+
+const importWorks = (event: Event) => {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.addEventListener('load', () => {
+    const content = typeof reader.result === 'string' ? reader.result : ''
+    const result = works.importFromJson(content)
+    shareMessage.value =
+      result.importedCount > 0
+        ? `已导入 ${result.importedCount} 条作品，跳过 ${result.skippedCount} 条重复或无效记录。`
+        : '没有导入新作品，请确认 JSON 文件来自暮调作品导出。'
+  })
+  reader.addEventListener('error', () => {
+    shareMessage.value = '读取 JSON 文件失败，请重新选择文件。'
+  })
+  reader.readAsText(file)
   input.value = ''
 }
 
