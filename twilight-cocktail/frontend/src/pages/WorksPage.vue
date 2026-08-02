@@ -36,8 +36,8 @@
               <option value="">自由记录</option>
               <option
                 v-for="cocktail in cocktailOptions"
-                :key="cocktail.slug"
-                :value="cocktail.slug"
+                :key="cocktail.value"
+                :value="cocktail.value"
               >
                 {{ cocktail.nameZh }}
               </option>
@@ -96,9 +96,24 @@
             >
               <option value="">选择调味酒</option>
               <option v-for="option in flavorLiquorOptions" :key="option" :value="option">
-                {{ option }}
+                {{ option === CUSTOM_OPTION_VALUE ? '自定义添加' : option }}
               </option>
             </select>
+            <div v-if="isAddingFlavorLiquor" class="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                v-model.trim="customFlavorLiquorName"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                placeholder="输入自定义调味酒"
+                @keydown.enter.prevent="saveCustomFlavorLiquor"
+              />
+              <button
+                class="rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
+                type="button"
+                @click="saveCustomFlavorLiquor"
+              >
+                添加
+              </button>
+            </div>
             <div v-if="form.ingredientGroups.flavorLiquors.length" class="flex flex-wrap gap-2">
               <button
                 v-for="item in form.ingredientGroups.flavorLiquors"
@@ -114,6 +129,11 @@
 
           <div class="space-y-2">
             <p class="text-xs text-muted">饮料类型</p>
+            <input
+              v-model.trim="beverageSearch"
+              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              placeholder="搜索饮料"
+            />
             <select
               v-model="selectedBeverage"
               class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
@@ -121,9 +141,24 @@
             >
               <option value="">选择饮料</option>
               <option v-for="option in beverageOptions" :key="option" :value="option">
-                {{ option }}
+                {{ option === CUSTOM_OPTION_VALUE ? '自定义添加' : option }}
               </option>
             </select>
+            <div v-if="isAddingBeverage" class="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                v-model.trim="customBeverageName"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                placeholder="输入自定义饮料"
+                @keydown.enter.prevent="saveCustomBeverage"
+              />
+              <button
+                class="rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
+                type="button"
+                @click="saveCustomBeverage"
+              >
+                添加
+              </button>
+            </div>
             <div v-if="form.ingredientGroups.beverages.length" class="flex flex-wrap gap-2">
               <button
                 v-for="item in form.ingredientGroups.beverages"
@@ -367,7 +402,13 @@ import {
   type WorkRecordInput,
 } from '@/stores/works'
 import {
+  CUSTOM_OPTION_VALUE,
+  addCustomMaterialOption,
+  addCustomWorkCocktailOption,
+  getBeverageSelectOptions,
   getCocktailSelectOptions,
+  getCustomMaterialOptions,
+  getCustomWorkCocktailOptions,
   getFlavorLiquorSelectOptions,
   isFlavorLiquorOption,
 } from '@/utils/workFormOptions'
@@ -378,6 +419,14 @@ const selectedFlavorLiquor = ref('')
 const selectedBeverage = ref('')
 const cocktailSearch = ref('')
 const flavorLiquorSearch = ref('')
+const beverageSearch = ref('')
+const customFlavorLiquorName = ref('')
+const customBeverageName = ref('')
+const customFlavorLiquors = ref(getCustomMaterialOptions('flavorLiquors'))
+const customBeverages = ref(getCustomMaterialOptions('beverages'))
+const customCocktails = ref(getCustomWorkCocktailOptions())
+const isAddingFlavorLiquor = ref(false)
+const isAddingBeverage = ref(false)
 const formError = ref('')
 const shareMessage = ref('')
 const dateInput = ref<HTMLInputElement | null>(null)
@@ -433,41 +482,6 @@ const extraBeverages = [
   '牛奶',
   '椰奶',
 ]
-const beverageKeywords = [
-  '汁',
-  '水',
-  '茶',
-  '咖啡',
-  '气泡',
-  '雪碧',
-  '可乐',
-  '汤力',
-  '苏打',
-  '养乐多',
-  '牛奶',
-  '椰奶',
-  '姜汁',
-  'Water',
-  'Juice',
-  'Soda',
-  'Tea',
-  'Coffee',
-  'Cola',
-  'Tonic',
-  'Milk',
-]
-const uniqueNames = (names: readonly string[]) =>
-  Array.from(new Set(names.map((item) => item.trim()).filter(Boolean)))
-
-const isBaseLiquorName = (name: string) =>
-  [
-    /金酒|琴酒|Gin/i,
-    /朗姆|Rum/i,
-    /伏特加|Vodka/i,
-    /龙舌兰|Tequila/i,
-    /威士忌|威士忌|Whisk|Bourbon|Scotch|Rye/i,
-    /白兰地|Brandy|Cognac/i,
-  ].some((pattern) => pattern.test(name))
 
 const getBaseLiquorLabel = (name: string) => {
   if (/金酒|琴酒|Gin/i.test(name)) return '金酒'
@@ -479,22 +493,30 @@ const getBaseLiquorLabel = (name: string) => {
   return ''
 }
 
-const isBeverageName = (name: string) =>
-  priorityBeverages.includes(name) ||
-  extraBeverages.includes(name) ||
-  beverageKeywords.some((keyword) => name.includes(keyword))
+const beveragePriorityOptions = computed(() => [...priorityBeverages, ...extraBeverages])
+const allBeverageNames = computed(() =>
+  getBeverageSelectOptions(
+    allIngredients,
+    beveragePriorityOptions.value,
+    '',
+    customBeverages.value,
+  ).filter((item) => item !== CUSTOM_OPTION_VALUE),
+)
+const isBeverageName = (name: string) => allBeverageNames.value.includes(name)
 
-const cocktailOptions = computed(() => getCocktailSelectOptions(cocktails, cocktailSearch.value))
-const ingredientNames = computed(() => uniqueNames(allIngredients.map((item) => item.nameZh)))
+const cocktailOptions = computed(() =>
+  getCocktailSelectOptions(cocktails, cocktailSearch.value, customCocktails.value),
+)
 const beverageOptions = computed(() =>
-  uniqueNames([
-    ...priorityBeverages,
-    ...extraBeverages,
-    ...ingredientNames.value.filter((name) => isBeverageName(name) && !isBaseLiquorName(name)),
-  ]),
+  getBeverageSelectOptions(
+    allIngredients,
+    beveragePriorityOptions.value,
+    beverageSearch.value,
+    customBeverages.value,
+  ),
 )
 const flavorLiquorOptions = computed(() =>
-  getFlavorLiquorSelectOptions(allIngredients, flavorLiquorSearch.value),
+  getFlavorLiquorSelectOptions(allIngredients, flavorLiquorSearch.value, customFlavorLiquors.value),
 )
 const selectedBaseLiquorCount = computed(
   () => form.ingredientGroups.baseLiquors.filter(Boolean).length,
@@ -523,6 +545,11 @@ const removeFrom = (items: string[], value: string) => {
 }
 
 const addFlavorLiquor = () => {
+  if (selectedFlavorLiquor.value === CUSTOM_OPTION_VALUE) {
+    isAddingFlavorLiquor.value = true
+    selectedFlavorLiquor.value = ''
+    return
+  }
   addUnique(form.ingredientGroups.flavorLiquors, selectedFlavorLiquor.value)
   selectedFlavorLiquor.value = ''
 }
@@ -532,6 +559,11 @@ const removeFlavorLiquor = (value: string) => {
 }
 
 const addBeverage = () => {
+  if (selectedBeverage.value === CUSTOM_OPTION_VALUE) {
+    isAddingBeverage.value = true
+    selectedBeverage.value = ''
+    return
+  }
   addUnique(form.ingredientGroups.beverages, selectedBeverage.value)
   selectedBeverage.value = ''
 }
@@ -540,7 +572,49 @@ const removeBeverage = (value: string) => {
   removeFrom(form.ingredientGroups.beverages, value)
 }
 
+const saveCustomFlavorLiquor = () => {
+  const name = customFlavorLiquorName.value.trim()
+  if (!name) return
+  addCustomMaterialOption('flavorLiquors', name)
+  customFlavorLiquors.value = getCustomMaterialOptions('flavorLiquors')
+  addUnique(form.ingredientGroups.flavorLiquors, name)
+  customFlavorLiquorName.value = ''
+  isAddingFlavorLiquor.value = false
+}
+
+const saveCustomBeverage = () => {
+  const name = customBeverageName.value.trim()
+  if (!name) return
+  addCustomMaterialOption('beverages', name)
+  customBeverages.value = getCustomMaterialOptions('beverages')
+  addUnique(form.ingredientGroups.beverages, name)
+  customBeverageName.value = ''
+  isAddingBeverage.value = false
+}
+
+const cloneIngredientGroups = (groups: WorkIngredientGroups): WorkIngredientGroups => ({
+  baseLiquors: [...groups.baseLiquors],
+  flavorLiquors: [...groups.flavorLiquors],
+  beverages: [...groups.beverages],
+  other: groups.other,
+})
+
+const isKnownCocktailName = (name: string) =>
+  cocktails.some((item) => item.nameZh === name) ||
+  customCocktails.value.some((item) => item.nameZh === name)
+
 const applyCocktail = () => {
+  const customCocktail = customCocktails.value.find((item) => item.value === selectedSlug.value)
+  if (customCocktail) {
+    form.cocktailSlug = customCocktail.value
+    form.cocktailName = customCocktail.nameZh
+    form.ingredientGroups = customCocktail.ingredientGroups
+      ? cloneIngredientGroups(customCocktail.ingredientGroups)
+      : createIngredientGroups()
+    form.ingredientsText = customCocktail.ingredientsText ?? ''
+    return
+  }
+
   const cocktail = cocktails.find((item) => item.slug === selectedSlug.value)
   form.cocktailSlug = cocktail?.slug ?? ''
   if (!cocktail) return
@@ -633,6 +707,11 @@ const resetForm = () => {
   selectedBeverage.value = ''
   cocktailSearch.value = ''
   flavorLiquorSearch.value = ''
+  beverageSearch.value = ''
+  customFlavorLiquorName.value = ''
+  customBeverageName.value = ''
+  isAddingFlavorLiquor.value = false
+  isAddingBeverage.value = false
   formError.value = ''
   Object.assign(form, {
     madeAt: getToday(),
@@ -667,15 +746,27 @@ const submit = () => {
     ingredientsText: form.ingredientsText,
     ingredientGroups: form.ingredientGroups,
   })
+  const cocktailName = form.cocktailName.trim()
+  const ingredientGroups = cloneIngredientGroups(form.ingredientGroups)
 
   works.add({
     ...form,
-    cocktailName: form.cocktailName.trim(),
+    cocktailName,
     ingredientsText,
     mood: form.mood.trim(),
     selfReview: form.selfReview.trim(),
     notes: form.notes.trim(),
   })
+
+  if (!isKnownCocktailName(cocktailName)) {
+    addCustomWorkCocktailOption({
+      nameZh: cocktailName,
+      ingredientsText,
+      ingredientGroups,
+    })
+    customCocktails.value = getCustomWorkCocktailOptions()
+  }
+
   resetForm()
 }
 </script>
