@@ -34,6 +34,23 @@ export type WorkImportResult = {
   skippedCount: number
 }
 
+export type WorkCloudSyncStatus = 'idle' | 'syncing' | 'success' | 'error'
+
+export type WorkCloudSyncState = {
+  status: WorkCloudSyncStatus
+  message: string
+  updatedAt: string
+}
+
+const createCloudSyncState = (): WorkCloudSyncState => ({
+  status: 'idle',
+  message: '尚未同步云端。',
+  updatedAt: '',
+})
+
+const getErrorMessage = (error: unknown, fallback: string) =>
+  error instanceof Error && error.message ? error.message : fallback
+
 const createId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()
@@ -203,6 +220,7 @@ const writeRecords = (records: WorkRecord[]) => {
 export const useWorkStore = defineStore('works', {
   state: () => ({
     items: readRecords(),
+    cloudSync: createCloudSyncState(),
   }),
   getters: {
     totalCount: (state) => state.items.length,
@@ -263,15 +281,47 @@ export const useWorkStore = defineStore('works', {
         skippedCount: imported.skippedCount + imported.records.length - nextRecords.length,
       }
     },
+    setCloudSync(status: WorkCloudSyncStatus, message: string) {
+      this.cloudSync = {
+        status,
+        message,
+        updatedAt: new Date().toISOString(),
+      }
+    },
     async loadFromCloud(): Promise<number> {
-      const records = await fetchCloudWorks()
-      writeRecords(records)
-      this.items = records
-      return records.length
+      this.setCloudSync('syncing', '正在从 CloudBase 云端恢复作品...')
+      try {
+        const records = await fetchCloudWorks()
+        if (!records.length) {
+          this.setCloudSync('success', '云端目前没有作品，未恢复到本地。')
+          return 0
+        }
+
+        writeRecords(records)
+        this.items = records
+        this.setCloudSync('success', `已从 CloudBase 云端恢复 ${records.length} 条作品。`)
+        return records.length
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '读取云端失败，请确认 CloudBase 已开启身份认证和数据库。'),
+        )
+        throw error
+      }
     },
     async pushAllToCloud(): Promise<number> {
-      await syncCloudWorks(this.items)
-      return this.items.length
+      this.setCloudSync('syncing', '正在上传作品到 CloudBase 云端...')
+      try {
+        await syncCloudWorks(this.items)
+        this.setCloudSync('success', `已上传 ${this.items.length} 条作品到 CloudBase 云端。`)
+        return this.items.length
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '上传云端失败，请确认 CloudBase 已开启身份认证和数据库。'),
+        )
+        throw error
+      }
     },
   },
 })

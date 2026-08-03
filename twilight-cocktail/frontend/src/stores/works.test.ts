@@ -326,9 +326,38 @@ describe('work store', () => {
 
     expect(count).toBe(1)
     expect(works.items).toEqual([cloudRecord])
+    expect(works.cloudSync).toMatchObject({
+      status: 'success',
+      message: '已从 CloudBase 云端恢复 1 条作品。',
+    })
     expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')).toEqual([
       cloudRecord,
     ])
+  })
+
+  it('does not clear local records when cloud restore finds no records', async () => {
+    vi.spyOn(cloudWorks, 'fetchCloudWorks').mockResolvedValue([])
+    const works = useWorkStore()
+    const localRecord = works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '本地作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    const count = await works.loadFromCloud()
+
+    expect(count).toBe(0)
+    expect(works.items).toEqual([localRecord])
+    expect(works.cloudSync).toMatchObject({
+      status: 'success',
+      message: '云端目前没有作品，未恢复到本地。',
+    })
   })
 
   it('pushes current local work records to cloud', async () => {
@@ -349,6 +378,33 @@ describe('work store', () => {
     const count = await works.pushAllToCloud()
 
     expect(count).toBe(1)
+    expect(works.cloudSync).toMatchObject({
+      status: 'success',
+      message: '已上传 1 条作品到 CloudBase 云端。',
+    })
     expect(push).toHaveBeenCalledWith(works.items)
+  })
+
+  it('keeps cloud sync errors visible in store state', async () => {
+    vi.spyOn(cloudWorks, 'syncCloudWorks').mockRejectedValue(new Error('权限不足'))
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '同步失败作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    await expect(works.pushAllToCloud()).rejects.toThrow('权限不足')
+
+    expect(works.cloudSync).toMatchObject({
+      status: 'error',
+      message: '权限不足',
+    })
   })
 })

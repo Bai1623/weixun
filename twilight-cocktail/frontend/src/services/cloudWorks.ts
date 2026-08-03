@@ -87,6 +87,12 @@ export const createCloudWorkDocument = (
   updatedAt: new Date().toISOString(),
 })
 
+export const toCloudWorkWriteData = (document: Required<CloudWorkDocument>) => {
+  const writeData: CloudWorkDocument = { ...document }
+  delete writeData._id
+  return writeData
+}
+
 const isIngredientGroups = (value: unknown): value is WorkIngredientGroups => {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<WorkIngredientGroups>
@@ -144,7 +150,7 @@ export const saveCloudWork = async (record: WorkRecord) => {
     .database()
     .collection(CLOUD_WORKS_COLLECTION)
     .doc(record.id)
-    .set(createCloudWorkDocument(record, ownerId))
+    .set(toCloudWorkWriteData(createCloudWorkDocument(record, ownerId)))
 }
 
 export const deleteCloudWork = async (id: string) => {
@@ -157,7 +163,7 @@ export const syncCloudWorks = async (records: readonly WorkRecord[]) => {
   const collection = getCloudbaseApp().database().collection(CLOUD_WORKS_COLLECTION)
   await Promise.all(
     records.map((record) =>
-      collection.doc(record.id).set(createCloudWorkDocument(record, ownerId)),
+      collection.doc(record.id).set(toCloudWorkWriteData(createCloudWorkDocument(record, ownerId))),
     ),
   )
 }

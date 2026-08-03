@@ -397,6 +397,18 @@
           >
             {{ shareMessage }}
           </p>
+          <div class="mt-4 rounded-lg border px-4 py-3" :class="cloudSyncStatusClass" role="status">
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p class="text-xs uppercase tracking-[0.2em] text-gold">CloudBase</p>
+                <p class="mt-1 text-sm font-semibold text-cream">{{ cloudSyncStatusLabel }}</p>
+              </div>
+              <p v-if="cloudSyncTimeText" class="text-xs text-muted">
+                {{ cloudSyncTimeText }}
+              </p>
+            </div>
+            <p class="mt-2 text-sm leading-6 text-cream/85">{{ works.cloudSync.message }}</p>
+          </div>
         </div>
 
         <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
@@ -713,6 +725,27 @@ const selectedBaseLiquorCount = computed(
 const filteredWorks = computed(() => filterWorkRecords(works.latestItems, workFilters))
 const averageRatingText = computed(() => (works.averageRating ? `${works.averageRating}` : '-'))
 const latestDateText = computed(() => works.latestItems[0]?.madeAt.slice(5) ?? '-')
+const cloudSyncStatusLabel = computed(() => {
+  if (works.cloudSync.status === 'syncing') return '同步中'
+  if (works.cloudSync.status === 'success') return '同步成功'
+  if (works.cloudSync.status === 'error') return '同步失败'
+  return '云端状态'
+})
+const cloudSyncStatusClass = computed(() => {
+  if (works.cloudSync.status === 'syncing') return 'border-gold/35 bg-gold/10'
+  if (works.cloudSync.status === 'success') return 'border-cream/20 bg-cream/10'
+  if (works.cloudSync.status === 'error') return 'border-wine/60 bg-wine/20'
+  return 'border-gold/15 bg-obsidian/45'
+})
+const cloudSyncTimeText = computed(() => {
+  if (!works.cloudSync.updatedAt) return ''
+  return `最后更新 ${new Date(works.cloudSync.updatedAt).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+})
 
 const openDatePicker = () => {
   const input = dateInput.value as (HTMLInputElement & { showPicker?: () => void }) | null
@@ -944,13 +977,10 @@ const pushWorksToCloud = async () => {
 
   isSyncingCloud.value = true
   try {
-    const count = await works.pushAllToCloud()
-    shareMessage.value = `已上传 ${count} 条作品到 CloudBase 云端。`
-  } catch (error) {
-    shareMessage.value =
-      error instanceof Error
-        ? error.message
-        : '上传云端失败，请确认 CloudBase 已开启身份认证和数据库。'
+    await works.pushAllToCloud()
+    shareMessage.value = works.cloudSync.message
+  } catch {
+    shareMessage.value = works.cloudSync.message
   } finally {
     isSyncingCloud.value = false
   }
@@ -964,13 +994,10 @@ const loadWorksFromCloud = async () => {
 
   isSyncingCloud.value = true
   try {
-    const count = await works.loadFromCloud()
-    shareMessage.value = `已从 CloudBase 云端恢复 ${count} 条作品。`
-  } catch (error) {
-    shareMessage.value =
-      error instanceof Error
-        ? error.message
-        : '读取云端失败，请确认 CloudBase 已开启身份认证和数据库。'
+    await works.loadFromCloud()
+    shareMessage.value = works.cloudSync.message
+  } catch {
+    shareMessage.value = works.cloudSync.message
   } finally {
     isSyncingCloud.value = false
   }

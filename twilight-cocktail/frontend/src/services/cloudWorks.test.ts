@@ -5,6 +5,7 @@ import {
   CLOUD_WORKS_COLLECTION,
   createCloudWorkDocument,
   getCloudbaseEnvId,
+  toCloudWorkWriteData,
   toWorkRecordFromCloudDocument,
 } from './cloudWorks'
 
@@ -51,6 +52,16 @@ describe('cloud works service', () => {
       notes: '周末补记',
       createdAt: '2026-08-03T12:00:00.000Z',
       updatedAt: expect.any(String),
+    })
+  })
+
+  it('omits document id from set payload when writing by document id', () => {
+    const writeData = toCloudWorkWriteData(createCloudWorkDocument(record, 'user-1'))
+
+    expect(writeData).not.toHaveProperty('_id')
+    expect(writeData).toMatchObject({
+      ownerId: 'user-1',
+      cocktailName: '莫吉托',
     })
   })
 
