@@ -337,10 +337,28 @@
             <div>
               <p class="text-sm text-muted">作品分享</p>
               <p class="mt-1 text-sm leading-6 text-cream/80">
-                用 JSON 备份或发给朋友，导入时会合并新记录。
+                用 JSON 备份或发给朋友，也可以先把作品同步到 CloudBase 云端。
               </p>
             </div>
             <div class="flex flex-wrap gap-3">
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                :disabled="!works.totalCount || isSyncingCloud"
+                @click="pushWorksToCloud"
+              >
+                <Upload class="h-4 w-4" />
+                {{ isSyncingCloud ? '同步中' : '上传到云端' }}
+              </button>
+              <button
+                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                type="button"
+                :disabled="isSyncingCloud"
+                @click="loadWorksFromCloud"
+              >
+                <Download class="h-4 w-4" />
+                从云端恢复
+              </button>
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
@@ -590,6 +608,7 @@ const formError = ref('')
 const shareMessage = ref('')
 const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
+const isSyncingCloud = ref(false)
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
@@ -913,6 +932,47 @@ const exportLongImages = async () => {
     shareMessage.value = error instanceof Error ? error.message : '生成长图失败，请稍后重试。'
   } finally {
     isExportingLongImage.value = false
+  }
+}
+
+const pushWorksToCloud = async () => {
+  shareMessage.value = ''
+  if (!works.totalCount) {
+    shareMessage.value = '当前还没有可上传到云端的作品。'
+    return
+  }
+
+  isSyncingCloud.value = true
+  try {
+    const count = await works.pushAllToCloud()
+    shareMessage.value = `已上传 ${count} 条作品到 CloudBase 云端。`
+  } catch (error) {
+    shareMessage.value =
+      error instanceof Error
+        ? error.message
+        : '上传云端失败，请确认 CloudBase 已开启身份认证和数据库。'
+  } finally {
+    isSyncingCloud.value = false
+  }
+}
+
+const loadWorksFromCloud = async () => {
+  shareMessage.value = ''
+  if (works.totalCount && !window.confirm('从云端恢复会用云端作品覆盖当前本地作品，确定继续？')) {
+    return
+  }
+
+  isSyncingCloud.value = true
+  try {
+    const count = await works.loadFromCloud()
+    shareMessage.value = `已从 CloudBase 云端恢复 ${count} 条作品。`
+  } catch (error) {
+    shareMessage.value =
+      error instanceof Error
+        ? error.message
+        : '读取云端失败，请确认 CloudBase 已开启身份认证和数据库。'
+  } finally {
+    isSyncingCloud.value = false
   }
 }
 

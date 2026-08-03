@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
 
+import { fetchCloudWorks, syncCloudWorks } from '@/services/cloudWorks'
+
 const storageKey = 'cocktail_work_records'
 
 export type WorkRecordInput = {
@@ -260,6 +262,16 @@ export const useWorkStore = defineStore('works', {
         importedCount: nextRecords.length,
         skippedCount: imported.skippedCount + imported.records.length - nextRecords.length,
       }
+    },
+    async loadFromCloud(): Promise<number> {
+      const records = await fetchCloudWorks()
+      writeRecords(records)
+      this.items = records
+      return records.length
+    },
+    async pushAllToCloud(): Promise<number> {
+      await syncCloudWorks(this.items)
+      return this.items.length
     },
   },
 })

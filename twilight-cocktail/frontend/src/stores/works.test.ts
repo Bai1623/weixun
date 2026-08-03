@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
+import * as cloudWorks from '@/services/cloudWorks'
 
 describe('work store', () => {
   beforeEach(() => {
@@ -302,5 +303,52 @@ describe('work store', () => {
     expect(works.items[0].cocktailName).toBe('朋友作品')
 
     expect(importWorkRecords('{bad json')).toEqual({ records: [], skippedCount: 0 })
+  })
+
+  it('loads cloud work records into local cache', async () => {
+    const cloudRecord = {
+      id: 'cloud-work',
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '云端作品',
+      photoDataUrl: '',
+      ingredientsText: '基酒：金酒',
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+      createdAt: '2026-08-03T10:00:00.000Z',
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudWorks').mockResolvedValue([cloudRecord])
+    const works = useWorkStore()
+
+    const count = await works.loadFromCloud()
+
+    expect(count).toBe(1)
+    expect(works.items).toEqual([cloudRecord])
+    expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')).toEqual([
+      cloudRecord,
+    ])
+  })
+
+  it('pushes current local work records to cloud', async () => {
+    const push = vi.spyOn(cloudWorks, 'syncCloudWorks').mockResolvedValue(undefined)
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '待迁移作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    const count = await works.pushAllToCloud()
+
+    expect(count).toBe(1)
+    expect(push).toHaveBeenCalledWith(works.items)
   })
 })
