@@ -337,14 +337,61 @@
             <div>
               <p class="text-sm text-muted">作品分享</p>
               <p class="mt-1 text-sm leading-6 text-cream/80">
-                用 JSON 备份或发给朋友，也可以先把作品同步到 CloudBase 云端。
+                用 JSON 备份或发给朋友，也可以登录账号后同步到 CloudBase 云端。
               </p>
             </div>
+          </div>
+          <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
+            <label class="space-y-2 text-sm text-muted">
+              <span>云端账号</span>
+              <input
+                v-model.trim="cloudAccountName"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                placeholder="例如 baibai"
+              />
+            </label>
+            <label class="space-y-2 text-sm text-muted">
+              <span>云端密码</span>
+              <input
+                v-model="cloudPassword"
+                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                placeholder="输入账号密码"
+                type="password"
+                @keydown.enter.prevent="loginCloudAccount"
+              />
+            </label>
+            <button
+              class="mt-auto inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              :disabled="isSyncingCloud"
+              @click="loginCloudAccount"
+            >
+              <Upload class="h-4 w-4" />
+              {{ works.cloudAccount.accountName ? '切换账号' : '登录/创建' }}
+            </button>
+            <button
+              class="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+              type="button"
+              :disabled="!works.cloudAccount.accountName || isSyncingCloud"
+              @click="logoutCloudAccount"
+            >
+              退出
+            </button>
+          </div>
+          <p class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
+            {{
+              works.cloudAccount.accountName
+                ? `当前云端账号：${works.cloudAccount.accountName}`
+                : '还未登录云端账号。账号不存在时会自动创建。'
+            }}
+          </p>
+          <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="text-sm leading-6 text-muted">上传和恢复只会操作当前云端账号的作品。</div>
             <div class="flex flex-wrap gap-3">
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
-                :disabled="!works.totalCount || isSyncingCloud"
+                :disabled="!works.totalCount || !works.cloudAccount.accountName || isSyncingCloud"
                 @click="pushWorksToCloud"
               >
                 <Upload class="h-4 w-4" />
@@ -353,7 +400,7 @@
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
-                :disabled="isSyncingCloud"
+                :disabled="!works.cloudAccount.accountName || isSyncingCloud"
                 @click="loadWorksFromCloud"
               >
                 <Download class="h-4 w-4" />
@@ -618,6 +665,8 @@ const isAddingFlavorLiquor = ref(false)
 const isAddingBeverage = ref(false)
 const formError = ref('')
 const shareMessage = ref('')
+const cloudAccountName = ref(works.cloudAccount.accountName)
+const cloudPassword = ref('')
 const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
 const isSyncingCloud = ref(false)
@@ -968,8 +1017,34 @@ const exportLongImages = async () => {
   }
 }
 
+const loginCloudAccount = async () => {
+  shareMessage.value = ''
+  isSyncingCloud.value = true
+  try {
+    await works.loginCloudAccount(cloudAccountName.value, cloudPassword.value)
+    cloudAccountName.value = works.cloudAccount.accountName
+    cloudPassword.value = ''
+    shareMessage.value = works.cloudSync.message
+  } catch {
+    shareMessage.value = works.cloudSync.message
+  } finally {
+    isSyncingCloud.value = false
+  }
+}
+
+const logoutCloudAccount = () => {
+  works.logoutCloudAccount()
+  cloudAccountName.value = ''
+  cloudPassword.value = ''
+  shareMessage.value = works.cloudSync.message
+}
+
 const pushWorksToCloud = async () => {
   shareMessage.value = ''
+  if (!works.cloudAccount.accountName) {
+    shareMessage.value = '请先登录云端账号。'
+    return
+  }
   if (!works.totalCount) {
     shareMessage.value = '当前还没有可上传到云端的作品。'
     return
@@ -988,6 +1063,10 @@ const pushWorksToCloud = async () => {
 
 const loadWorksFromCloud = async () => {
   shareMessage.value = ''
+  if (!works.cloudAccount.accountName) {
+    shareMessage.value = '请先登录云端账号。'
+    return
+  }
   if (works.totalCount && !window.confirm('从云端恢复会用云端作品覆盖当前本地作品，确定继续？')) {
     return
   }

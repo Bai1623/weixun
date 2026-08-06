@@ -1,10 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { WorkRecord } from '@/stores/works'
 import {
   CLOUD_WORKS_COLLECTION,
+  buildCloudWorksIdentity,
+  clearCloudWorksSession,
   createCloudWorkDocument,
-  getCloudbaseEnvId,
+  fetchCloudWorks,
+  getCloudWorksSession,
+  loginCloudWorksAccount,
+  syncCloudWorks,
   toCloudWorkWriteData,
   toWorkRecordFromCloudDocument,
 } from './cloudWorks'
@@ -30,12 +35,106 @@ const record: WorkRecord = {
 }
 
 describe('cloud works service', () => {
-  it('uses the configured CloudBase environment and collection', () => {
-    expect(getCloudbaseEnvId()).toBe('weixun-d8g9xwqak83952747')
+  beforeEach(() => {
+    window.localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('uses the existing works collection for the cloud function backend', () => {
     expect(CLOUD_WORKS_COLLECTION).toBe('works')
   })
 
-  it('serializes work records with owner and timestamps for cloud storage', () => {
+  it('builds stable account identity without storing the plain password', async () => {
+    const first = await buildCloudWorksIdentity(' Bai ', 'secret')
+    const second = await buildCloudWorksIdentity('bai', 'secret')
+
+    expect(first.accountName).toBe('Bai')
+    expect(first.accountNameKey).toBe(second.accountNameKey)
+    expect(first.passwordVerifier).toBe(second.passwordVerifier)
+    expect(first.passwordVerifier).not.toContain('secret')
+  })
+
+  it('creates a cloud account session through the HTTP cloud function', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, status: 'account_not_found' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const session = await loginCloudWorksAccount('mix', 'pass')
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"account-login"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"account-create"')
+    expect(getCloudWorksSession()).toMatchObject({
+      accountName: 'mix',
+      accountNameKey: session.accountNameKey,
+      passwordVerifier: session.passwordVerifier,
+    })
+  })
+
+  it('syncs and fetches work records through the saved cloud account session', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'saved', recordCount: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'matched',
+            payload: {
+              version: 1,
+              app: 'twilight-mixbook',
+              type: 'work-records',
+              records: [record],
+            },
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await syncCloudWorks([record])
+    const records = await fetchCloudWorks()
+
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"works-put"')
+    expect(fetchMock.mock.calls[0][1].body).toContain('"recordCount":1')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-get"')
+    expect(records).toEqual([record])
+  })
+
+  it('requires cloud account login before syncing records', async () => {
+    await expect(syncCloudWorks([record])).rejects.toThrow('请先在作品分享里登录云端账号。')
+  })
+
+  it('clears the saved cloud session', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+
+    clearCloudWorksSession()
+
+    expect(getCloudWorksSession()).toBeNull()
+  })
+
+  it('serializes work records with owner and timestamps for legacy document storage', () => {
     expect(createCloudWorkDocument(record, 'user-1')).toEqual({
       _id: 'work-1',
       ownerId: 'user-1',

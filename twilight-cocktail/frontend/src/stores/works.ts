@@ -1,6 +1,12 @@
 import { defineStore } from 'pinia'
 
-import { fetchCloudWorks, syncCloudWorks } from '@/services/cloudWorks'
+import {
+  clearCloudWorksSession,
+  fetchCloudWorks,
+  getCloudWorksSession,
+  loginCloudWorksAccount,
+  syncCloudWorks,
+} from '@/services/cloudWorks'
 
 const storageKey = 'cocktail_work_records'
 
@@ -42,11 +48,24 @@ export type WorkCloudSyncState = {
   updatedAt: string
 }
 
+export type WorkCloudAccountState = {
+  accountName: string
+  updatedAt: string
+}
+
 const createCloudSyncState = (): WorkCloudSyncState => ({
   status: 'idle',
   message: '尚未同步云端。',
   updatedAt: '',
 })
+
+const createCloudAccountState = (): WorkCloudAccountState => {
+  const session = getCloudWorksSession()
+  return {
+    accountName: session?.accountName ?? '',
+    updatedAt: session?.updatedAt ?? '',
+  }
+}
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback
@@ -221,6 +240,7 @@ export const useWorkStore = defineStore('works', {
   state: () => ({
     items: readRecords(),
     cloudSync: createCloudSyncState(),
+    cloudAccount: createCloudAccountState(),
   }),
   getters: {
     totalCount: (state) => state.items.length,
@@ -287,6 +307,29 @@ export const useWorkStore = defineStore('works', {
         message,
         updatedAt: new Date().toISOString(),
       }
+    },
+    async loginCloudAccount(accountName: string, password: string) {
+      this.setCloudSync('syncing', '正在登录 CloudBase 云端账号...')
+      try {
+        const session = await loginCloudWorksAccount(accountName, password)
+        this.cloudAccount = {
+          accountName: session.accountName,
+          updatedAt: session.updatedAt,
+        }
+        this.setCloudSync('success', `已登录云端账号「${session.accountName}」。`)
+        return session
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '云端账号登录失败，请检查云函数地址和账号密码。'),
+        )
+        throw error
+      }
+    },
+    logoutCloudAccount() {
+      clearCloudWorksSession()
+      this.cloudAccount = { accountName: '', updatedAt: '' }
+      this.setCloudSync('idle', '已退出云端账号。')
     },
     async loadFromCloud(): Promise<number> {
       this.setCloudSync('syncing', '正在从 CloudBase 云端恢复作品...')
