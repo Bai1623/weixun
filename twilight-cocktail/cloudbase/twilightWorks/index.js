@@ -46,6 +46,22 @@ function accountDocId(accountNameKey) {
   return `twilight_account_${accountNameKey}`;
 }
 
+function accountChunkDocId(accountNameKey, uploadId, chunkIndex) {
+  return `twilight_account_${accountNameKey}_${uploadId}_chunk_${chunkIndex}`;
+}
+
+function legacyAccountChunkDocId(accountNameKey, chunkIndex) {
+  return `twilight_account_${accountNameKey}_chunk_${chunkIndex}`;
+}
+
+function uploadId() {
+  return `up_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function validUploadId(value) {
+  return /^[A-Za-z0-9_-]{6,80}$/.test(value || "");
+}
+
 async function getDoc(lookupKey) {
   const result = await getCollection().where({ lookupKey }).limit(1).get();
   return result?.data?.[0] || null;
@@ -80,6 +96,29 @@ function buildWorksPayload(payload) {
     type: "work-records",
     records: safeRecords(payload),
   };
+}
+
+async function assertAccountPassword(accountNameKey, passwordVerifier) {
+  const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
+  if (doc && doc.passwordVerifier !== passwordVerifier) {
+    return { ok: false, status: "password_mismatch", doc };
+  }
+  return { ok: true, doc };
+}
+
+async function readChunkedWorks(doc) {
+  const chunkCount = Number(doc?.chunkCount || 0);
+  if (!chunkCount) return buildWorksPayload(doc?.payload);
+
+  const records = [];
+  const activeUploadId = doc.activeUploadId || "";
+  for (let index = 0; index < chunkCount; index += 1) {
+    const chunk = activeUploadId
+      ? await getDoc(accountChunkDocId(doc.accountNameKey, activeUploadId, index)).catch(() => null)
+      : await getDoc(legacyAccountChunkDocId(doc.accountNameKey, index)).catch(() => null);
+    records.push(...safeRecords(chunk?.payload));
+  }
+  return buildWorksPayload({ records });
 }
 
 exports.main = async (event = {}) => {
@@ -162,6 +201,71 @@ exports.main = async (event = {}) => {
       return response({ ok: true, status: doc ? "updated" : "created", recordCount: worksPayload.records.length });
     }
 
+    if (method === "POST" && action === "works-put-start") {
+      const { accountNameKey, passwordVerifier, accountName = "", recordCount = 0, chunkCount = 0 } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      return response({
+        ok: true,
+        status: "started",
+        uploadId: uploadId(),
+        accountName: accountName || account.doc?.accountName || "",
+        recordCount: Number(recordCount || 0),
+        chunkCount: Number(chunkCount || 0),
+      });
+    }
+
+    if (method === "POST" && action === "works-put-chunk") {
+      const { accountNameKey, passwordVerifier, uploadId: currentUploadId = "", chunkIndex = 0, payload } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      if (!validUploadId(currentUploadId)) return response({ error: "invalid_upload_id" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const index = Number(chunkIndex || 0);
+      if (!Number.isInteger(index) || index < 0 || index > 999) return response({ error: "invalid_chunk_index" }, 400);
+      const worksPayload = buildWorksPayload(payload);
+      await saveDoc(accountChunkDocId(accountNameKey, currentUploadId, index), {
+        type: "twilight-account-works-chunk",
+        accountNameKey,
+        uploadId: currentUploadId,
+        chunkIndex: index,
+        recordCount: worksPayload.records.length,
+        payload: worksPayload,
+      });
+      return response({ ok: true, status: "chunk_saved", chunkIndex: index, recordCount: worksPayload.records.length });
+    }
+
+    if (method === "POST" && action === "works-put-commit") {
+      const { accountNameKey, passwordVerifier, uploadId: currentUploadId = "", accountName = "", recordCount = 0, chunkCount = 0 } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      if (!validUploadId(currentUploadId)) return response({ error: "invalid_upload_id" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const now = new Date().toISOString();
+      await saveDoc(accountDocId(accountNameKey), {
+        type: "twilight-account-works",
+        accountName: accountName || account.doc?.accountName || "",
+        accountNameKey,
+        passwordVerifier,
+        recordCount: Number(recordCount || 0),
+        chunkCount: Number(chunkCount || 0),
+        activeUploadId: currentUploadId,
+        backupCreatedAt: now,
+        payload: buildWorksPayload({ records: [] }),
+      });
+      return response({ ok: true, status: "saved", recordCount: Number(recordCount || 0), chunkCount: Number(chunkCount || 0) });
+    }
+
     if (method === "POST" && action === "works-get") {
       const { accountNameKey, passwordVerifier } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
@@ -179,7 +283,7 @@ exports.main = async (event = {}) => {
         accountName: doc.accountName || "",
         recordCount: Number(doc.recordCount || doc.payload?.records?.length || 0),
         backupCreatedAt: doc.backupCreatedAt || "",
-        payload: buildWorksPayload(doc.payload),
+        payload: await readChunkedWorks(doc),
       });
     }
 

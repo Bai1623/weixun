@@ -6,6 +6,7 @@ import {
   buildCloudWorksIdentity,
   clearCloudWorksSession,
   createCloudWorkDocument,
+  createCloudWorkChunks,
   fetchCloudWorks,
   getCloudWorksSession,
   loginCloudWorksAccount,
@@ -87,6 +88,15 @@ describe('cloud works service', () => {
       .fn()
       .mockResolvedValueOnce({
         ok: true,
+        json: () =>
+          Promise.resolve({ ok: true, status: 'started', recordCount: 1, uploadId: 'up-1' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'chunk_saved', chunkIndex: 0 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: () => Promise.resolve({ ok: true, status: 'saved', recordCount: 1 }),
       })
       .mockResolvedValueOnce({
@@ -108,10 +118,30 @@ describe('cloud works service', () => {
     await syncCloudWorks([record])
     const records = await fetchCloudWorks()
 
-    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"works-put"')
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"works-put-start"')
     expect(fetchMock.mock.calls[0][1].body).toContain('"recordCount":1')
-    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-get"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-put-chunk"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"uploadId":"up-1"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"chunkIndex":0')
+    expect(fetchMock.mock.calls[2][1].body).toContain('"action":"works-put-commit"')
+    expect(fetchMock.mock.calls[2][1].body).toContain('"uploadId":"up-1"')
+    expect(fetchMock.mock.calls[3][1].body).toContain('"action":"works-get"')
     expect(records).toEqual([record])
+  })
+
+  it('splits large work records into bounded cloud upload chunks', () => {
+    const largeRecord = {
+      ...record,
+      id: 'large-work',
+      photoDataUrl: `data:image/jpeg;base64,${'a'.repeat(350)}`,
+    }
+
+    const chunks = createCloudWorkChunks([record, largeRecord], 300)
+
+    expect(chunks).toHaveLength(2)
+    expect(chunks[0].records).toEqual([record])
+    expect(chunks[1].records).toEqual([largeRecord])
   })
 
   it('requires cloud account login before syncing records', async () => {

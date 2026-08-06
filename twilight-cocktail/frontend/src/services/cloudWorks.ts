@@ -5,6 +5,7 @@ const defaultCloudWorksApiUrl =
   'https://weixun-d8g9xwqak83952747-1462034992.ap-shanghai.app.tcloudbase.com/twilightWorks'
 const cloudWorksApiUrl = import.meta.env.VITE_CLOUDBASE_WORKS_API_URL || defaultCloudWorksApiUrl
 const cloudSessionStorageKey = 'twilight_cloud_works_session'
+const defaultUploadChunkBytes = 256 * 1024
 
 export type CloudWorksSession = {
   accountName: string
@@ -27,6 +28,7 @@ type CloudWorksResponse = {
   message?: string
   accountName?: string
   recordCount?: number
+  uploadId?: string
   payload?: CloudWorksPayload
 }
 
@@ -79,6 +81,34 @@ const createPayload = (records: readonly WorkRecord[]): CloudWorksPayload => ({
   records: records.map((record) => ({ ...record })),
 })
 
+const byteLength = (value: string) => new Blob([value]).size
+
+export const createCloudWorkChunks = (
+  records: readonly WorkRecord[],
+  maxChunkBytes = defaultUploadChunkBytes,
+) => {
+  const chunks: Array<{ records: WorkRecord[] }> = []
+  let current: WorkRecord[] = []
+
+  records.forEach((record) => {
+    const nextRecord = { ...record }
+    const candidate = [...current, nextRecord]
+    const candidateSize = byteLength(JSON.stringify(createPayload(candidate)))
+    if (current.length && candidateSize > maxChunkBytes) {
+      chunks.push({ records: current })
+      current = [nextRecord]
+      return
+    }
+    current = candidate
+  })
+
+  if (current.length || !chunks.length) {
+    chunks.push({ records: current })
+  }
+
+  return chunks
+}
+
 const readCloudSession = (): CloudWorksSession | null => {
   try {
     const raw = window.localStorage.getItem(cloudSessionStorageKey)
@@ -117,11 +147,21 @@ const postCloudWorksAction = async (body: Record<string, unknown>): Promise<Clou
     throw new Error('请先配置 VITE_CLOUDBASE_WORKS_API_URL 云函数地址。')
   }
 
-  const response = await fetch(cloudWorksApiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let response: Response
+  try {
+    response = await fetch(cloudWorksApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new Error(
+        '无法连接云函数。若登录正常但上传失败，请重新部署新版 twilightWorks 云函数后再试。',
+      )
+    }
+    throw error
+  }
   const data = (await response.json().catch(() => ({}))) as CloudWorksResponse
   if (!response.ok || data.error) {
     throw new Error(data.message || data.error || '云函数请求失败。')
@@ -197,13 +237,38 @@ export const fetchCloudWorks = async () => {
 
 export const syncCloudWorks = async (records: readonly WorkRecord[]) => {
   const session = getRequiredCloudSession()
-  await postCloudWorksAction({
-    action: 'works-put',
+  const chunks = createCloudWorkChunks(records)
+  const startResult = await postCloudWorksAction({
+    action: 'works-put-start',
     accountName: session.accountName,
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
     recordCount: records.length,
-    payload: createPayload(records),
+    chunkCount: chunks.length,
+  })
+  if (!startResult.uploadId) {
+    throw new Error('云函数没有返回上传批次，请重新部署新版 twilightWorks 云函数。')
+  }
+  await Promise.all(
+    chunks.map((chunk, index) =>
+      postCloudWorksAction({
+        action: 'works-put-chunk',
+        accountNameKey: session.accountNameKey,
+        passwordVerifier: session.passwordVerifier,
+        uploadId: startResult.uploadId,
+        chunkIndex: index,
+        payload: createPayload(chunk.records),
+      }),
+    ),
+  )
+  await postCloudWorksAction({
+    action: 'works-put-commit',
+    accountName: session.accountName,
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    uploadId: startResult.uploadId,
+    recordCount: records.length,
+    chunkCount: chunks.length,
   })
 }
 
