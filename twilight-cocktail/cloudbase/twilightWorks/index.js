@@ -1,6 +1,16 @@
 const MAX_RECORDS = 500;
 const MAX_CHUNK_TEXT_BYTES = 128 * 1024;
+const MAX_DRINK_REQUESTS = 200;
+const MAX_DRINK_REQUEST_BYTES = 6 * 1024;
+const MAX_DRINK_TEXT = {
+  guestName: 24,
+  cocktailName: 40,
+  ingredient: 40,
+  other: 200,
+  note: 160,
+};
 let cachedCollection = null;
+const crypto = require("crypto");
 
 function getCollection() {
   if (cachedCollection) return cachedCollection;
@@ -51,6 +61,10 @@ function accountChunkDocId(accountNameKey, uploadId, chunkIndex) {
   return `twilight_account_${accountNameKey}_${uploadId}_chunk_${chunkIndex}`;
 }
 
+function requestShareDocId(shareKey) {
+  return `twilight_request_share_${shareKey}`;
+}
+
 function legacyAccountChunkDocId(accountNameKey, chunkIndex) {
   return `twilight_account_${accountNameKey}_chunk_${chunkIndex}`;
 }
@@ -63,8 +77,24 @@ function validUploadId(value) {
   return /^[A-Za-z0-9_-]{6,80}$/.test(value || "");
 }
 
+function validShareToken(value) {
+  return /^[A-Za-z0-9_-]{24,128}$/.test(value || "");
+}
+
 function byteLength(value) {
   return Buffer.byteLength(String(value || ""), "utf8");
+}
+
+function sha256(value) {
+  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
+}
+
+function shareKeyFromToken(token) {
+  return sha256(`twilight-drink-request-share:v1:${token}`);
+}
+
+function createDrinkRequestId() {
+  return `drink_req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 async function getDoc(lookupKey) {
@@ -94,6 +124,13 @@ function safeRecords(payload) {
   return records.slice(0, MAX_RECORDS);
 }
 
+function safeDrinkRequests(doc) {
+  const requests = Array.isArray(doc?.drinkRequests) ? doc.drinkRequests : [];
+  return requests
+    .filter((request) => request && typeof request === "object" && typeof request.cocktailName === "string")
+    .slice(0, MAX_DRINK_REQUESTS);
+}
+
 function buildWorksPayload(payload) {
   return {
     version: 1,
@@ -109,6 +146,66 @@ async function assertAccountPassword(accountNameKey, passwordVerifier) {
     return { ok: false, status: "password_mismatch", doc };
   }
   return { ok: true, doc };
+}
+
+function drinkRequestError(error, message, statusCode = 400) {
+  const result = new Error(message);
+  result.error = error;
+  result.statusCode = statusCode;
+  return result;
+}
+
+function normalizeDrinkText(label, value, maxLength, required = false) {
+  const next = typeof value === "string" ? value.trim() : "";
+  if (required && !next) throw drinkRequestError("missing_required_field", `请填写${label}。`);
+  if (Array.from(next).length > maxLength) {
+    throw drinkRequestError("field_too_long", `${label}最多 ${maxLength} 个字。`);
+  }
+  return next;
+}
+
+function normalizeDrinkList(values, maxItems) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((item) => normalizeDrinkText("材料", item, MAX_DRINK_TEXT.ingredient))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function normalizeDrinkRequest(input) {
+  if (input?.photoDataUrl) {
+    throw drinkRequestError("photo_not_allowed", "朋友点单不支持上传图片。");
+  }
+
+  const groups = input?.ingredientGroups || {};
+  const request = {
+    id: createDrinkRequestId(),
+    guestName: normalizeDrinkText("称呼", input?.guestName, MAX_DRINK_TEXT.guestName),
+    cocktailName: normalizeDrinkText("酒名", input?.cocktailName, MAX_DRINK_TEXT.cocktailName, true),
+    ingredientGroups: {
+      baseLiquors: normalizeDrinkList(groups.baseLiquors, 4),
+      flavorLiquors: normalizeDrinkList(groups.flavorLiquors, 8),
+      beverages: normalizeDrinkList(groups.beverages, 8),
+      other: normalizeDrinkText("其他材料", groups.other, MAX_DRINK_TEXT.other),
+    },
+    note: normalizeDrinkText("备注", input?.note, MAX_DRINK_TEXT.note),
+    createdAt: new Date().toISOString(),
+  };
+
+  if (byteLength(JSON.stringify(request)) > MAX_DRINK_REQUEST_BYTES) {
+    throw drinkRequestError("request_too_large", "点单内容过长，请减少材料或备注。", 413);
+  }
+  return request;
+}
+
+async function disableShareDoc(shareKey) {
+  if (!shareKey) return;
+  const shareDoc = await getDoc(requestShareDocId(shareKey)).catch(() => null);
+  if (!shareDoc) return;
+  await saveDoc(requestShareDocId(shareKey), {
+    enabled: false,
+    disabledAt: new Date().toISOString(),
+  });
 }
 
 async function readChunkedWorks(doc) {
@@ -334,6 +431,134 @@ exports.main = async (event = {}) => {
         recordCount: Number(doc.recordCount || doc.payload?.records?.length || 0),
         backupCreatedAt: doc.backupCreatedAt || "",
         payload: await readChunkedWorks(doc),
+      });
+    }
+
+    if (method === "POST" && action === "request-share-get") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const enabled = Boolean(account.doc?.requestShareEnabled && account.doc?.requestShareKey);
+      return response({
+        ok: true,
+        enabled,
+        requestCount: safeDrinkRequests(account.doc).length,
+        updatedAt: account.doc?.requestShareUpdatedAt || "",
+      });
+    }
+
+    if (method === "POST" && action === "request-share-reset") {
+      const { accountNameKey, passwordVerifier, shareToken = "" } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      if (!validShareToken(shareToken)) return response({ error: "invalid_share_token" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const now = new Date().toISOString();
+      const previousShareKey = account.doc?.requestShareKey || "";
+      const shareKey = shareKeyFromToken(shareToken);
+      if (previousShareKey && previousShareKey !== shareKey) {
+        await disableShareDoc(previousShareKey);
+      }
+
+      await saveDoc(requestShareDocId(shareKey), {
+        type: "twilight-drink-request-share",
+        accountNameKey,
+        shareKey,
+        enabled: true,
+        requestShareUpdatedAt: now,
+      });
+      await saveDoc(accountDocId(accountNameKey), {
+        type: "twilight-account-works",
+        accountNameKey,
+        passwordVerifier,
+        requestShareEnabled: true,
+        requestShareKey: shareKey,
+        requestShareUpdatedAt: now,
+        drinkRequestCount: safeDrinkRequests(account.doc).length,
+      });
+      return response({
+        ok: true,
+        enabled: true,
+        requestCount: safeDrinkRequests(account.doc).length,
+        updatedAt: now,
+      });
+    }
+
+    if (method === "POST" && action === "request-share-disable") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      await disableShareDoc(account.doc?.requestShareKey || "");
+      await saveDoc(accountDocId(accountNameKey), {
+        requestShareEnabled: false,
+        requestShareUpdatedAt: new Date().toISOString(),
+      });
+      return response({ ok: true, enabled: false });
+    }
+
+    if (method === "POST" && action === "drink-request-submit") {
+      const { shareToken = "", request } = body;
+      if (!validShareToken(shareToken)) return response({ error: "invalid_share_token" }, 400);
+      if (byteLength(JSON.stringify(request || {})) > MAX_DRINK_REQUEST_BYTES) {
+        return response({ error: "request_too_large", message: "点单内容过长，请减少材料或备注。" }, 413);
+      }
+
+      const shareKey = shareKeyFromToken(shareToken);
+      const shareDoc = await getDoc(requestShareDocId(shareKey)).catch(() => null);
+      if (!shareDoc?.enabled || !shareDoc.accountNameKey) {
+        return response({ ok: false, status: "share_disabled", message: "这个点单链接已经关闭。" }, 403);
+      }
+
+      const accountDoc = await getDoc(accountDocId(shareDoc.accountNameKey)).catch(() => null);
+      if (
+        !accountDoc?.requestShareEnabled ||
+        accountDoc.requestShareKey !== shareKey ||
+        accountDoc.accountNameKey !== shareDoc.accountNameKey
+      ) {
+        return response({ ok: false, status: "share_disabled", message: "这个点单链接已经关闭。" }, 403);
+      }
+
+      let drinkRequest;
+      try {
+        drinkRequest = normalizeDrinkRequest(request);
+      } catch (error) {
+        return response(
+          { error: error.error || "invalid_drink_request", message: error.message },
+          error.statusCode || 400,
+        );
+      }
+
+      const nextRequests = [drinkRequest, ...safeDrinkRequests(accountDoc)].slice(0, MAX_DRINK_REQUESTS);
+      await saveDoc(accountDocId(accountDoc.accountNameKey), {
+        drinkRequests: nextRequests,
+        drinkRequestCount: nextRequests.length,
+      });
+      return response({ ok: true, status: "created", requestId: drinkRequest.id });
+    }
+
+    if (method === "POST" && action === "drink-requests-get") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      return response({
+        ok: true,
+        requestCount: safeDrinkRequests(account.doc).length,
+        requests: safeDrinkRequests(account.doc),
       });
     }
 

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import WorksPage from './WorksPage.vue'
 import { useWorkStore } from '@/stores/works'
 import * as cloudWorks from '@/services/cloudWorks'
+import * as cloudDrinkRequests from '@/services/cloudDrinkRequests'
 import { addCustomWorkCocktailOption } from '@/utils/workFormOptions'
 
 describe('WorksPage', () => {
@@ -273,5 +274,62 @@ describe('WorksPage', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('manages the friend drink request share link and displays requests', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      }),
+    )
+    vi.spyOn(cloudDrinkRequests, 'getDrinkRequestShare').mockResolvedValue({
+      enabled: false,
+      token: '',
+      url: '',
+      requestCount: 0,
+      updatedAt: '',
+    })
+    vi.spyOn(cloudDrinkRequests, 'fetchDrinkRequests').mockResolvedValue([
+      {
+        id: 'req-1',
+        guestName: '朋友',
+        cocktailName: '冰岛',
+        ingredientGroups: {
+          baseLiquors: ['伏特加'],
+          flavorLiquors: [],
+          beverages: ['葡萄味气泡水'],
+          other: '',
+        },
+        note: '少甜',
+        createdAt: '2026-08-07T12:00:00.000Z',
+      },
+    ])
+    vi.spyOn(cloudDrinkRequests, 'resetDrinkRequestShare').mockResolvedValue({
+      enabled: true,
+      token: 'share-token',
+      url: 'https://example.com/#/want/share-token',
+      requestCount: 1,
+      updatedAt: '2026-08-07T12:00:00.000Z',
+    })
+    vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
+
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('朋友想喝')
+    expect(wrapper.text()).toContain('冰岛')
+    await wrapper.get('[data-testid="drink-share-reset"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('https://example.com/#/want/share-token')
+    await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
+    await flushPromises()
+
+    expect(cloudDrinkRequests.disableDrinkRequestShare).toHaveBeenCalled()
+    expect(wrapper.text()).toContain('分享链接已关闭')
   })
 })

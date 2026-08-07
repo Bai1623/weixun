@@ -461,6 +461,91 @@
               {{ autoBackupStatusText }}
             </p>
           </div>
+          <div class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p class="text-sm font-semibold text-cream">朋友想喝</p>
+                <p class="mt-1 text-sm leading-6 text-muted">
+                  生成分享链接后，朋友可以提交一条无照片点单。你可以随时关闭或重置链接。
+                </p>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button
+                  data-testid="drink-share-reset"
+                  class="inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="!works.cloudAccount.accountName || isDrinkRequestSyncing"
+                  @click="resetDrinkShareLink"
+                >
+                  <Upload class="h-4 w-4" />
+                  {{ drinkShare.enabled ? '重置分享链接' : '生成分享链接' }}
+                </button>
+                <button
+                  data-testid="drink-share-disable"
+                  class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="!drinkShare.enabled || isDrinkRequestSyncing"
+                  @click="disableDrinkShareLink"
+                >
+                  关闭链接
+                </button>
+                <button
+                  class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="!works.cloudAccount.accountName || isDrinkRequestSyncing"
+                  @click="loadDrinkRequestPanel"
+                >
+                  刷新点单
+                </button>
+              </div>
+            </div>
+            <p
+              v-if="drinkShare.url"
+              class="mt-3 break-all rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream"
+            >
+              {{ drinkShare.url }}
+            </p>
+            <p v-else class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
+              {{
+                works.cloudAccount.accountName
+                  ? '当前没有可用分享链接。'
+                  : '请先登录云端账号，再生成朋友点单链接。'
+              }}
+            </p>
+            <p
+              v-if="drinkRequestMessage"
+              class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream"
+            >
+              {{ drinkRequestMessage }}
+            </p>
+            <div v-if="drinkRequests.length" class="mt-4 space-y-3">
+              <article
+                v-for="request in drinkRequests"
+                :key="request.id"
+                class="rounded-lg border border-gold/10 bg-walnut/60 p-4"
+              >
+                <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p class="text-xs uppercase tracking-[0.18em] text-gold">
+                      {{ formatDrinkRequestDate(request.createdAt) }}
+                    </p>
+                    <h3 class="mt-1 font-display text-2xl text-cream">
+                      {{ request.cocktailName }}
+                    </h3>
+                  </div>
+                  <p v-if="request.guestName" class="text-sm text-muted">
+                    {{ request.guestName }}
+                  </p>
+                </div>
+                <p class="mt-3 whitespace-pre-line text-sm leading-6 text-muted">
+                  {{ formatDrinkRequestIngredients(request.ingredientGroups) }}
+                </p>
+                <p v-if="request.note" class="mt-2 text-sm leading-6 text-cream/85">
+                  {{ request.note }}
+                </p>
+              </article>
+            </div>
+          </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">上传和恢复只会操作当前云端账号的作品。</div>
             <div class="flex flex-wrap gap-3">
@@ -708,6 +793,14 @@ import {
   type WorkRecordInput,
 } from '@/stores/works'
 import {
+  disableDrinkRequestShare,
+  fetchDrinkRequests,
+  getDrinkRequestShare,
+  resetDrinkRequestShare,
+  type DrinkRequest,
+  type DrinkRequestShareState,
+} from '@/services/cloudDrinkRequests'
+import {
   CUSTOM_OPTION_VALUE,
   addCustomMaterialOption,
   addCustomWorkCocktailOption,
@@ -747,6 +840,16 @@ const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
 const isSyncingCloud = ref(false)
 const autoBackupPrompt = ref(false)
+const isDrinkRequestSyncing = ref(false)
+const drinkRequestMessage = ref('')
+const drinkRequests = ref<DrinkRequest[]>([])
+const drinkShare = ref<DrinkRequestShareState>({
+  enabled: false,
+  token: '',
+  url: '',
+  requestCount: 0,
+  updatedAt: '',
+})
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
@@ -886,6 +989,23 @@ const autoBackupStatusText = computed(() =>
     ? `自动备份已开启，${autoBackupLastBackupText.value}`
     : '自动备份已关闭，仍可手动上传到云端。',
 )
+const formatDrinkRequestIngredients = (groups: WorkIngredientGroups) =>
+  [
+    groups.baseLiquors.length ? `基酒：${groups.baseLiquors.join('、')}` : '',
+    groups.flavorLiquors.length ? `调味酒：${groups.flavorLiquors.join('、')}` : '',
+    groups.beverages.length ? `饮料：${groups.beverages.join('、')}` : '',
+    groups.other,
+  ]
+    .filter(Boolean)
+    .join('\n') || '未填写材料'
+
+const formatDrinkRequestDate = (value: string) =>
+  new Date(value).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 
 const openDatePicker = () => {
   const input = dateInput.value as (HTMLInputElement & { showPicker?: () => void }) | null
@@ -1116,6 +1236,7 @@ const loginCloudAccount = async () => {
     cloudAccountName.value = works.cloudAccount.accountName
     cloudPassword.value = ''
     shareMessage.value = works.cloudSync.message
+    await loadDrinkRequestPanel()
   } catch {
     shareMessage.value = works.cloudSync.message
   } finally {
@@ -1128,6 +1249,9 @@ const logoutCloudAccount = () => {
   cloudAccountName.value = ''
   cloudPassword.value = ''
   shareMessage.value = works.cloudSync.message
+  drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
+  drinkRequests.value = []
+  drinkRequestMessage.value = ''
 }
 
 const pushWorksToCloud = async () => {
@@ -1178,6 +1302,56 @@ const dismissAutoBackupPrompt = () => {
 const confirmAutoBackup = async () => {
   autoBackupPrompt.value = false
   await pushWorksToCloud()
+}
+
+const loadDrinkRequestPanel = async () => {
+  drinkRequestMessage.value = ''
+  if (!works.cloudAccount.accountName) return
+
+  isDrinkRequestSyncing.value = true
+  try {
+    const [share, requests] = await Promise.all([getDrinkRequestShare(), fetchDrinkRequests()])
+    drinkShare.value = share
+    drinkRequests.value = requests
+    drinkRequestMessage.value = requests.length
+      ? `已加载 ${requests.length} 条朋友点单。`
+      : '当前还没有朋友点单。'
+  } catch (error) {
+    drinkRequestMessage.value =
+      error instanceof Error ? error.message : '读取朋友点单失败，请稍后重试。'
+  } finally {
+    isDrinkRequestSyncing.value = false
+  }
+}
+
+const resetDrinkShareLink = async () => {
+  drinkRequestMessage.value = ''
+  isDrinkRequestSyncing.value = true
+  try {
+    drinkShare.value = await resetDrinkRequestShare()
+    drinkRequests.value = await fetchDrinkRequests()
+    drinkRequestMessage.value = '分享链接已生成。旧链接会失效。'
+  } catch (error) {
+    drinkRequestMessage.value =
+      error instanceof Error ? error.message : '生成分享链接失败，请稍后重试。'
+  } finally {
+    isDrinkRequestSyncing.value = false
+  }
+}
+
+const disableDrinkShareLink = async () => {
+  drinkRequestMessage.value = ''
+  isDrinkRequestSyncing.value = true
+  try {
+    await disableDrinkRequestShare()
+    drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
+    drinkRequestMessage.value = '分享链接已关闭。'
+  } catch (error) {
+    drinkRequestMessage.value =
+      error instanceof Error ? error.message : '关闭分享链接失败，请稍后重试。'
+  } finally {
+    isDrinkRequestSyncing.value = false
+  }
 }
 
 const loadWorksFromCloud = async () => {
@@ -1365,5 +1539,8 @@ const submit = () => {
   showSaveDialog('success', wasEditing ? '作品修改已保存。' : '作品已保存到我的作品。')
 }
 
-onMounted(checkAutoBackupPrompt)
+onMounted(() => {
+  checkAutoBackupPrompt()
+  void loadDrinkRequestPanel()
+})
 </script>

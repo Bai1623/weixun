@@ -12,6 +12,7 @@ export const routes: RouteRecordRaw[] = [
   { path: '/academy', component: () => import('@/pages/AcademyPage.vue') },
   { path: '/pantry', component: () => import('@/pages/PantryPage.vue') },
   { path: '/works', component: () => import('@/pages/WorksPage.vue') },
+  { path: '/want/:shareToken?', component: () => import('@/pages/WantDrinkPage.vue') },
   { path: '/profile', component: () => import('@/pages/ProfilePage.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]

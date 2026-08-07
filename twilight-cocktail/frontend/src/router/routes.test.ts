@@ -18,6 +18,7 @@ describe('application routes', () => {
         '/academy',
         '/pantry',
         '/works',
+        '/want/:shareToken?',
         '/profile',
         '/:pathMatch(.*)*',
       ]),
