@@ -385,6 +385,94 @@ describe('work store', () => {
     expect(push).toHaveBeenCalledWith(works.items)
   })
 
+  it('persists automatic cloud backup settings', () => {
+    const works = useWorkStore()
+
+    expect(works.autoBackup).toEqual({
+      enabled: false,
+      lastBackupAt: '',
+    })
+
+    works.setAutoBackupEnabled(true)
+
+    expect(works.autoBackup.enabled).toBe(true)
+    expect(JSON.parse(window.localStorage.getItem('cocktail_work_auto_backup') ?? '{}')).toEqual({
+      enabled: true,
+      lastBackupAt: '',
+    })
+
+    setActivePinia(createPinia())
+    const restored = useWorkStore()
+
+    expect(restored.autoBackup.enabled).toBe(true)
+  })
+
+  it('detects when automatic cloud backup is due', () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      }),
+    )
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({
+        enabled: true,
+        lastBackupAt: '2026-08-06T00:00:00.000Z',
+      }),
+    )
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-06',
+      cocktailSlug: '',
+      cocktailName: '自动备份作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    expect(works.shouldPromptAutoCloudBackup(new Date('2026-08-06T23:59:59.000Z'))).toBe(false)
+    expect(works.shouldPromptAutoCloudBackup(new Date('2026-08-07T00:00:01.000Z'))).toBe(true)
+  })
+
+  it('records last successful cloud backup time after pushing to cloud', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-07T09:30:00.000Z'))
+    const push = vi.spyOn(cloudWorks, 'syncCloudWorks').mockResolvedValue(undefined)
+    const works = useWorkStore()
+    works.setAutoBackupEnabled(true)
+    works.add({
+      madeAt: '2026-08-07',
+      cocktailSlug: '',
+      cocktailName: '已备份作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    try {
+      await works.pushAllToCloud()
+
+      expect(push).toHaveBeenCalledWith(works.items)
+      expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T09:30:00.000Z')
+      expect(JSON.parse(window.localStorage.getItem('cocktail_work_auto_backup') ?? '{}')).toEqual({
+        enabled: true,
+        lastBackupAt: '2026-08-07T09:30:00.000Z',
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('keeps cloud sync errors visible in store state', async () => {
     vi.spyOn(cloudWorks, 'syncCloudWorks').mockRejectedValue(new Error('权限不足'))
     const works = useWorkStore()

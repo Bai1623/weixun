@@ -47,6 +47,59 @@
       </div>
     </div>
 
+    <div
+      v-if="autoBackupPrompt"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-obsidian/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      @click.self="dismissAutoBackupPrompt"
+    >
+      <div
+        class="w-full max-w-md rounded-lg border border-gold/20 bg-walnut p-5 shadow-2xl shadow-black/40"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auto-backup-dialog-title"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-gold">CloudBase</p>
+            <h3 id="auto-backup-dialog-title" class="mt-2 font-display text-2xl text-cream">
+              自动备份提醒
+            </h3>
+          </div>
+          <button
+            class="rounded-md border border-gold/20 p-2 text-gold transition hover:bg-gold/10"
+            type="button"
+            aria-label="关闭自动备份提醒"
+            @click="dismissAutoBackupPrompt"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-muted">
+          距离上次云端备份已超过 1 天。是否现在把当前作品上传到云端？
+        </p>
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
+            type="button"
+            @click="dismissAutoBackupPrompt"
+          >
+            暂时不用
+          </button>
+          <button
+            data-testid="auto-backup-confirm"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            :disabled="isSyncingCloud"
+            @click="confirmAutoBackup"
+          >
+            <Upload class="h-4 w-4" />
+            现在上传
+          </button>
+        </div>
+      </div>
+    </div>
+
     <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <form
         ref="workFormEl"
@@ -385,6 +438,29 @@
                 : '还未登录云端账号。账号不存在时会自动创建。'
             }}
           </p>
+          <div
+            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
+            data-testid="auto-cloud-backup-panel"
+          >
+            <label class="flex cursor-pointer items-start justify-between gap-4">
+              <span>
+                <span class="block text-sm font-semibold text-cream">自动备份</span>
+                <span class="mt-1 block text-sm leading-6 text-muted">
+                  打开作品页时检查上次云端备份，超过 1 天会先询问再上传。
+                </span>
+              </span>
+              <input
+                data-testid="auto-cloud-backup-toggle"
+                class="mt-1 h-5 w-5 accent-gold"
+                type="checkbox"
+                :checked="works.autoBackup.enabled"
+                @change="toggleAutoBackup"
+              />
+            </label>
+            <p class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
+              {{ autoBackupStatusText }}
+            </p>
+          </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">上传和恢复只会操作当前云端账号的作品。</div>
             <div class="flex flex-wrap gap-3">
@@ -617,7 +693,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { Camera, Download, Pencil, Plus, Save, Sparkles, Trash2, Upload, X } from 'lucide-vue-next'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
@@ -670,6 +746,7 @@ const cloudPassword = ref('')
 const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
 const isSyncingCloud = ref(false)
+const autoBackupPrompt = ref(false)
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
@@ -795,6 +872,20 @@ const cloudSyncTimeText = computed(() => {
     minute: '2-digit',
   })}`
 })
+const autoBackupLastBackupText = computed(() => {
+  if (!works.autoBackup.lastBackupAt) return '还没有云端备份记录。'
+  return `上次备份 ${new Date(works.autoBackup.lastBackupAt).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`
+})
+const autoBackupStatusText = computed(() =>
+  works.autoBackup.enabled
+    ? `自动备份已开启，${autoBackupLastBackupText.value}`
+    : '自动备份已关闭，仍可手动上传到云端。',
+)
 
 const openDatePicker = () => {
   const input = dateInput.value as (HTMLInputElement & { showPicker?: () => void }) | null
@@ -1061,6 +1152,34 @@ const pushWorksToCloud = async () => {
   }
 }
 
+const checkAutoBackupPrompt = () => {
+  if (isSyncingCloud.value) return
+  autoBackupPrompt.value = works.shouldPromptAutoCloudBackup()
+}
+
+const toggleAutoBackup = (event: Event) => {
+  const enabled = (event.target as HTMLInputElement).checked
+  works.setAutoBackupEnabled(enabled)
+  shareMessage.value = enabled
+    ? '自动备份已开启。打开作品页时超过 1 天会先询问再上传。'
+    : '自动备份已关闭。'
+  if (enabled) {
+    checkAutoBackupPrompt()
+    return
+  }
+  autoBackupPrompt.value = false
+}
+
+const dismissAutoBackupPrompt = () => {
+  autoBackupPrompt.value = false
+  shareMessage.value = '已暂时跳过自动备份。'
+}
+
+const confirmAutoBackup = async () => {
+  autoBackupPrompt.value = false
+  await pushWorksToCloud()
+}
+
 const loadWorksFromCloud = async () => {
   shareMessage.value = ''
   if (!works.cloudAccount.accountName) {
@@ -1245,4 +1364,6 @@ const submit = () => {
   resetForm()
   showSaveDialog('success', wasEditing ? '作品修改已保存。' : '作品已保存到我的作品。')
 }
+
+onMounted(checkAutoBackupPrompt)
 </script>

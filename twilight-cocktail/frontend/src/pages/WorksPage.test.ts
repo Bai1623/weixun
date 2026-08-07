@@ -1,9 +1,10 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WorksPage from './WorksPage.vue'
 import { useWorkStore } from '@/stores/works'
+import * as cloudWorks from '@/services/cloudWorks'
 import { addCustomWorkCocktailOption } from '@/utils/workFormOptions'
 
 describe('WorksPage', () => {
@@ -206,5 +207,71 @@ describe('WorksPage', () => {
     expect(wrapper.text()).not.toContain('伏特加高分')
     expect(wrapper.text()).not.toContain('金酒低分')
     expect(wrapper.text()).toContain('当前显示 1 条')
+  })
+
+  it('toggles automatic cloud backup from the sharing panel', async () => {
+    const wrapper = mount(WorksPage)
+    const works = useWorkStore()
+
+    await wrapper.get('[data-testid="auto-cloud-backup-toggle"]').setValue(true)
+
+    expect(works.autoBackup.enabled).toBe(true)
+    expect(wrapper.text()).toContain('自动备份已开启')
+  })
+
+  it('prompts and uploads automatically when the last cloud backup is older than one day', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-07T10:00:00.000Z'))
+    const push = vi.spyOn(cloudWorks, 'syncCloudWorks').mockResolvedValue(undefined)
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      }),
+    )
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({
+        enabled: true,
+        lastBackupAt: '2026-08-06T09:59:59.000Z',
+      }),
+    )
+    window.localStorage.setItem(
+      'cocktail_work_records',
+      JSON.stringify([
+        {
+          id: 'auto-backup-work',
+          madeAt: '2026-08-06',
+          cocktailSlug: '',
+          cocktailName: '自动备份作品',
+          photoDataUrl: '',
+          ingredientsText: '饮料：苏打水',
+          rating: 0,
+          mood: '',
+          selfReview: '',
+          notes: '',
+          createdAt: '2026-08-06T12:00:00.000Z',
+        },
+      ]),
+    )
+
+    try {
+      const wrapper = mount(WorksPage)
+      await wrapper.vm.$nextTick()
+
+      expect(wrapper.get('[role="dialog"]').text()).toContain('自动备份提醒')
+      await wrapper.get('[data-testid="auto-backup-confirm"]').trigger('click')
+      await flushPromises()
+
+      const works = useWorkStore()
+      expect(push).toHaveBeenCalledWith(works.items)
+      expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T10:00:00.000Z')
+      expect(wrapper.text()).toContain('已上传 1 条作品到 CloudBase 云端。')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

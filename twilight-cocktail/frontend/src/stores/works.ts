@@ -9,6 +9,8 @@ import {
 } from '@/services/cloudWorks'
 
 const storageKey = 'cocktail_work_records'
+const autoBackupStorageKey = 'cocktail_work_auto_backup'
+const autoBackupIntervalMs = 24 * 60 * 60 * 1000
 
 export type WorkRecordInput = {
   madeAt: string
@@ -53,6 +55,11 @@ export type WorkCloudAccountState = {
   updatedAt: string
 }
 
+export type WorkAutoBackupState = {
+  enabled: boolean
+  lastBackupAt: string
+}
+
 const createCloudSyncState = (): WorkCloudSyncState => ({
   status: 'idle',
   message: '尚未同步云端。',
@@ -64,6 +71,20 @@ const createCloudAccountState = (): WorkCloudAccountState => {
   return {
     accountName: session?.accountName ?? '',
     updatedAt: session?.updatedAt ?? '',
+  }
+}
+
+const createAutoBackupState = (): WorkAutoBackupState => {
+  try {
+    const raw = window.localStorage.getItem(autoBackupStorageKey)
+    if (!raw) return { enabled: false, lastBackupAt: '' }
+    const parsed = JSON.parse(raw) as Partial<WorkAutoBackupState>
+    return {
+      enabled: Boolean(parsed.enabled),
+      lastBackupAt: typeof parsed.lastBackupAt === 'string' ? parsed.lastBackupAt : '',
+    }
+  } catch {
+    return { enabled: false, lastBackupAt: '' }
   }
 }
 
@@ -236,11 +257,16 @@ const writeRecords = (records: WorkRecord[]) => {
   window.localStorage.setItem(storageKey, JSON.stringify(records))
 }
 
+const writeAutoBackupState = (state: WorkAutoBackupState) => {
+  window.localStorage.setItem(autoBackupStorageKey, JSON.stringify(state))
+}
+
 export const useWorkStore = defineStore('works', {
   state: () => ({
     items: readRecords(),
     cloudSync: createCloudSyncState(),
     cloudAccount: createCloudAccountState(),
+    autoBackup: createAutoBackupState(),
   }),
   getters: {
     totalCount: (state) => state.items.length,
@@ -308,6 +334,29 @@ export const useWorkStore = defineStore('works', {
         updatedAt: new Date().toISOString(),
       }
     },
+    setAutoBackupEnabled(enabled: boolean) {
+      this.autoBackup = {
+        ...this.autoBackup,
+        enabled,
+      }
+      writeAutoBackupState(this.autoBackup)
+    },
+    markCloudBackupSuccess() {
+      this.autoBackup = {
+        ...this.autoBackup,
+        lastBackupAt: new Date().toISOString(),
+      }
+      writeAutoBackupState(this.autoBackup)
+    },
+    shouldPromptAutoCloudBackup(now = new Date()) {
+      if (!this.autoBackup.enabled) return false
+      if (!this.cloudAccount.accountName) return false
+      if (!this.totalCount) return false
+
+      const lastBackupTime = Date.parse(this.autoBackup.lastBackupAt)
+      if (!Number.isFinite(lastBackupTime)) return true
+      return now.getTime() - lastBackupTime >= autoBackupIntervalMs
+    },
     async loginCloudAccount(accountName: string, password: string) {
       this.setCloudSync('syncing', '正在登录 CloudBase 云端账号...')
       try {
@@ -356,6 +405,7 @@ export const useWorkStore = defineStore('works', {
       this.setCloudSync('syncing', '正在上传作品到 CloudBase 云端...')
       try {
         await syncCloudWorks(this.items)
+        this.markCloudBackupSuccess()
         this.setCloudSync('success', `已上传 ${this.items.length} 条作品到 CloudBase 云端。`)
         return this.items.length
       } catch (error) {
