@@ -1,4 +1,5 @@
 const MAX_RECORDS = 500;
+const MAX_CHUNK_TEXT_BYTES = 128 * 1024;
 let cachedCollection = null;
 
 function getCollection() {
@@ -62,6 +63,10 @@ function validUploadId(value) {
   return /^[A-Za-z0-9_-]{6,80}$/.test(value || "");
 }
 
+function byteLength(value) {
+  return Buffer.byteLength(String(value || ""), "utf8");
+}
+
 async function getDoc(lookupKey) {
   const result = await getCollection().where({ lookupKey }).limit(1).get();
   return result?.data?.[0] || null;
@@ -110,15 +115,30 @@ async function readChunkedWorks(doc) {
   const chunkCount = Number(doc?.chunkCount || 0);
   if (!chunkCount) return buildWorksPayload(doc?.payload);
 
-  const records = [];
+  const textChunks = [];
+  const legacyRecords = [];
+  let textMode = false;
   const activeUploadId = doc.activeUploadId || "";
   for (let index = 0; index < chunkCount; index += 1) {
     const chunk = activeUploadId
       ? await getDoc(accountChunkDocId(doc.accountNameKey, activeUploadId, index)).catch(() => null)
       : await getDoc(legacyAccountChunkDocId(doc.accountNameKey, index)).catch(() => null);
-    records.push(...safeRecords(chunk?.payload));
+    if (!chunk) throw new Error("missing_upload_chunk");
+    if (typeof chunk.payloadText === "string") {
+      if (legacyRecords.length) throw new Error("mixed_upload_chunk_format");
+      textMode = true;
+      textChunks.push(chunk.payloadText);
+      continue;
+    }
+    if (textMode) throw new Error("mixed_upload_chunk_format");
+    legacyRecords.push(...safeRecords(chunk?.payload));
   }
-  return buildWorksPayload({ records });
+
+  if (textMode) {
+    return buildWorksPayload(JSON.parse(textChunks.join("")));
+  }
+
+  return buildWorksPayload({ records: legacyRecords });
 }
 
 exports.main = async (event = {}) => {
@@ -220,7 +240,14 @@ exports.main = async (event = {}) => {
     }
 
     if (method === "POST" && action === "works-put-chunk") {
-      const { accountNameKey, passwordVerifier, uploadId: currentUploadId = "", chunkIndex = 0, payload } = body;
+      const {
+        accountNameKey,
+        passwordVerifier,
+        uploadId: currentUploadId = "",
+        chunkIndex = 0,
+        payload,
+        payloadText = "",
+      } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
       if (!validUploadId(currentUploadId)) return response({ error: "invalid_upload_id" }, 400);
@@ -230,6 +257,29 @@ exports.main = async (event = {}) => {
 
       const index = Number(chunkIndex || 0);
       if (!Number.isInteger(index) || index < 0 || index > 999) return response({ error: "invalid_chunk_index" }, 400);
+
+      if (typeof payloadText === "string" && payloadText) {
+        const textBytes = byteLength(payloadText);
+        if (textBytes > MAX_CHUNK_TEXT_BYTES) return response({ error: "chunk_too_large" }, 413);
+        await saveDoc(accountChunkDocId(accountNameKey, currentUploadId, index), {
+          type: "twilight-account-works-chunk",
+          accountNameKey,
+          uploadId: currentUploadId,
+          chunkIndex: index,
+          recordCount: 0,
+          payloadText,
+          textLength: payloadText.length,
+          textBytes,
+        });
+        return response({
+          ok: true,
+          status: "chunk_saved",
+          chunkIndex: index,
+          textLength: payloadText.length,
+          textBytes,
+        });
+      }
+
       const worksPayload = buildWorksPayload(payload);
       await saveDoc(accountChunkDocId(accountNameKey, currentUploadId, index), {
         type: "twilight-account-works-chunk",

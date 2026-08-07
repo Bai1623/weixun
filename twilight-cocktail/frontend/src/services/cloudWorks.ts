@@ -5,7 +5,7 @@ const defaultCloudWorksApiUrl =
   'https://weixun-d8g9xwqak83952747-1462034992.ap-shanghai.app.tcloudbase.com/twilightWorks'
 const cloudWorksApiUrl = import.meta.env.VITE_CLOUDBASE_WORKS_API_URL || defaultCloudWorksApiUrl
 const cloudSessionStorageKey = 'twilight_cloud_works_session'
-const defaultUploadChunkBytes = 256 * 1024
+const defaultUploadChunkBytes = 24 * 1024
 
 export type CloudWorksSession = {
   accountName: string
@@ -87,25 +87,21 @@ export const createCloudWorkChunks = (
   records: readonly WorkRecord[],
   maxChunkBytes = defaultUploadChunkBytes,
 ) => {
-  const chunks: Array<{ records: WorkRecord[] }> = []
-  let current: WorkRecord[] = []
+  const payloadText = JSON.stringify(createPayload(records))
+  const chunks: Array<{ payloadText: string }> = []
+  let start = 0
 
-  records.forEach((record) => {
-    const nextRecord = { ...record }
-    const candidate = [...current, nextRecord]
-    const candidateSize = byteLength(JSON.stringify(createPayload(candidate)))
-    if (current.length && candidateSize > maxChunkBytes) {
-      chunks.push({ records: current })
-      current = [nextRecord]
-      return
+  while (start < payloadText.length) {
+    let end = Math.min(payloadText.length, start + maxChunkBytes)
+    while (end > start && byteLength(payloadText.slice(start, end)) > maxChunkBytes) {
+      end -= Math.min(1024, end - start)
     }
-    current = candidate
-  })
-
-  if (current.length || !chunks.length) {
-    chunks.push({ records: current })
+    if (end <= start) end = start + 1
+    chunks.push({ payloadText: payloadText.slice(start, end) })
+    start = end
   }
 
+  if (!chunks.length) chunks.push({ payloadText })
   return chunks
 }
 
@@ -249,18 +245,16 @@ export const syncCloudWorks = async (records: readonly WorkRecord[]) => {
   if (!startResult.uploadId) {
     throw new Error('云函数没有返回上传批次，请重新部署新版 twilightWorks 云函数。')
   }
-  await Promise.all(
-    chunks.map((chunk, index) =>
-      postCloudWorksAction({
-        action: 'works-put-chunk',
-        accountNameKey: session.accountNameKey,
-        passwordVerifier: session.passwordVerifier,
-        uploadId: startResult.uploadId,
-        chunkIndex: index,
-        payload: createPayload(chunk.records),
-      }),
-    ),
-  )
+  for (const [index, chunk] of chunks.entries()) {
+    await postCloudWorksAction({
+      action: 'works-put-chunk',
+      accountNameKey: session.accountNameKey,
+      passwordVerifier: session.passwordVerifier,
+      uploadId: startResult.uploadId,
+      chunkIndex: index,
+      payloadText: chunk.payloadText,
+    })
+  }
   await postCloudWorksAction({
     action: 'works-put-commit',
     accountName: session.accountName,

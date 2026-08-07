@@ -124,24 +124,33 @@ describe('cloud works service', () => {
     expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-put-chunk"')
     expect(fetchMock.mock.calls[1][1].body).toContain('"uploadId":"up-1"')
     expect(fetchMock.mock.calls[1][1].body).toContain('"chunkIndex":0')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"payloadText"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"action":"works-put-commit"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"uploadId":"up-1"')
     expect(fetchMock.mock.calls[3][1].body).toContain('"action":"works-get"')
     expect(records).toEqual([record])
   })
 
-  it('splits large work records into bounded cloud upload chunks', () => {
+  it('splits the serialized work payload into bounded text chunks', () => {
     const largeRecord = {
       ...record,
       id: 'large-work',
-      photoDataUrl: `data:image/jpeg;base64,${'a'.repeat(350)}`,
+      photoDataUrl: `data:image/jpeg;base64,${'a'.repeat(700)}`,
     }
 
-    const chunks = createCloudWorkChunks([record, largeRecord], 300)
+    const chunks = createCloudWorkChunks([largeRecord], 160)
+    const restoredPayload = JSON.parse(chunks.map((chunk) => chunk.payloadText).join('')) as {
+      records: WorkRecord[]
+    }
 
-    expect(chunks).toHaveLength(2)
-    expect(chunks[0].records).toEqual([record])
-    expect(chunks[1].records).toEqual([largeRecord])
+    expect(chunks.length).toBeGreaterThan(1)
+    chunks.forEach((chunk) => {
+      expect(chunk.payloadText.length).toBeLessThanOrEqual(160)
+    })
+    expect(restoredPayload.records[0]).toMatchObject({
+      id: 'large-work',
+      photoDataUrl: largeRecord.photoDataUrl,
+    })
   })
 
   it('requires cloud account login before syncing records', async () => {
