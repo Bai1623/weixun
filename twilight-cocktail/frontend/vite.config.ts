@@ -11,6 +11,7 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      selfDestroying: true,
       registerType: 'autoUpdate',
       workbox: {
         cleanupOutdatedCaches: true,
