@@ -791,7 +791,27 @@
           </div>
         </div>
 
-        <div v-if="filteredWorks.length" class="space-y-4">
+        <button
+          v-if="works.totalCount"
+          data-testid="work-list-summary"
+          class="w-full rounded-lg border border-gold/15 bg-walnut/70 p-5 text-left transition hover:border-gold/35 hover:bg-walnut"
+          type="button"
+          :aria-expanded="isWorkListExpanded"
+          @click="toggleWorkListExpanded"
+        >
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <p class="text-sm text-muted">作品列表</p>
+              <p class="mt-2 font-display text-3xl text-cream">
+                当前有 {{ filteredWorks.length }} 个酒
+              </p>
+            </div>
+            <ChevronUp v-if="isWorkListExpanded" class="h-5 w-5 shrink-0 text-gold" />
+            <ChevronDown v-else class="h-5 w-5 shrink-0 text-gold" />
+          </div>
+        </button>
+
+        <div v-if="isWorkListExpanded && filteredWorks.length" class="space-y-4">
           <article
             v-for="item in filteredWorks"
             :key="item.id"
@@ -871,7 +891,7 @@
         </div>
 
         <StateBlock
-          v-else
+          v-else-if="isWorkListExpanded || !works.totalCount"
           :title="works.totalCount ? '没有匹配作品' : '还没有作品'"
           :message="
             works.totalCount
@@ -966,6 +986,7 @@ const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
 const newDrinkRequestPrompt = ref<{ count: number } | null>(null)
 const expandedWorkIds = ref<string[]>([])
+const isWorkListExpanded = ref(false)
 const drinkShare = ref<DrinkRequestShareState>({
   enabled: false,
   token: '',
@@ -1155,6 +1176,10 @@ const toggleWorkExpanded = (id: string) => {
   expandedWorkIds.value = isWorkExpanded(id)
     ? expandedWorkIds.value.filter((item) => item !== id)
     : [...expandedWorkIds.value, id]
+}
+
+const toggleWorkListExpanded = () => {
+  isWorkListExpanded.value = !isWorkListExpanded.value
 }
 
 const openDatePicker = () => {

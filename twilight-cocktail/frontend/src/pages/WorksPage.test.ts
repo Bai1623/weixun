@@ -124,6 +124,7 @@ describe('WorksPage', () => {
     })
     const wrapper = mount(WorksPage)
 
+    await wrapper.get('[data-testid="work-list-summary"]').trigger('click')
     await wrapper.get(`[aria-label="编辑 ${item.cocktailName}"]`).trigger('click')
     await wrapper
       .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
@@ -207,13 +208,20 @@ describe('WorksPage', () => {
     await wrapper.get('[data-testid="work-filter-base"]').setValue('金酒')
     await wrapper.get('[data-testid="work-filter-rating"]').setValue('4')
 
-    expect(wrapper.text()).toContain('金酒高分')
+    expect(wrapper.text()).not.toContain('金酒高分')
     expect(wrapper.text()).not.toContain('伏特加高分')
     expect(wrapper.text()).not.toContain('金酒低分')
     expect(wrapper.text()).toContain('当前显示 1 条')
+    expect(wrapper.get('[data-testid="work-list-summary"]').text()).toContain('当前有 1 个酒')
+
+    await wrapper.get('[data-testid="work-list-summary"]').trigger('click')
+
+    expect(wrapper.text()).toContain('金酒高分')
+    expect(wrapper.text()).not.toContain('伏特加高分')
+    expect(wrapper.text()).not.toContain('金酒低分')
   })
 
-  it('keeps work card details collapsed until the user expands them', async () => {
+  it('keeps work cards hidden until the user expands the work list', async () => {
     const works = useWorkStore()
     works.add({
       madeAt: '2026-08-01',
@@ -228,8 +236,14 @@ describe('WorksPage', () => {
     })
     const wrapper = mount(WorksPage)
 
+    expect(wrapper.get('[data-testid="work-list-summary"]').text()).toContain('当前有 1 个酒')
+    expect(wrapper.text()).not.toContain('折叠作品')
+    expect(wrapper.text()).not.toContain('基酒：金酒')
+    expect(wrapper.text()).not.toContain('杯型好看')
+
+    await wrapper.get('[data-testid="work-list-summary"]').trigger('click')
+
     expect(wrapper.text()).toContain('折叠作品')
-    expect(wrapper.text()).toContain('4 星')
     expect(wrapper.text()).not.toContain('基酒：金酒')
     expect(wrapper.text()).not.toContain('杯型好看')
 
