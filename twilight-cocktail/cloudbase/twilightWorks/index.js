@@ -81,6 +81,10 @@ function validShareToken(value) {
   return /^[A-Za-z0-9_-]{24,128}$/.test(value || "");
 }
 
+function validRequestId(value) {
+  return /^[A-Za-z0-9_-]{4,128}$/.test(value || "");
+}
+
 function byteLength(value) {
   return Buffer.byteLength(String(value || ""), "utf8");
 }
@@ -674,6 +678,23 @@ exports.main = async (event = {}) => {
         requestCount: safeDrinkRequests(account.doc).length,
         requests: safeDrinkRequests(account.doc),
       });
+    }
+
+    if (method === "POST" && action === "drink-request-delete") {
+      const { accountNameKey, passwordVerifier, requestId = "" } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      if (!validRequestId(requestId)) return response({ error: "invalid_request_id" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const nextRequests = safeDrinkRequests(account.doc).filter((request) => request.id !== requestId);
+      await saveDoc(accountDocId(accountNameKey), {
+        drinkRequests: nextRequests,
+        drinkRequestCount: nextRequests.length,
+      });
+      return response({ ok: true, status: "deleted", requestCount: nextRequests.length });
     }
 
     return response({ name: "twilight-works-api", status: "ok" });

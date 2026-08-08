@@ -231,6 +231,18 @@ export const fetchDrinkRequests = async () => {
   return Array.isArray(data.requests) ? data.requests.filter(isDrinkRequest) : []
 }
 
+export const deleteDrinkRequest = async (requestId: string) => {
+  const session = getRequiredCloudSession()
+  const id = requestId.trim()
+  if (!id) throw new Error('请选择要删除的点单。')
+  await postCloudDrinkAction({
+    action: 'drink-request-delete',
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    requestId: id,
+  })
+}
+
 export const submitDrinkRequest = async (shareToken: string, input: DrinkRequestInput) => {
   const inputWithoutPhoto = { ...input }
   delete inputWithoutPhoto.photoDataUrl

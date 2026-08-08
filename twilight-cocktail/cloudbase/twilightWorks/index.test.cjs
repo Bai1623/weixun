@@ -273,6 +273,49 @@ test("drink request share link accepts one bounded no-photo request", async () =
   assert.equal(list.body.requests[0].cocktailName, "冰岛");
 });
 
+test("owner can delete one drink request after reviewing it", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await createAccountAndShare(api);
+  const submit = await post(api, {
+    action: "drink-request-submit",
+    shareToken,
+    request: {
+      guestName: "朋友",
+      cocktailName: "冰岛",
+      ingredientGroups: {
+        baseLiquors: ["伏特加"],
+        flavorLiquors: [],
+        beverages: ["葡萄味气泡水"],
+        other: "",
+      },
+      note: "少甜",
+    },
+  });
+  const beforeDelete = await post(api, {
+    action: "drink-requests-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+
+  const deleted = await post(api, {
+    action: "drink-request-delete",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    requestId: submit.body.requestId,
+  });
+  const afterDelete = await post(api, {
+    action: "drink-requests-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+
+  assert.equal(beforeDelete.body.requests.length, 1);
+  assert.equal(deleted.statusCode, 200);
+  assert.equal(deleted.body.requestCount, 0);
+  assert.equal(afterDelete.body.requests.length, 0);
+});
+
 test("drink request share link rejects photo payloads and disabled links", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);

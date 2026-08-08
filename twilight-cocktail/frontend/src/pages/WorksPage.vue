@@ -100,6 +100,61 @@
       </div>
     </div>
 
+    <div
+      v-if="newDrinkRequestPrompt"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-obsidian/75 px-4 backdrop-blur-sm"
+      role="presentation"
+      @click.self="dismissDrinkRequestPrompt"
+    >
+      <div
+        class="w-full max-w-md rounded-lg border border-gold/20 bg-walnut p-5 shadow-2xl shadow-black/40"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="drink-request-dialog-title"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-gold">ORDER</p>
+            <h3 id="drink-request-dialog-title" class="mt-2 font-display text-2xl text-cream">
+              朋友想喝提醒
+            </h3>
+          </div>
+          <button
+            class="rounded-md border border-gold/20 p-2 text-gold transition hover:bg-gold/10"
+            type="button"
+            aria-label="关闭朋友点单提醒"
+            @click="dismissDrinkRequestPrompt"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-muted">
+          {{
+            newDrinkRequestPrompt.count === 1
+              ? '当前有一个朋友想喝，是否查看？'
+              : `当前有 ${newDrinkRequestPrompt.count} 个新的朋友点单，是否查看？`
+          }}
+        </p>
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
+            type="button"
+            @click="dismissDrinkRequestPrompt"
+          >
+            稍后
+          </button>
+          <button
+            data-testid="drink-request-view-new"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream"
+            type="button"
+            @click="viewNewDrinkRequests"
+          >
+            查看
+          </button>
+        </div>
+      </div>
+    </div>
+
     <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <form
         ref="workFormEl"
@@ -461,7 +516,10 @@
               {{ autoBackupStatusText }}
             </p>
           </div>
-          <div class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4">
+          <div
+            ref="drinkRequestPanelEl"
+            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4"
+          >
             <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <p class="text-sm font-semibold text-cream">朋友想喝</p>
@@ -490,10 +548,11 @@
                   关闭链接
                 </button>
                 <button
+                  data-testid="drink-request-refresh"
                   class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                   type="button"
                   :disabled="!works.cloudAccount.accountName || isDrinkRequestSyncing"
-                  @click="loadDrinkRequestPanel"
+                  @click="() => loadDrinkRequestPanel()"
                 >
                   刷新点单
                 </button>
@@ -524,7 +583,7 @@
                 :key="request.id"
                 class="rounded-lg border border-gold/10 bg-walnut/60 p-4"
               >
-                <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p class="text-xs uppercase tracking-[0.18em] text-gold">
                       {{ formatDrinkRequestDate(request.createdAt) }}
@@ -533,9 +592,21 @@
                       {{ request.cocktailName }}
                     </h3>
                   </div>
-                  <p v-if="request.guestName" class="text-sm text-muted">
-                    {{ request.guestName }}
-                  </p>
+                  <div class="flex items-center gap-2">
+                    <p v-if="request.guestName" class="text-sm text-muted">
+                      {{ request.guestName }}
+                    </p>
+                    <button
+                      data-testid="drink-request-delete"
+                      class="rounded-md border border-wine/70 p-2 text-cream transition hover:bg-wine/20 disabled:cursor-not-allowed disabled:opacity-50"
+                      type="button"
+                      :aria-label="`删除点单 ${request.cocktailName}`"
+                      :disabled="isDrinkRequestSyncing"
+                      @click="deleteDrinkRequestItem(request)"
+                    >
+                      <Trash2 class="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <p class="mt-3 whitespace-pre-line text-sm leading-6 text-muted">
                   {{ formatDrinkRequestIngredients(request.ingredientGroups) }}
@@ -554,7 +625,7 @@
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
-                :disabled="!works.totalCount || !works.cloudAccount.accountName || isSyncingCloud"
+                :disabled="!works.cloudAccount.accountName || isSyncingCloud"
                 @click="pushWorksToCloud"
               >
                 <Upload class="h-4 w-4" />
@@ -641,19 +712,37 @@
           <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <label class="space-y-2 text-sm text-muted">
               <span>开始日期</span>
-              <input
-                v-model="workFilters.startDate"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
-                type="date"
-              />
+              <span class="relative block">
+                <input
+                  v-model="workFilters.startDate"
+                  data-testid="work-filter-start-date"
+                  class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-transparent [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
+                  type="date"
+                />
+                <span
+                  data-testid="work-filter-start-placeholder"
+                  class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-cream"
+                >
+                  {{ workFilters.startDate || '请选择开始日期' }}
+                </span>
+              </span>
             </label>
             <label class="space-y-2 text-sm text-muted">
               <span>结束日期</span>
-              <input
-                v-model="workFilters.endDate"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
-                type="date"
-              />
+              <span class="relative block">
+                <input
+                  v-model="workFilters.endDate"
+                  data-testid="work-filter-end-date"
+                  class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-transparent [color-scheme:dark] outline-none focus:ring-2 focus:ring-gold"
+                  type="date"
+                />
+                <span
+                  data-testid="work-filter-end-placeholder"
+                  class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-cream"
+                >
+                  {{ workFilters.endDate || '请选择结束日期' }}
+                </span>
+              </span>
             </label>
             <label class="space-y-2 text-sm text-muted">
               <span>包含基酒</span>
@@ -706,7 +795,7 @@
           <article
             v-for="item in filteredWorks"
             :key="item.id"
-            class="grid gap-4 rounded-lg border border-gold/15 bg-walnut/70 p-4 sm:grid-cols-[8rem_1fr]"
+            class="grid gap-4 rounded-lg border border-gold/15 bg-walnut/70 p-4 sm:grid-cols-[7rem_1fr]"
           >
             <div
               class="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-obsidian/70"
@@ -754,13 +843,29 @@
                 </span>
               </div>
 
-              <p class="mt-3 whitespace-pre-line text-sm leading-6 text-muted">
-                {{ formatWorkIngredients(item) }}
-              </p>
-              <p v-if="item.selfReview" class="mt-3 text-sm leading-6 text-cream">
-                {{ item.selfReview }}
-              </p>
-              <p v-if="item.notes" class="mt-2 text-xs leading-5 text-muted">{{ item.notes }}</p>
+              <button
+                data-testid="work-expand-toggle"
+                class="mt-3 inline-flex items-center gap-2 rounded-md border border-gold/25 px-3 py-2 text-xs text-gold transition hover:bg-gold/10"
+                type="button"
+                :aria-expanded="isWorkExpanded(item.id)"
+                @click="toggleWorkExpanded(item.id)"
+              >
+                <ChevronUp v-if="isWorkExpanded(item.id)" class="h-3.5 w-3.5" />
+                <ChevronDown v-else class="h-3.5 w-3.5" />
+                {{ isWorkExpanded(item.id) ? '收起详情' : '展开详情' }}
+              </button>
+
+              <div v-if="isWorkExpanded(item.id)" class="mt-3 border-t border-gold/10 pt-3">
+                <p class="whitespace-pre-line text-sm leading-6 text-muted">
+                  {{ formatWorkIngredients(item) }}
+                </p>
+                <p v-if="item.selfReview" class="mt-3 text-sm leading-6 text-cream">
+                  {{ item.selfReview }}
+                </p>
+                <p v-if="item.notes" class="mt-2 text-xs leading-5 text-muted">
+                  {{ item.notes }}
+                </p>
+              </div>
             </div>
           </article>
         </div>
@@ -781,7 +886,19 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { Camera, Download, Pencil, Plus, Save, Sparkles, Trash2, Upload, X } from 'lucide-vue-next'
+import {
+  Camera,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  Pencil,
+  Plus,
+  Save,
+  Sparkles,
+  Trash2,
+  Upload,
+  X,
+} from 'lucide-vue-next'
 
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
@@ -795,6 +912,7 @@ import {
   type WorkRecordInput,
 } from '@/stores/works'
 import {
+  deleteDrinkRequest,
   disableDrinkRequestShare,
   fetchDrinkRequests,
   getDrinkRequestShare,
@@ -802,6 +920,7 @@ import {
   type DrinkRequest,
   type DrinkRequestShareState,
 } from '@/services/cloudDrinkRequests'
+import { getCloudWorksSession } from '@/services/cloudWorks'
 import {
   CUSTOM_OPTION_VALUE,
   addCustomMaterialOption,
@@ -845,6 +964,8 @@ const autoBackupPrompt = ref(false)
 const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
+const newDrinkRequestPrompt = ref<{ count: number } | null>(null)
+const expandedWorkIds = ref<string[]>([])
 const drinkShare = ref<DrinkRequestShareState>({
   enabled: false,
   token: '',
@@ -854,6 +975,7 @@ const drinkShare = ref<DrinkRequestShareState>({
 })
 const dateInput = ref<HTMLInputElement | null>(null)
 const workFormEl = ref<HTMLFormElement | null>(null)
+const drinkRequestPanelEl = ref<HTMLElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
 const saveDialogTitleId = 'work-save-dialog-title'
 const getToday = () => new Date().toISOString().slice(0, 10)
@@ -889,6 +1011,7 @@ const workFilters = reactive<WorkFilterState>({
 
 const baseLiquorOptions = ['金酒', '朗姆酒', '伏特加', '龙舌兰', '威士忌', '白兰地']
 const priorityBeverages = ['柠檬水溶C', '葡萄味气泡水', '橙汁', '东方树叶', '西柚汁']
+const drinkRequestSeenCountPrefix = 'twilight_drink_request_seen_count'
 const extraBeverages = [
   '水溶C',
   '葡萄气泡水',
@@ -1008,6 +1131,31 @@ const formatDrinkRequestDate = (value: string) =>
     hour: '2-digit',
     minute: '2-digit',
   })
+
+const drinkRequestSeenCountStorageKey = () => {
+  const session = getCloudWorksSession()
+  return session ? `${drinkRequestSeenCountPrefix}:${session.accountNameKey}` : ''
+}
+
+const readDrinkRequestSeenCount = () => {
+  const key = drinkRequestSeenCountStorageKey()
+  if (!key) return 0
+  return Number(window.localStorage.getItem(key) || 0) || 0
+}
+
+const writeDrinkRequestSeenCount = (count: number) => {
+  const key = drinkRequestSeenCountStorageKey()
+  if (!key) return
+  window.localStorage.setItem(key, `${Math.max(0, count)}`)
+}
+
+const isWorkExpanded = (id: string) => expandedWorkIds.value.includes(id)
+
+const toggleWorkExpanded = (id: string) => {
+  expandedWorkIds.value = isWorkExpanded(id)
+    ? expandedWorkIds.value.filter((item) => item !== id)
+    : [...expandedWorkIds.value, id]
+}
 
 const openDatePicker = () => {
   const input = dateInput.value as (HTMLInputElement & { showPicker?: () => void }) | null
@@ -1253,6 +1401,7 @@ const logoutCloudAccount = () => {
   shareMessage.value = works.cloudSync.message
   drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
   drinkRequests.value = []
+  newDrinkRequestPrompt.value = null
   drinkRequestMessage.value = ''
 }
 
@@ -1302,15 +1451,30 @@ const confirmAutoBackup = async () => {
   await pushWorksToCloud()
 }
 
-const loadDrinkRequestPanel = async () => {
+const dismissDrinkRequestPrompt = () => {
+  newDrinkRequestPrompt.value = null
+}
+
+const viewNewDrinkRequests = () => {
+  newDrinkRequestPrompt.value = null
+  drinkRequestPanelEl.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
+}
+
+const loadDrinkRequestPanel = async (options: { notifyNew?: boolean } = { notifyNew: true }) => {
   drinkRequestMessage.value = ''
   if (!works.cloudAccount.accountName) return
 
   isDrinkRequestSyncing.value = true
   try {
+    const previousCount = readDrinkRequestSeenCount()
     const [share, requests] = await Promise.all([getDrinkRequestShare(), fetchDrinkRequests()])
     drinkShare.value = share
     drinkRequests.value = requests
+    const newCount = Math.max(0, requests.length - previousCount)
+    if (options.notifyNew !== false && newCount > 0) {
+      newDrinkRequestPrompt.value = { count: newCount }
+    }
+    writeDrinkRequestSeenCount(requests.length)
     drinkRequestMessage.value = requests.length
       ? `已加载 ${requests.length} 条朋友点单。`
       : '当前还没有朋友点单。'
@@ -1328,6 +1492,7 @@ const resetDrinkShareLink = async () => {
   try {
     drinkShare.value = await resetDrinkRequestShare()
     drinkRequests.value = await fetchDrinkRequests()
+    writeDrinkRequestSeenCount(drinkRequests.value.length)
     drinkRequestMessage.value = '分享链接已生成。旧链接会失效。'
   } catch (error) {
     drinkRequestMessage.value =
@@ -1343,10 +1508,32 @@ const disableDrinkShareLink = async () => {
   try {
     await disableDrinkRequestShare()
     drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
+    newDrinkRequestPrompt.value = null
+    writeDrinkRequestSeenCount(0)
     drinkRequestMessage.value = '分享链接已关闭。'
   } catch (error) {
     drinkRequestMessage.value =
       error instanceof Error ? error.message : '关闭分享链接失败，请稍后重试。'
+  } finally {
+    isDrinkRequestSyncing.value = false
+  }
+}
+
+const deleteDrinkRequestItem = async (request: DrinkRequest) => {
+  drinkRequestMessage.value = ''
+  isDrinkRequestSyncing.value = true
+  try {
+    await deleteDrinkRequest(request.id)
+    drinkRequests.value = drinkRequests.value.filter((item) => item.id !== request.id)
+    drinkShare.value = {
+      ...drinkShare.value,
+      requestCount: Math.max(0, drinkShare.value.requestCount - 1),
+    }
+    writeDrinkRequestSeenCount(drinkRequests.value.length)
+    drinkRequestMessage.value = `已删除点单「${request.cocktailName}」。`
+  } catch (error) {
+    drinkRequestMessage.value =
+      error instanceof Error ? error.message : '删除点单失败，请稍后重试。'
   } finally {
     isDrinkRequestSyncing.value = false
   }

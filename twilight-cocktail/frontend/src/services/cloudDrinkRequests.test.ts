@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildDrinkRequestShareUrl,
   disableDrinkRequestShare,
+  deleteDrinkRequest,
   fetchDrinkRequests,
   getLocalDrinkRequestShareToken,
   normalizeDrinkRequestInput,
@@ -157,5 +158,23 @@ describe('cloud drink request service', () => {
       accountNameKey: session.accountNameKey,
     })
     expect(requests).toHaveLength(1)
+  })
+
+  it('deletes one owner drink request with the saved cloud account session', async () => {
+    window.localStorage.setItem('twilight_cloud_works_session', JSON.stringify(session))
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, status: 'deleted', requestCount: 0 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteDrinkRequest('req-1')
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      action: 'drink-request-delete',
+      accountNameKey: session.accountNameKey,
+      passwordVerifier: session.passwordVerifier,
+      requestId: 'req-1',
+    })
   })
 })

@@ -1,12 +1,15 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WorksPage from './WorksPage.vue'
 import { useWorkStore } from '@/stores/works'
 import * as cloudWorks from '@/services/cloudWorks'
 import * as cloudDrinkRequests from '@/services/cloudDrinkRequests'
 import { addCustomWorkCocktailOption } from '@/utils/workFormOptions'
+
+enableAutoUnmount(afterEach)
+vi.setConfig({ testTimeout: 15000 })
 
 describe('WorksPage', () => {
   beforeEach(() => {
@@ -210,6 +213,45 @@ describe('WorksPage', () => {
     expect(wrapper.text()).toContain('当前显示 1 条')
   })
 
+  it('keeps work card details collapsed until the user expands them', async () => {
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-01',
+      cocktailSlug: '',
+      cocktailName: '折叠作品',
+      photoDataUrl: '',
+      ingredientsText: '基酒：金酒\n饮料：汤力水',
+      rating: 4,
+      mood: '清爽',
+      selfReview: '比例不错',
+      notes: '杯型好看',
+    })
+    const wrapper = mount(WorksPage)
+
+    expect(wrapper.text()).toContain('折叠作品')
+    expect(wrapper.text()).toContain('4 星')
+    expect(wrapper.text()).not.toContain('基酒：金酒')
+    expect(wrapper.text()).not.toContain('杯型好看')
+
+    await wrapper.get('[data-testid="work-expand-toggle"]').trigger('click')
+
+    expect(wrapper.text()).toContain('基酒：金酒')
+    expect(wrapper.text()).toContain('杯型好看')
+  })
+
+  it('shows friendly placeholders for empty date filters', async () => {
+    const wrapper = mount(WorksPage)
+
+    expect(wrapper.get('[data-testid="work-filter-start-placeholder"]').text()).toBe(
+      '请选择开始日期',
+    )
+    expect(wrapper.get('[data-testid="work-filter-end-placeholder"]').text()).toBe('请选择结束日期')
+
+    await wrapper.get('input[data-testid="work-filter-start-date"]').setValue('2026-08-01')
+
+    expect(wrapper.get('[data-testid="work-filter-start-placeholder"]').text()).toBe('2026-08-01')
+  })
+
   it('toggles automatic cloud backup from the sharing panel', async () => {
     const wrapper = mount(WorksPage)
     const works = useWorkStore()
@@ -316,12 +358,21 @@ describe('WorksPage', () => {
       updatedAt: '2026-08-07T12:00:00.000Z',
     })
     vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
+    vi.spyOn(cloudDrinkRequests, 'deleteDrinkRequest').mockResolvedValue()
 
     const wrapper = mount(WorksPage)
     await flushPromises()
 
     expect(wrapper.text()).toContain('朋友想喝')
     expect(wrapper.text()).toContain('冰岛')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('朋友想喝提醒')
+    await wrapper.get('[data-testid="drink-request-view-new"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('[data-testid="drink-request-delete"]').trigger('click')
+    await flushPromises()
+
+    expect(cloudDrinkRequests.deleteDrinkRequest).toHaveBeenCalledWith('req-1')
     await wrapper.get('[data-testid="drink-share-reset"]').trigger('click')
     await flushPromises()
 
