@@ -1,5 +1,5 @@
 <template>
-  <div class="mx-auto max-w-5xl space-y-6">
+  <div class="want-drink-page page-stack mx-auto max-w-5xl">
     <SectionHeading
       eyebrow="Tonight's Order"
       title="我想要喝"
@@ -13,13 +13,13 @@
     />
 
     <section v-else class="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
-      <form class="rounded-lg border border-gold/15 bg-walnut/70 p-5" @submit.prevent>
+      <form class="ui-panel p-5" @submit.prevent>
         <div class="grid gap-4 sm:grid-cols-2">
           <label class="space-y-2 text-sm text-muted">
             <span>你的称呼</span>
             <input
               v-model.trim="form.guestName"
-              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              class="ui-field px-3 py-3"
               placeholder="你的称呼"
             />
           </label>
@@ -27,7 +27,7 @@
             <span>想喝的酒</span>
             <input
               v-model.trim="form.cocktailName"
-              class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              class="ui-field px-3 py-3"
               placeholder="例如 冰岛 / 想见你 / 自由特调"
             />
           </label>
@@ -45,7 +45,7 @@
                 v-for="index in 4"
                 :key="index"
                 v-model="form.ingredientGroups.baseLiquors[index - 1]"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                class="ui-field px-3 py-3"
                 :aria-label="`基酒 ${index}`"
               >
                 <option value="">无</option>
@@ -66,7 +66,7 @@
               <span>调味酒</span>
               <select
                 v-model="selectedFlavorLiquor"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                class="ui-field px-3 py-3"
                 @change="addFlavorLiquor"
               >
                 <option value="">选择调味酒</option>
@@ -80,7 +80,7 @@
               <select
                 v-model="selectedBeverage"
                 data-testid="want-beverage-select"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+                class="ui-field px-3 py-3"
                 @change="addBeverage"
               >
                 <option value="">选择饮料</option>
@@ -100,7 +100,7 @@
             <button
               v-for="item in form.ingredientGroups.flavorLiquors"
               :key="`flavor-${item}`"
-              class="rounded-full bg-cream/10 px-3 py-1 text-xs text-cream transition hover:bg-wine/30"
+              class="ui-tag px-3 py-1 text-xs transition hover:bg-wine/30"
               type="button"
               @click="removeFlavorLiquor(item)"
             >
@@ -109,7 +109,7 @@
             <button
               v-for="item in form.ingredientGroups.beverages"
               :key="`beverage-${item}`"
-              class="rounded-full bg-gold/15 px-3 py-1 text-xs text-cream transition hover:bg-wine/30"
+              class="ui-tag px-3 py-1 text-xs transition hover:bg-wine/30"
               type="button"
               @click="removeBeverage(item)"
             >
@@ -121,7 +121,7 @@
             <span>口味和其他材料</span>
             <textarea
               v-model="form.ingredientGroups.other"
-              class="min-h-24 w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              class="ui-field min-h-24 px-3 py-3"
               placeholder="少甜、清爽一点、不要太烈，或补充特殊材料。"
             />
           </label>
@@ -129,7 +129,7 @@
             <span>备注</span>
             <textarea
               v-model="form.note"
-              class="min-h-20 w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
+              class="ui-field min-h-20 px-3 py-3"
               placeholder="可选：今晚什么时候喝、有没有忌口。"
             />
           </label>
@@ -137,7 +137,7 @@
 
         <button
           data-testid="want-drink-submit"
-          class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-md bg-gold px-5 py-3 font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
+          class="ui-button-primary mt-5 w-full gap-2 disabled:cursor-not-allowed disabled:opacity-50"
           type="button"
           :disabled="isSubmitting"
           @click="submit"
@@ -154,22 +154,22 @@
         </p>
       </form>
 
-      <aside class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+      <aside class="ui-panel p-5">
         <p class="text-xs uppercase tracking-[0.2em] text-gold">Twilight Mixbook</p>
         <h2 class="mt-3 font-display text-3xl text-cream">把今晚想喝的味道发给我</h2>
         <p class="mt-4 text-sm leading-7 text-muted">
           这个页面不会上传照片，也不会保存大段内容。每次只提交一条点单，方便我打开“我的作品”查看并按你的原料来调。
         </p>
         <div class="mt-5 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-          <div class="rounded-lg border border-gold/10 bg-obsidian/40 p-4">
+          <div class="ui-stat p-4">
             <p class="text-xs text-muted">酒名</p>
             <p class="mt-1 text-sm text-cream">最多 40 个字</p>
           </div>
-          <div class="rounded-lg border border-gold/10 bg-obsidian/40 p-4">
+          <div class="ui-stat p-4">
             <p class="text-xs text-muted">图片</p>
             <p class="mt-1 text-sm text-cream">不上传</p>
           </div>
-          <div class="rounded-lg border border-gold/10 bg-obsidian/40 p-4">
+          <div class="ui-stat p-4">
             <p class="text-xs text-muted">提交</p>
             <p class="mt-1 text-sm text-cream">一次一条</p>
           </div>

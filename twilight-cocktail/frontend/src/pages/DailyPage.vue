@@ -67,6 +67,7 @@ onMounted(() => {
   display: grid;
   min-height: calc(100vh - 8.5rem);
   grid-template-rows: auto 1fr;
+  padding-bottom: 2rem;
 }
 
 .daily-page__intro {
@@ -77,6 +78,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .daily-page {
     min-height: calc(100vh - 8rem);
+    padding-bottom: 5.5rem;
   }
 
   .daily-page__intro {

@@ -1,21 +1,21 @@
 <template>
-  <div class="space-y-8">
+  <div class="page-stack">
     <SectionHeading
       eyebrow="Pantry"
       title="我的酒柜"
       description="登记家中已有材料，快速判断今晚可以直接制作哪些酒。"
     />
-    <section class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+    <section class="ui-panel p-5">
       <input
         v-model="search"
-        class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-gold"
+        class="ui-field px-3 py-3 text-sm"
         placeholder="搜索原料，例如 金酒 / 青柠 / 汤力水"
       />
-      <div class="mt-4 flex flex-wrap gap-2">
+      <div class="motion-list mt-4 flex flex-wrap gap-2">
         <button
           v-for="item in filteredIngredients.slice(0, 18)"
           :key="item.slug"
-          class="rounded-md border border-gold/20 px-3 py-2 text-sm transition hover:bg-gold/10"
+          class="ui-tag px-3 py-2 text-sm transition hover:border-gold/35 hover:bg-gold/10"
           type="button"
           @click="pantry.add(item.slug)"
         >
@@ -30,7 +30,7 @@
         <button
           v-for="item in ownedIngredients"
           :key="item.slug"
-          class="rounded-md bg-gold px-3 py-2 text-sm text-obsidian"
+          class="ui-button-primary min-h-0 px-3 py-2 text-sm"
           type="button"
           @click="pantry.remove(item.slug)"
         >
@@ -45,13 +45,13 @@
     </section>
 
     <section class="grid gap-5 lg:grid-cols-2">
-      <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+      <div class="ui-panel p-5">
         <h2 class="font-display text-2xl">可以直接制作</h2>
-        <div class="mt-4 space-y-3">
+        <div class="motion-list mt-4 space-y-3">
           <RouterLink
             v-for="item in pantry.matches.ready"
             :key="item.slug"
-            class="block rounded-md bg-cream/5 p-3 text-sm"
+            class="block rounded-md bg-cream/5 p-3 text-sm transition hover:bg-cream/10"
             :to="`/cocktails/${item.slug}`"
           >
             {{ item.nameZh }} · {{ item.matchedRequired }}/{{ item.totalRequired }}
@@ -61,13 +61,13 @@
           </p>
         </div>
       </div>
-      <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
+      <div class="ui-panel p-5">
         <h2 class="font-display text-2xl">只差一种</h2>
-        <div class="mt-4 space-y-3">
+        <div class="motion-list mt-4 space-y-3">
           <RouterLink
             v-for="item in pantry.matches.missingOne"
             :key="item.slug"
-            class="block rounded-md bg-cream/5 p-3 text-sm"
+            class="block rounded-md bg-cream/5 p-3 text-sm transition hover:bg-cream/10"
             :to="`/cocktails/${item.slug}`"
           >
             {{ item.nameZh }} · 缺 {{ item.missingIngredients.join('、') }}

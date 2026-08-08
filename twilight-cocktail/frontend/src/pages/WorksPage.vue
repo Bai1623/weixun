@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-8">
+  <div class="works-page page-stack">
     <SectionHeading
       eyebrow="Works"
       title="我的作品"

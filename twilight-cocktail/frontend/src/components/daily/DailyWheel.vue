@@ -54,7 +54,7 @@
 
     <button
       v-if="!selected"
-      class="oracle-action mt-7 rounded-md px-6 py-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-cream disabled:cursor-not-allowed disabled:opacity-70"
+      class="oracle-action ui-button-primary mt-7 px-6 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cream disabled:cursor-not-allowed disabled:opacity-70"
       type="button"
       :disabled="spinning"
       @click="$emit('spin')"
@@ -83,21 +83,21 @@ defineEmits<{
 
 const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 const MAX_VISIBLE_KEYWORDS = 150
-const KEYWORD_COLUMNS = 15
 const LABELED_KEYWORDS = 20
 
 const positionForIndex = (index: number, total: number) => {
-  const rows = Math.ceil(total / KEYWORD_COLUMNS)
-  const slot = (index * 73) % Math.max(total, 1)
-  const row = Math.floor(slot / KEYWORD_COLUMNS)
-  const column = slot % KEYWORD_COLUMNS
-  const rowOffset = row % 2 ? 0.42 : -0.14
-  const xBase = 5.2 + ((column + rowOffset) / KEYWORD_COLUMNS) * 89.8
-  const yBase = rows <= 1 ? 52 : 8.5 + (row / (rows - 1)) * 83
-  const wave = Math.sin(index * GOLDEN_ANGLE) * 0.76
-  const jitterX = (((index * 29) % 11) - 5) * 0.22 + wave
-  const jitterY = (((index * 31) % 11) - 5) * 0.24 + Math.cos(index * GOLDEN_ANGLE) * 0.62
-  return [Math.min(97, Math.max(3, xBase + jitterX)), Math.min(94, Math.max(8, yBase + jitterY))]
+  const seededIndex = index < LABELED_KEYWORDS ? index * 3 + 10 : index + 34
+  const progress = seededIndex / Math.max(total + 42, 1)
+  const angle = seededIndex * GOLDEN_ANGLE + Math.sin(index * 1.37) * 0.48
+  const radius = 0.16 + Math.sqrt(progress) * 0.49 + ((index * 17) % 7) * 0.006
+  const ellipseX = Math.cos(angle) * radius * 88
+  const ellipseY = Math.sin(angle) * radius * 68
+  const driftX = Math.sin(index * 2.11) * 3.4 + (((index * 29) % 13) - 6) * 0.36
+  const driftY = Math.cos(index * 1.71) * 2.8 + (((index * 31) % 13) - 6) * 0.28
+  return [
+    Math.min(97, Math.max(3, 50 + ellipseX + driftX)),
+    Math.min(94, Math.max(8, 52 + ellipseY + driftY)),
+  ]
 }
 
 const bubbleSizeFor = (item: Cocktail) => {
@@ -150,9 +150,10 @@ const stageState = computed(() => {
 .constellation-stage {
   min-height: clamp(34rem, calc(100vh - 15rem), 56rem);
   background:
-    radial-gradient(circle at 48% 43%, rgba(250, 244, 225, 0.14), transparent 21rem),
-    radial-gradient(circle at 8% 16%, rgba(244, 205, 187, 0.1), transparent 18rem),
-    radial-gradient(circle at 93% 76%, rgba(164, 189, 205, 0.1), transparent 20rem);
+    radial-gradient(circle at 48% 43%, rgba(250, 244, 225, 0.12), transparent 22rem),
+    radial-gradient(circle at 8% 16%, rgba(216, 166, 147, 0.09), transparent 18rem),
+    radial-gradient(circle at 93% 76%, rgba(139, 171, 162, 0.1), transparent 22rem);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 6%, #000 92%, transparent 100%);
 }
 
 .constellation-wash,
@@ -175,8 +176,8 @@ const stageState = computed(() => {
       rgba(223, 199, 141, 0)
     );
   filter: blur(12px);
-  opacity: 0.72;
-  animation: constellation-breathe 7s ease-in-out infinite;
+  opacity: 0.58;
+  animation: constellation-breathe 8.5s ease-in-out infinite;
 }
 
 .constellation-ring {
@@ -235,13 +236,13 @@ const stageState = computed(() => {
 
 .keyword-star__glow {
   position: absolute;
-  width: calc(var(--bubble-size) * 0.34);
-  height: calc(var(--bubble-size) * 0.34);
+  width: calc(var(--bubble-size) * 0.28);
+  height: calc(var(--bubble-size) * 0.28);
   border-radius: 999px;
-  background: rgba(249, 237, 208, 0.76);
+  background: rgba(249, 237, 208, 0.64);
   box-shadow:
-    0 0 0 calc(var(--bubble-size) * 0.22) rgba(249, 237, 208, 0.04),
-    0 0 calc(var(--bubble-size) * 0.64) rgba(249, 237, 208, 0.34);
+    0 0 0 calc(var(--bubble-size) * 0.18) rgba(249, 237, 208, 0.035),
+    0 0 calc(var(--bubble-size) * 0.72) rgba(249, 237, 208, 0.28);
 }
 
 .keyword-star__label,
@@ -255,8 +256,8 @@ const stageState = computed(() => {
   border: 1px solid rgba(250, 244, 225, 0.12);
   border-radius: 999px;
   background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.18), transparent 26%),
-    rgba(250, 244, 225, 0.075);
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.16), transparent 26%),
+    rgba(250, 244, 225, 0.058);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 0.8rem 2rem rgba(0, 0, 0, 0.08);
@@ -275,11 +276,11 @@ const stageState = computed(() => {
 }
 
 .keyword-star__point::after {
-  width: calc(var(--bubble-size) * 0.25);
-  height: calc(var(--bubble-size) * 0.25);
+  width: calc(var(--bubble-size) * 0.18);
+  height: calc(var(--bubble-size) * 0.18);
   border-radius: 999px;
-  background: rgba(255, 248, 232, 0.78);
-  box-shadow: 0 0 calc(var(--bubble-size) * 0.36) rgba(255, 248, 232, 0.5);
+  background: rgba(255, 248, 232, 0.62);
+  box-shadow: 0 0 calc(var(--bubble-size) * 0.38) rgba(255, 248, 232, 0.4);
   content: '';
 }
 
@@ -376,6 +377,7 @@ const stageState = computed(() => {
     0 1.5rem 3.8rem rgba(0, 0, 0, 0.18),
     0 0 4rem rgba(223, 199, 141, 0.24);
   transform: rotate(45deg);
+  animation: gift-float 4.8s ease-in-out infinite;
   backdrop-filter: blur(18px);
 }
 
@@ -488,6 +490,12 @@ const stageState = computed(() => {
     background 180ms ease;
 }
 
+.daily-gift__link {
+  transition:
+    transform 180ms var(--ease-out-soft),
+    box-shadow 180ms ease;
+}
+
 .oracle-action:hover,
 .daily-gift__link:hover,
 .daily-gift__reroll:hover {
@@ -591,9 +599,19 @@ const stageState = computed(() => {
   }
 }
 
+@keyframes gift-float {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  50% {
+    translate: 0 -0.42rem;
+  }
+}
+
 @media (max-width: 640px) {
   .constellation-stage {
-    min-height: 32rem;
+    min-height: 26rem;
   }
 
   .keyword-star__label {
@@ -619,6 +637,7 @@ const stageState = computed(() => {
   .constellation-wash,
   .constellation-comet,
   .keyword-star,
+  .daily-gift__shape,
   .selection-current::before,
   .selection-current::after,
   .daily-gift__aura {

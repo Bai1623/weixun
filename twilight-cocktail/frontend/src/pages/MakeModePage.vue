@@ -8,7 +8,7 @@
         步骤 {{ currentStepIndex + 1 }} / {{ cocktail.steps.length }}
       </p>
     </div>
-    <section class="min-h-[55vh] rounded-lg border border-gold/15 bg-walnut/80 p-6 md:p-10">
+    <section class="ui-panel min-h-[55vh] p-6 md:p-10">
       <p class="text-xs uppercase tracking-[0.22em] text-gold">{{ cocktail.nameEn }}</p>
       <h1 class="mt-3 font-display text-4xl">{{ cocktail.nameZh }}</h1>
       <p class="mt-8 text-2xl leading-relaxed text-cream">{{ step.instruction }}</p>
@@ -18,18 +18,14 @@
     </section>
     <div class="mt-6 grid grid-cols-2 gap-3">
       <button
-        class="min-h-12 rounded-md border border-gold/30 px-5 py-3 text-gold disabled:opacity-40"
+        class="ui-button-secondary min-h-12 px-5 py-3 text-gold disabled:opacity-40"
         type="button"
         :disabled="currentStepIndex === 0"
         @click="prev"
       >
         上一步
       </button>
-      <button
-        class="min-h-12 rounded-md bg-gold px-5 py-3 font-semibold text-obsidian"
-        type="button"
-        @click="next"
-      >
+      <button class="ui-button-primary min-h-12 px-5 py-3" type="button" @click="next">
         {{ currentStepIndex === cocktail.steps.length - 1 ? '完成制作' : '完成本步' }}
       </button>
     </div>

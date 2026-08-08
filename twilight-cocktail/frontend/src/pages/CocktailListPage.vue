@@ -1,43 +1,30 @@
 <template>
-  <div>
+  <div class="page-stack">
     <SectionHeading
       eyebrow="Recipes"
       title="发现酒谱"
       description="从风味、基酒或现有材料开始寻找。"
     />
-    <div class="mb-6 grid gap-3 rounded-lg border border-gold/15 bg-walnut/70 p-4 md:grid-cols-4">
-      <input
-        v-model="keyword"
-        class="rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-gold"
-        placeholder="搜索中英文酒名"
-      />
-      <select
-        v-model="baseSpirit"
-        class="rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-gold"
-      >
+    <div class="ui-panel grid gap-3 p-4 md:grid-cols-4">
+      <input v-model="keyword" class="ui-field px-3 py-3 text-sm" placeholder="搜索中英文酒名" />
+      <select v-model="baseSpirit" class="ui-field px-3 py-3 text-sm">
         <option value="">全部基酒</option>
         <option v-for="spirit in baseSpirits" :key="spirit" :value="spirit">{{ spirit }}</option>
       </select>
-      <select
-        v-model="difficulty"
-        class="rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-gold"
-      >
+      <select v-model="difficulty" class="ui-field px-3 py-3 text-sm">
         <option value="">全部难度</option>
         <option value="easy">入门</option>
         <option value="medium">普通</option>
         <option value="advanced">进阶</option>
       </select>
-      <select
-        v-model="sort"
-        class="rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-sm outline-none focus:ring-2 focus:ring-gold"
-      >
+      <select v-model="sort" class="ui-field px-3 py-3 text-sm">
         <option value="popular">热门优先</option>
         <option value="beginner">入门优先</option>
         <option value="fewest">材料最少</option>
         <option value="fastest">制作最快</option>
       </select>
     </div>
-    <div v-if="filtered.length" class="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div v-if="filtered.length" class="motion-grid grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
       <CocktailCard v-for="cocktail in filtered" :key="cocktail.slug" :cocktail="cocktail" />
     </div>
     <StateBlock

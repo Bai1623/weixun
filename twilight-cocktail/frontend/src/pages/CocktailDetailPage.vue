@@ -1,5 +1,5 @@
 <template>
-  <div v-if="cocktail" class="space-y-10">
+  <div v-if="cocktail" class="page-stack">
     <section class="grid gap-8 md:grid-cols-[0.9fr_1.1fr]">
       <CocktailVisual
         :alt="cocktail.nameZh"
@@ -16,13 +16,13 @@
         <p class="mt-5 text-base leading-8 text-muted">{{ cocktail.story }}</p>
         <div class="mt-6 flex flex-col gap-3 sm:flex-row">
           <RouterLink
-            class="rounded-md bg-gold px-5 py-3 text-center font-semibold text-obsidian"
+            class="ui-button-primary text-center"
             :to="`/cocktails/${cocktail.slug}/make`"
           >
             开始制作
           </RouterLink>
           <button
-            class="rounded-md border border-gold/30 px-5 py-3 text-gold"
+            class="ui-button-secondary px-5 py-3 text-gold"
             type="button"
             @click="toggleFavorite"
           >
@@ -33,11 +33,7 @@
     </section>
 
     <section class="grid gap-4 md:grid-cols-6">
-      <div
-        v-for="item in stats"
-        :key="item.label"
-        class="rounded-lg border border-gold/15 bg-walnut/70 p-4"
-      >
+      <div v-for="item in stats" :key="item.label" class="ui-stat p-4">
         <p class="text-xs text-muted">{{ item.label }}</p>
         <p class="mt-1 text-sm text-cream">{{ item.value }}</p>
       </div>
@@ -54,7 +50,7 @@
           <div
             v-for="item in cocktail.ingredients"
             :key="`${item.slug}-${item.displayOrder}`"
-            class="flex items-center justify-between gap-4 rounded-lg border border-gold/15 bg-walnut/70 p-4"
+            class="ui-card flex items-center justify-between gap-4 p-4"
           >
             <div>
               <p class="text-cream">{{ item.nameZh }}</p>
@@ -69,11 +65,7 @@
     <section>
       <SectionHeading title="制作步骤" description="进入制作模式后会一屏展示一步。" />
       <ol class="grid gap-3 md:grid-cols-3">
-        <li
-          v-for="step in cocktail.steps"
-          :key="step.stepNumber"
-          class="rounded-lg border border-gold/15 bg-walnut/70 p-4"
-        >
+        <li v-for="step in cocktail.steps" :key="step.stepNumber" class="ui-card p-4">
           <p class="text-xs text-gold">步骤 {{ step.stepNumber }} · {{ step.technique }}</p>
           <p class="mt-2 text-sm leading-6 text-cream">{{ step.instruction }}</p>
           <p v-if="step.tip" class="mt-2 text-xs leading-5 text-muted">{{ step.tip }}</p>
@@ -81,9 +73,7 @@
       </ol>
     </section>
 
-    <section
-      class="rounded-lg border border-gold/15 bg-obsidian/50 p-5 text-sm leading-6 text-muted"
-    >
+    <section class="ui-panel p-5 text-sm leading-6 text-muted">
       数据来源：{{ cocktail.sourceName }}。本应用仅用于鸡尾酒知识学习与配方记录，请理性饮酒。
     </section>
   </div>

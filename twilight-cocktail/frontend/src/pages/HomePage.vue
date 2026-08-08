@@ -1,8 +1,10 @@
 <template>
-  <div class="space-y-12">
-    <section class="grid min-h-[calc(100vh-9rem)] items-center gap-8 md:grid-cols-[1.05fr_0.95fr]">
-      <div>
-        <p class="mb-4 text-xs uppercase tracking-[0.28em] text-gold">Twilight Cocktail</p>
+  <div class="page-stack">
+    <section
+      class="home-hero grid min-h-[calc(100vh-9rem)] items-center gap-8 md:grid-cols-[1.02fr_0.98fr]"
+    >
+      <div class="home-hero__copy">
+        <p class="mb-4 text-xs uppercase tracking-[0.28em] text-gold">Twilight Mixbook</p>
         <h1 class="font-display text-5xl leading-tight text-cream md:text-7xl">
           今晚，<br />调一杯属于你的味道。
         </h1>
@@ -11,29 +13,27 @@
         </p>
         <div class="mt-8 flex flex-col gap-3 sm:flex-row">
           <RouterLink
-            class="rounded-md bg-gold px-5 py-3 text-center text-sm font-semibold text-obsidian transition hover:bg-gold/90 focus:outline-none focus:ring-2 focus:ring-cream"
+            class="ui-button-primary text-center text-sm focus:outline-none focus:ring-2 focus:ring-cream"
             to="/daily"
           >
             开启今日酒单
           </RouterLink>
           <RouterLink
-            class="rounded-md border border-gold/30 px-5 py-3 text-center text-sm font-semibold text-gold transition hover:bg-gold/10 focus:outline-none focus:ring-2 focus:ring-gold"
+            class="ui-button-secondary text-center text-sm focus:outline-none focus:ring-2 focus:ring-gold"
             to="/cocktails"
           >
             查看经典酒谱
           </RouterLink>
         </div>
       </div>
-      <div class="relative">
+      <div class="home-hero__visual relative">
         <CocktailVisual
           alt="暮色鸡尾酒主视觉"
-          class="min-h-[34rem]"
+          class="home-visual min-h-[34rem]"
           image-url="/cocktails/negroni.jpg"
           tone="amber"
         />
-        <div
-          class="absolute bottom-4 left-4 right-4 rounded-lg border border-gold/20 bg-obsidian/72 p-4 backdrop-blur-lg"
-        >
+        <div class="ui-panel absolute bottom-4 left-4 right-4 p-4">
           <p class="text-xs text-gold">今日预览</p>
           <h2 class="mt-1 font-display text-2xl">
             {{ daily.selected?.nameZh ?? '今日酒单尚未揭晓' }}
@@ -51,11 +51,11 @@
         title="今晚可以从这里开始"
         description="保留低门槛入口，让初学者不用先理解所有术语。"
       />
-      <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="motion-grid grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <RouterLink
           v-for="entry in entries"
           :key="entry.to"
-          class="rounded-lg border border-gold/15 bg-walnut/70 p-5 transition hover:border-gold/40 hover:bg-walnut focus:outline-none focus:ring-2 focus:ring-gold"
+          class="ui-card ui-card-interactive p-5 focus:outline-none focus:ring-2 focus:ring-gold"
           :to="entry.to"
         >
           <p class="font-display text-xl text-cream">{{ entry.title }}</p>
@@ -64,7 +64,7 @@
       </div>
     </section>
 
-    <section class="rounded-lg border border-gold/15 bg-walnut/70 p-6">
+    <section class="ui-panel p-6">
       <p class="text-xs uppercase tracking-[0.22em] text-gold">
         调酒入门 · {{ academy.completedCount }}/8
       </p>
@@ -105,3 +105,41 @@ onMounted(() => {
   user.ensureAnonymousKey()
 })
 </script>
+
+<style scoped>
+.home-hero {
+  position: relative;
+}
+
+.home-hero::before {
+  position: absolute;
+  left: -6vw;
+  top: 8%;
+  width: min(28rem, 48vw);
+  height: min(28rem, 48vw);
+  border-radius: 999px;
+  background: rgba(215, 187, 117, 0.08);
+  filter: blur(58px);
+  content: '';
+}
+
+.home-hero__copy,
+.home-hero__visual {
+  position: relative;
+}
+
+.home-visual {
+  border-radius: 1rem;
+  box-shadow:
+    0 2rem 7rem rgba(0, 0, 0, 0.32),
+    0 0 0 1px rgba(255, 248, 232, 0.04);
+  transform: perspective(1200px) rotateY(-2deg);
+}
+
+@media (max-width: 768px) {
+  .home-visual {
+    min-height: 28rem;
+    transform: none;
+  }
+}
+</style>
