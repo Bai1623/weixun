@@ -5,11 +5,14 @@ import {
   CLOUD_WORKS_COLLECTION,
   buildCloudWorksIdentity,
   clearCloudWorksSession,
+  createCloudAppDataChunks,
   createCloudWorkDocument,
   createCloudWorkChunks,
+  fetchCloudAppData,
   fetchCloudWorks,
   getCloudWorksSession,
   loginCloudWorksAccount,
+  syncCloudAppData,
   syncCloudWorks,
   toCloudWorkWriteData,
   toWorkRecordFromCloudDocument,
@@ -131,6 +134,112 @@ describe('cloud works service', () => {
     expect(records).toEqual([record])
   })
 
+  it('syncs and fetches the full account app data package through the cloud function', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    const appData = {
+      version: 1 as const,
+      app: 'twilight-mixbook' as const,
+      type: 'app-data' as const,
+      works: [record],
+      pantry: { ingredientSlugs: ['gin', 'tonic-water'] },
+      favorites: { cocktailSlugs: ['mojito'] },
+      academy: { completedSlugs: ['tools'] },
+      dailyPick: {
+        selectedSlug: 'negroni',
+        selectedDate: '2026-08-08',
+        reason: '今晚适合苦甜风味。',
+        rerollCount: 2,
+      },
+      customOptions: {
+        cocktails: [],
+        flavorLiquors: ['蓝橙力娇酒'],
+        beverages: ['水溶C'],
+      },
+      autoBackup: {
+        enabled: true,
+        lastBackupAt: '2026-08-08T10:00:00.000Z',
+      },
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({ ok: true, status: 'started', recordCount: 1, uploadId: 'up-1' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'chunk_saved', chunkIndex: 0 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'saved', recordCount: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'matched',
+            payload: appData,
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await syncCloudAppData(appData)
+    const restored = await fetchCloudAppData()
+
+    expect(fetchMock).toHaveBeenCalledTimes(4)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"works-put-start"')
+    expect(fetchMock.mock.calls[0][1].body).toContain('"payloadType":"app-data"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"type":"app-data"')
+    expect(fetchMock.mock.calls[2][1].body).toContain('"payloadType":"app-data"')
+    expect(restored).toEqual(appData)
+  })
+
+  it('normalizes legacy work-record payloads into an app data package', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'matched',
+            payload: {
+              version: 1,
+              app: 'twilight-mixbook',
+              type: 'work-records',
+              records: [record],
+            },
+          }),
+      }),
+    )
+
+    const restored = await fetchCloudAppData()
+
+    expect(restored.works).toEqual([record])
+    expect(restored.pantry.ingredientSlugs).toEqual([])
+    expect(restored.customOptions.beverages).toEqual([])
+  })
+
   it('splits the serialized work payload into bounded text chunks', () => {
     const largeRecord = {
       ...record,
@@ -151,6 +260,32 @@ describe('cloud works service', () => {
       id: 'large-work',
       photoDataUrl: largeRecord.photoDataUrl,
     })
+  })
+
+  it('splits the serialized app data payload into bounded text chunks', () => {
+    const chunks = createCloudAppDataChunks(
+      {
+        version: 1,
+        app: 'twilight-mixbook',
+        type: 'app-data',
+        works: [record],
+        pantry: { ingredientSlugs: ['gin'] },
+        favorites: { cocktailSlugs: ['mojito'] },
+        academy: { completedSlugs: ['tools'] },
+        dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+        customOptions: { cocktails: [], flavorLiquors: [], beverages: ['水溶C'.repeat(30)] },
+        autoBackup: { enabled: false, lastBackupAt: '' },
+      },
+      180,
+    )
+    const restoredPayload = JSON.parse(chunks.map((chunk) => chunk.payloadText).join('')) as {
+      type: string
+      works: WorkRecord[]
+    }
+
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(restoredPayload.type).toBe('app-data')
+    expect(restoredPayload.works[0].id).toBe(record.id)
   })
 
   it('requires cloud account login before syncing records', async () => {

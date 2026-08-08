@@ -76,7 +76,7 @@
           </button>
         </div>
         <p class="mt-3 text-sm leading-6 text-muted">
-          距离上次云端备份已超过 1 天。是否现在把当前作品上传到云端？
+          距离上次云端备份已超过 1 天。是否现在把当前完整账号数据上传到云端？
         </p>
         <div class="mt-5 grid gap-3 sm:grid-cols-2">
           <button
@@ -446,7 +446,7 @@
               <span>
                 <span class="block text-sm font-semibold text-cream">自动备份</span>
                 <span class="mt-1 block text-sm leading-6 text-muted">
-                  打开作品页时检查上次云端备份，超过 1 天会先询问再上传。
+                  打开作品页时检查上次云端备份，超过 1 天会先询问再上传完整账号数据。
                 </span>
               </span>
               <input
@@ -547,7 +547,9 @@
             </div>
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div class="text-sm leading-6 text-muted">上传和恢复只会操作当前云端账号的作品。</div>
+            <div class="text-sm leading-6 text-muted">
+              上传和恢复会操作当前云端账号的完整本地数据：作品、酒柜、收藏、学院进度、每日酒单和自定义选项。
+            </div>
             <div class="flex flex-wrap gap-3">
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
@@ -1260,10 +1262,6 @@ const pushWorksToCloud = async () => {
     shareMessage.value = '请先登录云端账号。'
     return
   }
-  if (!works.totalCount) {
-    shareMessage.value = '当前还没有可上传到云端的作品。'
-    return
-  }
 
   isSyncingCloud.value = true
   try {
@@ -1360,7 +1358,10 @@ const loadWorksFromCloud = async () => {
     shareMessage.value = '请先登录云端账号。'
     return
   }
-  if (works.totalCount && !window.confirm('从云端恢复会用云端作品覆盖当前本地作品，确定继续？')) {
+  if (
+    works.totalCount &&
+    !window.confirm('从云端恢复会用云端账号数据覆盖当前本地数据，确定继续？')
+  ) {
     return
   }
 

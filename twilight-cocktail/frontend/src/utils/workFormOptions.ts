@@ -32,6 +32,12 @@ export type CustomWorkCocktailOption = WorkCocktailSelectOption & {
   createdAt: string
 }
 
+export type WorkCustomOptionsSnapshot = {
+  cocktails: CustomWorkCocktailOption[]
+  flavorLiquors: string[]
+  beverages: string[]
+}
+
 const searchAliases: Record<string, string[]> = {
   冰岛: ['bingdao', 'bd', 'bing'],
   想见你: ['xiangjianni', 'xjn', 'xj'],
@@ -65,6 +71,11 @@ const safeReadStringArray = (key: string): string[] => {
   }
 }
 
+const safeReadStringArrayFromValue = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? Array.from(new Set(value.filter((item): item is string => typeof item === 'string')))
+    : []
+
 const writeStringArray = (key: string, values: readonly string[]) => {
   window.localStorage.setItem(key, JSON.stringify(values))
 }
@@ -91,6 +102,19 @@ const safeReadCustomCocktails = (): CustomWorkCocktailOption[] => {
     return []
   }
 }
+
+const normalizeCustomCocktails = (records: readonly unknown[]): CustomWorkCocktailOption[] =>
+  records.filter((item): item is CustomWorkCocktailOption => {
+    if (!item || typeof item !== 'object') return false
+    const candidate = item as Partial<CustomWorkCocktailOption>
+    return (
+      typeof candidate.value === 'string' &&
+      typeof candidate.slug === 'string' &&
+      typeof candidate.nameZh === 'string' &&
+      typeof candidate.nameEn === 'string' &&
+      typeof candidate.createdAt === 'string'
+    )
+  })
 
 const writeCustomCocktails = (records: readonly CustomWorkCocktailOption[]) => {
   window.localStorage.setItem(customCocktailStorageKey, JSON.stringify(records))
@@ -144,6 +168,24 @@ export const addCustomMaterialOption = (kind: CustomMaterialKind, name: string):
 
 export const getCustomWorkCocktailOptions = (): CustomWorkCocktailOption[] =>
   safeReadCustomCocktails()
+
+export const readWorkCustomOptionsSnapshot = (): WorkCustomOptionsSnapshot => ({
+  cocktails: safeReadCustomCocktails(),
+  flavorLiquors: getCustomMaterialOptions('flavorLiquors'),
+  beverages: getCustomMaterialOptions('beverages'),
+})
+
+export const writeWorkCustomOptionsSnapshot = (snapshot: Partial<WorkCustomOptionsSnapshot>) => {
+  writeCustomCocktails(normalizeCustomCocktails(snapshot.cocktails ?? []))
+  writeStringArray(
+    customMaterialStorageKeys.flavorLiquors,
+    sortByChineseName(safeReadStringArrayFromValue(snapshot.flavorLiquors)),
+  )
+  writeStringArray(
+    customMaterialStorageKeys.beverages,
+    sortByChineseName(safeReadStringArrayFromValue(snapshot.beverages)),
+  )
+}
 
 export const addCustomWorkCocktailOption = (
   input: CustomWorkCocktailOptionInput,

@@ -120,8 +120,57 @@ async function saveDoc(lookupKey, data) {
 }
 
 function safeRecords(payload) {
-  const records = Array.isArray(payload?.records) ? payload.records : [];
+  const records = Array.isArray(payload?.works)
+    ? payload.works
+    : Array.isArray(payload?.records)
+      ? payload.records
+      : [];
   return records.slice(0, MAX_RECORDS);
+}
+
+function safeString(value, maxLength = 240) {
+  const next = typeof value === "string" ? value.trim() : "";
+  return Array.from(next).slice(0, maxLength).join("");
+}
+
+function safeStringArray(values, maxItems = 500, maxLength = 80) {
+  if (!Array.isArray(values)) return [];
+  return Array.from(
+    new Set(values.map((item) => safeString(item, maxLength)).filter(Boolean)),
+  ).slice(0, maxItems);
+}
+
+function safeNumber(value, fallback = 0) {
+  const next = Number(value);
+  return Number.isFinite(next) ? next : fallback;
+}
+
+function safeIngredientGroups(value) {
+  const groups = value && typeof value === "object" ? value : {};
+  return {
+    baseLiquors: safeStringArray(groups.baseLiquors, 4, 40),
+    flavorLiquors: safeStringArray(groups.flavorLiquors, 12, 40),
+    beverages: safeStringArray(groups.beverages, 12, 40),
+    other: safeString(groups.other, 500),
+  };
+}
+
+function safeCustomCocktails(values) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      value: safeString(item.value, 80),
+      slug: safeString(item.slug, 80),
+      nameZh: safeString(item.nameZh, 80),
+      nameEn: safeString(item.nameEn, 80),
+      ingredientsText: safeString(item.ingredientsText, 1200),
+      ingredientGroups: item.ingredientGroups ? safeIngredientGroups(item.ingredientGroups) : undefined,
+      isCustom: true,
+      createdAt: safeString(item.createdAt, 40),
+    }))
+    .filter((item) => item.value && item.slug && item.nameZh && item.nameEn && item.createdAt)
+    .slice(0, MAX_RECORDS);
 }
 
 function safeDrinkRequests(doc) {
@@ -138,6 +187,55 @@ function buildWorksPayload(payload) {
     type: "work-records",
     records: safeRecords(payload),
   };
+}
+
+function buildAppDataPayload(payload) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const dailyPick = source.dailyPick && typeof source.dailyPick === "object" ? source.dailyPick : {};
+  const customOptions = source.customOptions && typeof source.customOptions === "object" ? source.customOptions : {};
+  const autoBackup = source.autoBackup && typeof source.autoBackup === "object" ? source.autoBackup : {};
+
+  return {
+    version: 1,
+    app: "twilight-mixbook",
+    type: "app-data",
+    works: safeRecords({ works: source.works }),
+    pantry: {
+      ingredientSlugs: safeStringArray(source.pantry?.ingredientSlugs),
+    },
+    favorites: {
+      cocktailSlugs: safeStringArray(source.favorites?.cocktailSlugs),
+    },
+    academy: {
+      completedSlugs: safeStringArray(source.academy?.completedSlugs),
+    },
+    dailyPick: {
+      selectedSlug: safeString(dailyPick.selectedSlug, 80),
+      selectedDate: safeString(dailyPick.selectedDate, 40),
+      reason: safeString(dailyPick.reason, 300),
+      rerollCount: Math.max(0, Math.floor(safeNumber(dailyPick.rerollCount))),
+    },
+    customOptions: {
+      cocktails: safeCustomCocktails(customOptions.cocktails),
+      flavorLiquors: safeStringArray(customOptions.flavorLiquors, 300, 80),
+      beverages: safeStringArray(customOptions.beverages, 300, 80),
+    },
+    autoBackup: {
+      enabled: Boolean(autoBackup.enabled),
+      lastBackupAt: safeString(autoBackup.lastBackupAt, 40),
+    },
+  };
+}
+
+function buildAccountPayload(payload, payloadType = "") {
+  if (payloadType === "app-data" || payload?.type === "app-data") {
+    return buildAppDataPayload(payload);
+  }
+  return buildWorksPayload(payload);
+}
+
+function payloadRecordCount(payload) {
+  return safeRecords(payload).length;
 }
 
 async function assertAccountPassword(accountNameKey, passwordVerifier) {
@@ -208,12 +306,13 @@ async function disableShareDoc(shareKey) {
   });
 }
 
-async function readChunkedWorks(doc) {
+async function readChunkedPayload(doc) {
   const chunkCount = Number(doc?.chunkCount || 0);
-  if (!chunkCount) return buildWorksPayload(doc?.payload);
+  if (!chunkCount) return buildAccountPayload(doc?.payload, doc?.payloadType);
 
   const textChunks = [];
   const legacyRecords = [];
+  let appDataChunk = null;
   let textMode = false;
   const activeUploadId = doc.activeUploadId || "";
   for (let index = 0; index < chunkCount; index += 1) {
@@ -228,13 +327,19 @@ async function readChunkedWorks(doc) {
       continue;
     }
     if (textMode) throw new Error("mixed_upload_chunk_format");
+    if (chunk?.payload?.type === "app-data") {
+      appDataChunk = chunk.payload;
+      continue;
+    }
     legacyRecords.push(...safeRecords(chunk?.payload));
   }
 
   if (textMode) {
-    return buildWorksPayload(JSON.parse(textChunks.join("")));
+    const parsed = JSON.parse(textChunks.join(""));
+    return buildAccountPayload(parsed, parsed?.type || doc.payloadType);
   }
 
+  if (appDataChunk) return buildAppDataPayload(appDataChunk);
   return buildWorksPayload({ records: legacyRecords });
 }
 
@@ -262,7 +367,7 @@ exports.main = async (event = {}) => {
         ok: true,
         status: "matched",
         accountName: doc.accountName || "",
-        recordCount: Number(doc.recordCount || doc.payload?.records?.length || 0),
+        recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
         backupCreatedAt: doc.backupCreatedAt || "",
       });
     }
@@ -287,14 +392,15 @@ exports.main = async (event = {}) => {
         accountNameKey,
         passwordVerifier,
         recordCount: 0,
+        payloadType: "app-data",
         backupCreatedAt: "",
-        payload: buildWorksPayload({ records: [] }),
+        payload: buildAppDataPayload({}),
       });
       return response({ ok: true, status: "created", recordCount: 0 });
     }
 
     if (method === "POST" && action === "works-put") {
-      const { accountNameKey, passwordVerifier, accountName = "", payload } = body;
+      const { accountNameKey, passwordVerifier, accountName = "", payload, payloadType = "" } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
 
@@ -304,22 +410,25 @@ exports.main = async (event = {}) => {
         return response({ ok: false, status: "password_mismatch" });
       }
 
-      const worksPayload = buildWorksPayload(payload);
+      const accountPayload = buildAccountPayload(payload, payloadType);
       const now = new Date().toISOString();
       await saveDoc(id, {
         type: "twilight-account-works",
         accountName: accountName || doc?.accountName || "",
         accountNameKey,
         passwordVerifier,
-        recordCount: worksPayload.records.length,
+        recordCount: payloadRecordCount(accountPayload),
+        payloadType: accountPayload.type,
+        chunkCount: 0,
+        activeUploadId: "",
         backupCreatedAt: now,
-        payload: worksPayload,
+        payload: accountPayload,
       });
-      return response({ ok: true, status: doc ? "updated" : "created", recordCount: worksPayload.records.length });
+      return response({ ok: true, status: doc ? "updated" : "created", recordCount: payloadRecordCount(accountPayload) });
     }
 
     if (method === "POST" && action === "works-put-start") {
-      const { accountNameKey, passwordVerifier, accountName = "", recordCount = 0, chunkCount = 0 } = body;
+      const { accountNameKey, passwordVerifier, accountName = "", recordCount = 0, chunkCount = 0, payloadType = "work-records" } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
 
@@ -331,6 +440,7 @@ exports.main = async (event = {}) => {
         status: "started",
         uploadId: uploadId(),
         accountName: accountName || account.doc?.accountName || "",
+        payloadType,
         recordCount: Number(recordCount || 0),
         chunkCount: Number(chunkCount || 0),
       });
@@ -344,6 +454,7 @@ exports.main = async (event = {}) => {
         chunkIndex = 0,
         payload,
         payloadText = "",
+        payloadType = "",
       } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
@@ -363,6 +474,7 @@ exports.main = async (event = {}) => {
           accountNameKey,
           uploadId: currentUploadId,
           chunkIndex: index,
+          payloadType,
           recordCount: 0,
           payloadText,
           textLength: payloadText.length,
@@ -377,20 +489,21 @@ exports.main = async (event = {}) => {
         });
       }
 
-      const worksPayload = buildWorksPayload(payload);
+      const accountPayload = buildAccountPayload(payload, payloadType);
       await saveDoc(accountChunkDocId(accountNameKey, currentUploadId, index), {
         type: "twilight-account-works-chunk",
         accountNameKey,
         uploadId: currentUploadId,
         chunkIndex: index,
-        recordCount: worksPayload.records.length,
-        payload: worksPayload,
+        payloadType: accountPayload.type,
+        recordCount: payloadRecordCount(accountPayload),
+        payload: accountPayload,
       });
-      return response({ ok: true, status: "chunk_saved", chunkIndex: index, recordCount: worksPayload.records.length });
+      return response({ ok: true, status: "chunk_saved", chunkIndex: index, recordCount: payloadRecordCount(accountPayload) });
     }
 
     if (method === "POST" && action === "works-put-commit") {
-      const { accountNameKey, passwordVerifier, uploadId: currentUploadId = "", accountName = "", recordCount = 0, chunkCount = 0 } = body;
+      const { accountNameKey, passwordVerifier, uploadId: currentUploadId = "", accountName = "", recordCount = 0, chunkCount = 0, payloadType = "work-records" } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
       if (!validUploadId(currentUploadId)) return response({ error: "invalid_upload_id" }, 400);
@@ -407,8 +520,9 @@ exports.main = async (event = {}) => {
         recordCount: Number(recordCount || 0),
         chunkCount: Number(chunkCount || 0),
         activeUploadId: currentUploadId,
+        payloadType,
         backupCreatedAt: now,
-        payload: buildWorksPayload({ records: [] }),
+        payload: payloadType === "app-data" ? buildAppDataPayload({}) : buildWorksPayload({ records: [] }),
       });
       return response({ ok: true, status: "saved", recordCount: Number(recordCount || 0), chunkCount: Number(chunkCount || 0) });
     }
@@ -419,7 +533,7 @@ exports.main = async (event = {}) => {
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
 
       const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
-      if (!doc) return response({ ok: true, status: "account_not_found", payload: buildWorksPayload({ records: [] }) });
+      if (!doc) return response({ ok: true, status: "account_not_found", payload: buildAppDataPayload({}) });
       if (doc.passwordVerifier !== passwordVerifier) {
         return response({ ok: false, status: "password_mismatch" });
       }
@@ -428,9 +542,9 @@ exports.main = async (event = {}) => {
         ok: true,
         status: "matched",
         accountName: doc.accountName || "",
-        recordCount: Number(doc.recordCount || doc.payload?.records?.length || 0),
+        recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
         backupCreatedAt: doc.backupCreatedAt || "",
-        payload: await readChunkedWorks(doc),
+        payload: await readChunkedPayload(doc),
       });
     }
 

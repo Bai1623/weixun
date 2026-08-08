@@ -21,6 +21,50 @@ type CloudWorksPayload = {
   records: WorkRecord[]
 }
 
+export type CloudDailyPickData = {
+  selectedSlug: string
+  selectedDate: string
+  reason: string
+  rerollCount: number
+}
+
+export type CloudCustomWorkCocktailOption = {
+  value: string
+  slug: string
+  nameZh: string
+  nameEn: string
+  ingredientsText?: string
+  ingredientGroups?: WorkIngredientGroups
+  isCustom: boolean
+  createdAt: string
+}
+
+export type CloudAppData = {
+  version: 1
+  app: 'twilight-mixbook'
+  type: 'app-data'
+  works: WorkRecord[]
+  pantry: {
+    ingredientSlugs: string[]
+  }
+  favorites: {
+    cocktailSlugs: string[]
+  }
+  academy: {
+    completedSlugs: string[]
+  }
+  dailyPick: CloudDailyPickData
+  customOptions: {
+    cocktails: CloudCustomWorkCocktailOption[]
+    flavorLiquors: string[]
+    beverages: string[]
+  }
+  autoBackup: {
+    enabled: boolean
+    lastBackupAt: string
+  }
+}
+
 type CloudWorksResponse = {
   ok?: boolean
   status?: string
@@ -81,13 +125,36 @@ const createPayload = (records: readonly WorkRecord[]): CloudWorksPayload => ({
   records: records.map((record) => ({ ...record })),
 })
 
+export const createEmptyCloudAppData = (): CloudAppData => ({
+  version: 1,
+  app: 'twilight-mixbook',
+  type: 'app-data',
+  works: [],
+  pantry: { ingredientSlugs: [] },
+  favorites: { cocktailSlugs: [] },
+  academy: { completedSlugs: [] },
+  dailyPick: {
+    selectedSlug: '',
+    selectedDate: '',
+    reason: '',
+    rerollCount: 0,
+  },
+  customOptions: {
+    cocktails: [],
+    flavorLiquors: [],
+    beverages: [],
+  },
+  autoBackup: {
+    enabled: false,
+    lastBackupAt: '',
+  },
+})
+
+const createAppDataPayload = (appData: CloudAppData): CloudAppData => normalizeCloudAppData(appData)
+
 const byteLength = (value: string) => new Blob([value]).size
 
-export const createCloudWorkChunks = (
-  records: readonly WorkRecord[],
-  maxChunkBytes = defaultUploadChunkBytes,
-) => {
-  const payloadText = JSON.stringify(createPayload(records))
+const createTextChunks = (payloadText: string, maxChunkBytes = defaultUploadChunkBytes) => {
   const chunks: Array<{ payloadText: string }> = []
   let start = 0
 
@@ -103,6 +170,22 @@ export const createCloudWorkChunks = (
 
   if (!chunks.length) chunks.push({ payloadText })
   return chunks
+}
+
+export const createCloudWorkChunks = (
+  records: readonly WorkRecord[],
+  maxChunkBytes = defaultUploadChunkBytes,
+) => {
+  const payloadText = JSON.stringify(createPayload(records))
+  return createTextChunks(payloadText, maxChunkBytes)
+}
+
+export const createCloudAppDataChunks = (
+  appData: CloudAppData,
+  maxChunkBytes = defaultUploadChunkBytes,
+) => {
+  const payloadText = JSON.stringify(createAppDataPayload(appData))
+  return createTextChunks(payloadText, maxChunkBytes)
 }
 
 const readCloudSession = (): CloudWorksSession | null => {
@@ -216,19 +299,114 @@ const isWorkRecord = (value: unknown): value is WorkRecord => {
 
 const normalizeCloudRecords = (payload: unknown): WorkRecord[] => {
   if (!payload || typeof payload !== 'object') return []
-  const records = (payload as { records?: unknown }).records
+  const records =
+    (payload as { records?: unknown }).records ?? (payload as { works?: unknown }).works
   if (!Array.isArray(records)) return []
   return records.flatMap((item) => (isWorkRecord(item) ? [item] : []))
 }
 
-export const fetchCloudWorks = async () => {
+const safeStringArray = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? Array.from(new Set(value.filter((item): item is string => typeof item === 'string')))
+    : []
+
+const normalizeDailyPick = (value: unknown): CloudDailyPickData => {
+  if (!value || typeof value !== 'object') return createEmptyCloudAppData().dailyPick
+  const candidate = value as Partial<CloudDailyPickData>
+  return {
+    selectedSlug: typeof candidate.selectedSlug === 'string' ? candidate.selectedSlug : '',
+    selectedDate: typeof candidate.selectedDate === 'string' ? candidate.selectedDate : '',
+    reason: typeof candidate.reason === 'string' ? candidate.reason : '',
+    rerollCount:
+      typeof candidate.rerollCount === 'number' && Number.isFinite(candidate.rerollCount)
+        ? Math.max(0, Math.floor(candidate.rerollCount))
+        : 0,
+  }
+}
+
+const isCloudCustomCocktailOption = (value: unknown): value is CloudCustomWorkCocktailOption => {
+  if (!value || typeof value !== 'object') return false
+  const candidate = value as Partial<CloudCustomWorkCocktailOption>
+  return (
+    typeof candidate.value === 'string' &&
+    typeof candidate.slug === 'string' &&
+    typeof candidate.nameZh === 'string' &&
+    typeof candidate.nameEn === 'string' &&
+    typeof candidate.createdAt === 'string' &&
+    (candidate.ingredientsText === undefined || typeof candidate.ingredientsText === 'string') &&
+    (candidate.ingredientGroups === undefined || isIngredientGroups(candidate.ingredientGroups))
+  )
+}
+
+const normalizeCustomCocktails = (value: unknown): CloudCustomWorkCocktailOption[] => {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) =>
+    isCloudCustomCocktailOption(item)
+      ? [
+          {
+            ...item,
+            isCustom: true,
+            ingredientsText: item.ingredientsText ?? '',
+            ingredientGroups: item.ingredientGroups,
+          },
+        ]
+      : [],
+  )
+}
+
+const normalizeAutoBackup = (value: unknown): CloudAppData['autoBackup'] => {
+  if (!value || typeof value !== 'object') return createEmptyCloudAppData().autoBackup
+  const candidate = value as Partial<CloudAppData['autoBackup']>
+  return {
+    enabled: Boolean(candidate.enabled),
+    lastBackupAt: typeof candidate.lastBackupAt === 'string' ? candidate.lastBackupAt : '',
+  }
+}
+
+export const normalizeCloudAppData = (payload: unknown): CloudAppData => {
+  const empty = createEmptyCloudAppData()
+  if (!payload || typeof payload !== 'object') return empty
+
+  const candidate = payload as Partial<CloudAppData> & {
+    type?: string
+    records?: unknown
+  }
+  const isAppData = candidate.type === 'app-data'
+  return {
+    ...empty,
+    works: normalizeCloudRecords(isAppData ? candidate : payload),
+    pantry: {
+      ingredientSlugs: safeStringArray(candidate.pantry?.ingredientSlugs),
+    },
+    favorites: {
+      cocktailSlugs: safeStringArray(candidate.favorites?.cocktailSlugs),
+    },
+    academy: {
+      completedSlugs: safeStringArray(candidate.academy?.completedSlugs),
+    },
+    dailyPick: normalizeDailyPick(candidate.dailyPick),
+    customOptions: {
+      cocktails: normalizeCustomCocktails(candidate.customOptions?.cocktails),
+      flavorLiquors: safeStringArray(candidate.customOptions?.flavorLiquors),
+      beverages: safeStringArray(candidate.customOptions?.beverages),
+    },
+    autoBackup: normalizeAutoBackup(candidate.autoBackup),
+  }
+}
+
+export const fetchCloudAppData = async () => {
   const session = getRequiredCloudSession()
   const result = await postCloudWorksAction({
     action: 'works-get',
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
   })
-  return normalizeCloudRecords(result.payload)
+  return normalizeCloudAppData(result.payload)
+}
+
+export const fetchCloudWorks = async () => {
+  const appData = await fetchCloudAppData()
+  return appData.works
 }
 
 export const syncCloudWorks = async (records: readonly WorkRecord[]) => {
@@ -262,6 +440,46 @@ export const syncCloudWorks = async (records: readonly WorkRecord[]) => {
     passwordVerifier: session.passwordVerifier,
     uploadId: startResult.uploadId,
     recordCount: records.length,
+    chunkCount: chunks.length,
+  })
+}
+
+export const syncCloudAppData = async (appData: CloudAppData) => {
+  const session = getRequiredCloudSession()
+  const payload = createAppDataPayload(appData)
+  const chunks = createCloudAppDataChunks(payload)
+  const startResult = await postCloudWorksAction({
+    action: 'works-put-start',
+    accountName: session.accountName,
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    payloadType: 'app-data',
+    recordCount: payload.works.length,
+    chunkCount: chunks.length,
+  })
+  if (!startResult.uploadId) {
+    throw new Error('云函数没有返回上传批次，请重新部署新版 twilightWorks 云函数。')
+  }
+  for (const [index, chunk] of chunks.entries()) {
+    await postCloudWorksAction({
+      action: 'works-put-chunk',
+      accountNameKey: session.accountNameKey,
+      passwordVerifier: session.passwordVerifier,
+      uploadId: startResult.uploadId,
+      chunkIndex: index,
+      payloadText: chunk.payloadText,
+      payloadType: 'app-data',
+      type: 'app-data',
+    })
+  }
+  await postCloudWorksAction({
+    action: 'works-put-commit',
+    accountName: session.accountName,
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    uploadId: startResult.uploadId,
+    payloadType: 'app-data',
+    recordCount: payload.works.length,
     chunkCount: chunks.length,
   })
 }

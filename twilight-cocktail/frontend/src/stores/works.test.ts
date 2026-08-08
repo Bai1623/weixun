@@ -3,6 +3,10 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
 import * as cloudWorks from '@/services/cloudWorks'
+import { useAcademyStore } from '@/stores/academy'
+import { useDailyPickStore } from '@/stores/daily'
+import { useFavoriteStore } from '@/stores/favorites'
+import { usePantryStore } from '@/stores/pantry'
 
 describe('work store', () => {
   beforeEach(() => {
@@ -305,7 +309,7 @@ describe('work store', () => {
     expect(importWorkRecords('{bad json')).toEqual({ records: [], skippedCount: 0 })
   })
 
-  it('loads cloud work records into local cache', async () => {
+  it('loads full cloud account data into local cache', async () => {
     const cloudRecord = {
       id: 'cloud-work',
       madeAt: '2026-08-03',
@@ -319,24 +323,88 @@ describe('work store', () => {
       notes: '',
       createdAt: '2026-08-03T10:00:00.000Z',
     }
-    vi.spyOn(cloudWorks, 'fetchCloudWorks').mockResolvedValue([cloudRecord])
+    vi.spyOn(cloudWorks, 'fetchCloudAppData').mockResolvedValue({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'app-data',
+      works: [cloudRecord],
+      pantry: { ingredientSlugs: ['gin', 'tonic-water'] },
+      favorites: { cocktailSlugs: ['mojito'] },
+      academy: { completedSlugs: ['tools'] },
+      dailyPick: {
+        selectedSlug: 'negroni',
+        selectedDate: '2026-08-08',
+        reason: '今晚适合苦甜风味。',
+        rerollCount: 2,
+      },
+      customOptions: {
+        cocktails: [
+          {
+            value: 'custom:summer',
+            slug: 'custom:summer',
+            nameZh: '夏夜杯',
+            nameEn: '夏夜杯',
+            ingredientsText: '饮料：葡萄味气泡水',
+            isCustom: true,
+            createdAt: '2026-08-08T10:00:00.000Z',
+          },
+        ],
+        flavorLiquors: ['蓝橙力娇酒'],
+        beverages: ['水溶C'],
+      },
+      autoBackup: {
+        enabled: true,
+        lastBackupAt: '2026-08-08T10:00:00.000Z',
+      },
+    })
     const works = useWorkStore()
+    const pantry = usePantryStore()
+    const favorites = useFavoriteStore()
+    const academy = useAcademyStore()
+    const daily = useDailyPickStore()
 
     const count = await works.loadFromCloud()
 
     expect(count).toBe(1)
     expect(works.items).toEqual([cloudRecord])
+    expect(pantry.ingredientSlugs).toEqual(['gin', 'tonic-water'])
+    expect(favorites.slugs).toEqual(['mojito'])
+    expect(academy.completedSlugs).toEqual(['tools'])
+    expect(daily.selectedSlug).toBe('negroni')
+    expect(daily.rerollCount).toBe(2)
+    expect(JSON.parse(window.localStorage.getItem('custom_work_flavor_liquors') ?? '[]')).toEqual([
+      '蓝橙力娇酒',
+    ])
+    expect(JSON.parse(window.localStorage.getItem('custom_work_beverages') ?? '[]')).toEqual([
+      '水溶C',
+    ])
+    expect(
+      (
+        JSON.parse(window.localStorage.getItem('custom_work_cocktail_options') ?? '[]') as unknown[]
+      )[0],
+    ).toMatchObject({ nameZh: '夏夜杯' })
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '已从 CloudBase 云端恢复 1 条作品。',
+      message: '已从 CloudBase 云端恢复账号数据（作品 1 条）。',
     })
     expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')).toEqual([
       cloudRecord,
     ])
   })
 
-  it('does not clear local records when cloud restore finds no records', async () => {
-    vi.spyOn(cloudWorks, 'fetchCloudWorks').mockResolvedValue([])
+  it('does not clear local records when cloud restore finds no account data', async () => {
+    vi.spyOn(cloudWorks, 'fetchCloudAppData').mockResolvedValue({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'app-data',
+      works: [],
+      pantry: { ingredientSlugs: [] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: [] },
+      dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    })
     const works = useWorkStore()
     const localRecord = works.add({
       madeAt: '2026-08-03',
@@ -356,13 +424,45 @@ describe('work store', () => {
     expect(works.items).toEqual([localRecord])
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '云端目前没有作品，未恢复到本地。',
+      message: '云端目前没有账号数据，未恢复到本地。',
     })
   })
 
-  it('pushes current local work records to cloud', async () => {
-    const push = vi.spyOn(cloudWorks, 'syncCloudWorks').mockResolvedValue(undefined)
+  it('pushes full local account data to cloud', async () => {
+    const push = vi.spyOn(cloudWorks, 'syncCloudAppData').mockResolvedValue(undefined)
     const works = useWorkStore()
+    const pantry = usePantryStore()
+    const favorites = useFavoriteStore()
+    const academy = useAcademyStore()
+    const daily = useDailyPickStore()
+    pantry.add('gin')
+    favorites.slugs = ['mojito']
+    window.localStorage.setItem('favorite_cocktail_slugs', JSON.stringify(favorites.slugs))
+    academy.toggle('tools')
+    daily.selectedSlug = 'negroni'
+    daily.selectedDate = '2026-08-08'
+    daily.reason = '今晚适合苦甜风味。'
+    daily.rerollCount = 2
+    window.localStorage.setItem('daily_pick_slug', daily.selectedSlug)
+    window.localStorage.setItem('daily_pick_date', daily.selectedDate)
+    window.localStorage.setItem('daily_pick_reason', daily.reason)
+    window.localStorage.setItem('daily_pick_reroll_count', String(daily.rerollCount))
+    window.localStorage.setItem('custom_work_flavor_liquors', JSON.stringify(['蓝橙力娇酒']))
+    window.localStorage.setItem('custom_work_beverages', JSON.stringify(['水溶C']))
+    window.localStorage.setItem(
+      'custom_work_cocktail_options',
+      JSON.stringify([
+        {
+          value: 'custom:summer',
+          slug: 'custom:summer',
+          nameZh: '夏夜杯',
+          nameEn: '夏夜杯',
+          ingredientsText: '饮料：葡萄味气泡水',
+          isCustom: true,
+          createdAt: '2026-08-08T10:00:00.000Z',
+        },
+      ]),
+    )
     works.add({
       madeAt: '2026-08-03',
       cocktailSlug: '',
@@ -380,9 +480,30 @@ describe('work store', () => {
     expect(count).toBe(1)
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '已上传 1 条作品到 CloudBase 云端。',
+      message: '已上传完整账号数据到 CloudBase 云端（作品 1 条）。',
     })
-    expect(push).toHaveBeenCalledWith(works.items)
+    expect(push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'app-data',
+        works: works.items,
+        pantry: { ingredientSlugs: ['gin'] },
+        favorites: { cocktailSlugs: ['mojito'] },
+        academy: { completedSlugs: ['tools'] },
+        dailyPick: {
+          selectedSlug: 'negroni',
+          selectedDate: '2026-08-08',
+          reason: '今晚适合苦甜风味。',
+          rerollCount: 2,
+        },
+        customOptions: expect.objectContaining({
+          flavorLiquors: ['蓝橙力娇酒'],
+          beverages: ['水溶C'],
+        }),
+        autoBackup: expect.objectContaining({
+          lastBackupAt: expect.any(String),
+        }),
+      }),
+    )
   })
 
   it('persists automatic cloud backup settings', () => {
@@ -441,10 +562,33 @@ describe('work store', () => {
     expect(works.shouldPromptAutoCloudBackup(new Date('2026-08-07T00:00:01.000Z'))).toBe(true)
   })
 
+  it('detects automatic cloud backup as due when only non-work account data exists', () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      }),
+    )
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({
+        enabled: true,
+        lastBackupAt: '2026-08-06T00:00:00.000Z',
+      }),
+    )
+    window.localStorage.setItem('pantry_ingredient_slugs', JSON.stringify(['gin']))
+    const works = useWorkStore()
+
+    expect(works.shouldPromptAutoCloudBackup(new Date('2026-08-07T00:00:01.000Z'))).toBe(true)
+  })
+
   it('records last successful cloud backup time after pushing to cloud', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T09:30:00.000Z'))
-    const push = vi.spyOn(cloudWorks, 'syncCloudWorks').mockResolvedValue(undefined)
+    const push = vi.spyOn(cloudWorks, 'syncCloudAppData').mockResolvedValue(undefined)
     const works = useWorkStore()
     works.setAutoBackupEnabled(true)
     works.add({
@@ -462,7 +606,14 @@ describe('work store', () => {
     try {
       await works.pushAllToCloud()
 
-      expect(push).toHaveBeenCalledWith(works.items)
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({
+          autoBackup: {
+            enabled: true,
+            lastBackupAt: '2026-08-07T09:30:00.000Z',
+          },
+        }),
+      )
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T09:30:00.000Z')
       expect(JSON.parse(window.localStorage.getItem('cocktail_work_auto_backup') ?? '{}')).toEqual({
         enabled: true,
@@ -474,7 +625,7 @@ describe('work store', () => {
   })
 
   it('keeps cloud sync errors visible in store state', async () => {
-    vi.spyOn(cloudWorks, 'syncCloudWorks').mockRejectedValue(new Error('权限不足'))
+    vi.spyOn(cloudWorks, 'syncCloudAppData').mockRejectedValue(new Error('权限不足'))
     const works = useWorkStore()
     works.add({
       madeAt: '2026-08-03',

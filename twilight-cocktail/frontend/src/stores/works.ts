@@ -2,15 +2,34 @@ import { defineStore } from 'pinia'
 
 import {
   clearCloudWorksSession,
-  fetchCloudWorks,
+  fetchCloudAppData,
   getCloudWorksSession,
   loginCloudWorksAccount,
-  syncCloudWorks,
+  syncCloudAppData,
 } from '@/services/cloudWorks'
+import type { CloudAppData } from '@/services/cloudWorks'
+import { useAcademyStore } from '@/stores/academy'
+import { useDailyPickStore } from '@/stores/daily'
+import { useFavoriteStore } from '@/stores/favorites'
+import { usePantryStore } from '@/stores/pantry'
+import { getStoredStringArray, setStoredString, setStoredStringArray } from '@/utils/storage'
+import {
+  readWorkCustomOptionsSnapshot,
+  writeWorkCustomOptionsSnapshot,
+} from '@/utils/workFormOptions'
 
 const storageKey = 'cocktail_work_records'
 const autoBackupStorageKey = 'cocktail_work_auto_backup'
 const autoBackupIntervalMs = 24 * 60 * 60 * 1000
+const pantryStorageKey = 'pantry_ingredient_slugs'
+const favoritesStorageKey = 'favorite_cocktail_slugs'
+const academyStorageKey = 'academy_progress'
+const dailyPickStorageKeys = {
+  selectedSlug: 'daily_pick_slug',
+  selectedDate: 'daily_pick_date',
+  reason: 'daily_pick_reason',
+  rerollCount: 'daily_pick_reroll_count',
+} as const
 
 export type WorkRecordInput = {
   madeAt: string
@@ -261,6 +280,103 @@ const writeAutoBackupState = (state: WorkAutoBackupState) => {
   window.localStorage.setItem(autoBackupStorageKey, JSON.stringify(state))
 }
 
+const readStoreStringArray = (key: string, storeValues: readonly string[]) =>
+  storeValues.length ? [...storeValues] : getStoredStringArray(key)
+
+const createAccountBackupData = (
+  works: readonly WorkRecord[],
+  autoBackup: WorkAutoBackupState,
+): CloudAppData => {
+  const pantry = usePantryStore()
+  const favorites = useFavoriteStore()
+  const academy = useAcademyStore()
+  const daily = useDailyPickStore()
+  const customOptions = readWorkCustomOptionsSnapshot()
+
+  return {
+    version: 1,
+    app: 'twilight-mixbook',
+    type: 'app-data',
+    works: works.map((record) => normalizeRecord(record)),
+    pantry: {
+      ingredientSlugs: readStoreStringArray(pantryStorageKey, pantry.ingredientSlugs),
+    },
+    favorites: {
+      cocktailSlugs: readStoreStringArray(favoritesStorageKey, favorites.slugs),
+    },
+    academy: {
+      completedSlugs: readStoreStringArray(academyStorageKey, academy.completedSlugs),
+    },
+    dailyPick: {
+      selectedSlug: daily.selectedSlug,
+      selectedDate: daily.selectedDate,
+      reason: daily.reason,
+      rerollCount: daily.rerollCount,
+    },
+    customOptions,
+    autoBackup: { ...autoBackup },
+  }
+}
+
+const hasRestorableAccountData = (appData: CloudAppData) =>
+  appData.works.length > 0 ||
+  appData.pantry.ingredientSlugs.length > 0 ||
+  appData.favorites.cocktailSlugs.length > 0 ||
+  appData.academy.completedSlugs.length > 0 ||
+  Boolean(
+    appData.dailyPick.selectedSlug || appData.dailyPick.selectedDate || appData.dailyPick.reason,
+  ) ||
+  appData.dailyPick.rerollCount > 0 ||
+  appData.customOptions.cocktails.length > 0 ||
+  appData.customOptions.flavorLiquors.length > 0 ||
+  appData.customOptions.beverages.length > 0 ||
+  Boolean(appData.autoBackup.enabled || appData.autoBackup.lastBackupAt)
+
+const hasLocalBackupSourceData = (
+  works: readonly WorkRecord[],
+  autoBackup: WorkAutoBackupState,
+) => {
+  const appData = createAccountBackupData(works, autoBackup)
+  return (
+    appData.works.length > 0 ||
+    appData.pantry.ingredientSlugs.length > 0 ||
+    appData.favorites.cocktailSlugs.length > 0 ||
+    appData.academy.completedSlugs.length > 0 ||
+    Boolean(
+      appData.dailyPick.selectedSlug || appData.dailyPick.selectedDate || appData.dailyPick.reason,
+    ) ||
+    appData.dailyPick.rerollCount > 0 ||
+    appData.customOptions.cocktails.length > 0 ||
+    appData.customOptions.flavorLiquors.length > 0 ||
+    appData.customOptions.beverages.length > 0
+  )
+}
+
+const applyAccountBackupData = (appData: CloudAppData) => {
+  const pantry = usePantryStore()
+  const favorites = useFavoriteStore()
+  const academy = useAcademyStore()
+  const daily = useDailyPickStore()
+
+  writeRecords(appData.works)
+  setStoredStringArray(pantryStorageKey, appData.pantry.ingredientSlugs)
+  setStoredStringArray(favoritesStorageKey, appData.favorites.cocktailSlugs)
+  setStoredStringArray(academyStorageKey, appData.academy.completedSlugs)
+  setStoredString(dailyPickStorageKeys.selectedSlug, appData.dailyPick.selectedSlug)
+  setStoredString(dailyPickStorageKeys.selectedDate, appData.dailyPick.selectedDate)
+  setStoredString(dailyPickStorageKeys.reason, appData.dailyPick.reason)
+  setStoredString(dailyPickStorageKeys.rerollCount, String(appData.dailyPick.rerollCount))
+  writeWorkCustomOptionsSnapshot(appData.customOptions)
+
+  pantry.ingredientSlugs = [...appData.pantry.ingredientSlugs]
+  favorites.slugs = [...appData.favorites.cocktailSlugs]
+  academy.completedSlugs = [...appData.academy.completedSlugs]
+  daily.selectedSlug = appData.dailyPick.selectedSlug
+  daily.selectedDate = appData.dailyPick.selectedDate
+  daily.reason = appData.dailyPick.reason
+  daily.rerollCount = appData.dailyPick.rerollCount
+}
+
 export const useWorkStore = defineStore('works', {
   state: () => ({
     items: readRecords(),
@@ -341,17 +457,17 @@ export const useWorkStore = defineStore('works', {
       }
       writeAutoBackupState(this.autoBackup)
     },
-    markCloudBackupSuccess() {
+    markCloudBackupSuccess(timestamp = new Date().toISOString()) {
       this.autoBackup = {
         ...this.autoBackup,
-        lastBackupAt: new Date().toISOString(),
+        lastBackupAt: timestamp,
       }
       writeAutoBackupState(this.autoBackup)
     },
     shouldPromptAutoCloudBackup(now = new Date()) {
       if (!this.autoBackup.enabled) return false
       if (!this.cloudAccount.accountName) return false
-      if (!this.totalCount) return false
+      if (!hasLocalBackupSourceData(this.items, this.autoBackup)) return false
 
       const lastBackupTime = Date.parse(this.autoBackup.lastBackupAt)
       if (!Number.isFinite(lastBackupTime)) return true
@@ -381,18 +497,23 @@ export const useWorkStore = defineStore('works', {
       this.setCloudSync('idle', '已退出云端账号。')
     },
     async loadFromCloud(): Promise<number> {
-      this.setCloudSync('syncing', '正在从 CloudBase 云端恢复作品...')
+      this.setCloudSync('syncing', '正在从 CloudBase 云端恢复账号数据...')
       try {
-        const records = await fetchCloudWorks()
-        if (!records.length) {
-          this.setCloudSync('success', '云端目前没有作品，未恢复到本地。')
+        const appData = await fetchCloudAppData()
+        if (!hasRestorableAccountData(appData)) {
+          this.setCloudSync('success', '云端目前没有账号数据，未恢复到本地。')
           return 0
         }
 
-        writeRecords(records)
-        this.items = records
-        this.setCloudSync('success', `已从 CloudBase 云端恢复 ${records.length} 条作品。`)
-        return records.length
+        applyAccountBackupData(appData)
+        this.items = appData.works
+        this.autoBackup = appData.autoBackup
+        writeAutoBackupState(this.autoBackup)
+        this.setCloudSync(
+          'success',
+          `已从 CloudBase 云端恢复账号数据（作品 ${appData.works.length} 条）。`,
+        )
+        return appData.works.length
       } catch (error) {
         this.setCloudSync(
           'error',
@@ -402,11 +523,20 @@ export const useWorkStore = defineStore('works', {
       }
     },
     async pushAllToCloud(): Promise<number> {
-      this.setCloudSync('syncing', '正在上传作品到 CloudBase 云端...')
+      this.setCloudSync('syncing', '正在上传完整账号数据到 CloudBase 云端...')
       try {
-        await syncCloudWorks(this.items)
-        this.markCloudBackupSuccess()
-        this.setCloudSync('success', `已上传 ${this.items.length} 条作品到 CloudBase 云端。`)
+        const backupAt = new Date().toISOString()
+        await syncCloudAppData(
+          createAccountBackupData(this.items, {
+            ...this.autoBackup,
+            lastBackupAt: backupAt,
+          }),
+        )
+        this.markCloudBackupSuccess(backupAt)
+        this.setCloudSync(
+          'success',
+          `已上传完整账号数据到 CloudBase 云端（作品 ${this.items.length} 条）。`,
+        )
         return this.items.length
       } catch (error) {
         this.setCloudSync(

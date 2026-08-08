@@ -96,6 +96,148 @@ async function createAccountAndShare(api) {
   });
 }
 
+test("account backup stores and returns full app data payloads", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const appData = {
+    version: 1,
+    app: "twilight-mixbook",
+    type: "app-data",
+    works: [
+      {
+        id: "work-1",
+        madeAt: "2026-08-08",
+        cocktailSlug: "mojito",
+        cocktailName: "莫吉托",
+        photoDataUrl: "",
+        ingredientsText: "基酒：朗姆酒",
+        createdAt: "2026-08-08T10:00:00.000Z",
+      },
+    ],
+    pantry: { ingredientSlugs: ["gin", "tonic-water"] },
+    favorites: { cocktailSlugs: ["mojito"] },
+    academy: { completedSlugs: ["tools"] },
+    dailyPick: {
+      selectedSlug: "negroni",
+      selectedDate: "2026-08-08",
+      reason: "今晚适合苦甜风味。",
+      rerollCount: 2,
+    },
+    customOptions: {
+      cocktails: [],
+      flavorLiquors: ["蓝橙力娇酒"],
+      beverages: ["水溶C"],
+    },
+    autoBackup: {
+      enabled: true,
+      lastBackupAt: "2026-08-08T10:00:00.000Z",
+    },
+  };
+
+  const start = await post(api, {
+    action: "works-put-start",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    payloadType: "app-data",
+    recordCount: 1,
+    chunkCount: 1,
+  });
+  assert.equal(start.statusCode, 200);
+  assert.equal(start.body.payloadType, "app-data");
+
+  const chunk = await post(api, {
+    action: "works-put-chunk",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    uploadId: start.body.uploadId,
+    chunkIndex: 0,
+    payloadType: "app-data",
+    payloadText: JSON.stringify(appData),
+  });
+  assert.equal(chunk.statusCode, 200);
+
+  const commit = await post(api, {
+    action: "works-put-commit",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    uploadId: start.body.uploadId,
+    accountName: "mix",
+    payloadType: "app-data",
+    recordCount: 1,
+    chunkCount: 1,
+  });
+  assert.equal(commit.statusCode, 200);
+
+  const restored = await post(api, {
+    action: "works-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+
+  assert.equal(restored.statusCode, 200);
+  assert.equal(restored.body.payload.type, "app-data");
+  assert.equal(restored.body.payload.works.length, 1);
+  assert.deepEqual(restored.body.payload.pantry.ingredientSlugs, ["gin", "tonic-water"]);
+  assert.deepEqual(restored.body.payload.customOptions.beverages, ["水溶C"]);
+  assert.equal(restored.body.payload.autoBackup.enabled, true);
+});
+
+test("legacy work-record chunk backups still restore as work records", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const legacyPayload = {
+    version: 1,
+    app: "twilight-mixbook",
+    type: "work-records",
+    records: [{ id: "legacy-work", cocktailName: "旧作品" }],
+  };
+  const start = await post(api, {
+    action: "works-put-start",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    recordCount: 1,
+    chunkCount: 1,
+  });
+  await post(api, {
+    action: "works-put-chunk",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    uploadId: start.body.uploadId,
+    chunkIndex: 0,
+    payloadText: JSON.stringify(legacyPayload),
+  });
+  await post(api, {
+    action: "works-put-commit",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    uploadId: start.body.uploadId,
+    recordCount: 1,
+    chunkCount: 1,
+  });
+
+  const restored = await post(api, {
+    action: "works-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+
+  assert.equal(restored.body.payload.type, "work-records");
+  assert.equal(restored.body.payload.records[0].id, "legacy-work");
+});
+
 test("drink request share link accepts one bounded no-photo request", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);
