@@ -366,7 +366,10 @@ describe('work store', () => {
     const count = await works.loadFromCloud()
 
     expect(count).toBe(1)
-    expect(works.items).toEqual([cloudRecord])
+    expect(works.items[0]).toMatchObject({
+      ...cloudRecord,
+      updatedAt: '2026-08-03T10:00:00.000Z',
+    })
     expect(pantry.ingredientSlugs).toEqual(['gin', 'tonic-water'])
     expect(favorites.slugs).toEqual(['mojito'])
     expect(academy.completedSlugs).toEqual(['tools'])
@@ -387,9 +390,12 @@ describe('work store', () => {
       status: 'success',
       message: '已从 CloudBase 云端恢复账号数据（作品 1 条）。',
     })
-    expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')).toEqual([
-      cloudRecord,
-    ])
+    expect(
+      (JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]') as unknown[])[0],
+    ).toMatchObject({
+      ...cloudRecord,
+      updatedAt: '2026-08-03T10:00:00.000Z',
+    })
   })
 
   it('does not clear local records when cloud restore finds no account data', async () => {
@@ -428,8 +434,59 @@ describe('work store', () => {
     })
   })
 
-  it('pushes full local account data to cloud', async () => {
-    const push = vi.spyOn(cloudWorks, 'syncCloudAppData').mockResolvedValue(undefined)
+  it('keeps existing local photos when restoring lightweight cloud metadata', async () => {
+    const works = useWorkStore()
+    const local = works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '带照片作品',
+      photoDataUrl: 'data:image/jpeg;base64,local-photo',
+      ingredientsText: '饮料：苏打水',
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudAppData').mockResolvedValue({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'app-data',
+      works: [
+        {
+          ...local,
+          cocktailName: '云端改名作品',
+          photoDataUrl: '',
+          updatedAt: '2026-08-04T10:00:00.000Z',
+        },
+      ],
+      pantry: { ingredientSlugs: [] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: [] },
+      dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    })
+
+    await works.loadFromCloud()
+
+    expect(works.items[0]).toMatchObject({
+      id: local.id,
+      cocktailName: '云端改名作品',
+      photoDataUrl: 'data:image/jpeg;base64,local-photo',
+    })
+  })
+
+  it('pushes lightweight metadata changes to cloud without photos', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      }),
+    )
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
     const works = useWorkStore()
     const pantry = usePantryStore()
     const favorites = useFavoriteStore()
@@ -467,7 +524,7 @@ describe('work store', () => {
       madeAt: '2026-08-03',
       cocktailSlug: '',
       cocktailName: '待迁移作品',
-      photoDataUrl: '',
+      photoDataUrl: 'data:image/jpeg;base64,large-photo',
       ingredientsText: '饮料：苏打水',
       rating: 0,
       mood: '',
@@ -480,12 +537,18 @@ describe('work store', () => {
     expect(count).toBe(1)
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '已上传完整账号数据到 CloudBase 云端（作品 1 条）。',
+      message: '已轻量同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，不含照片）。',
     })
     expect(push).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'app-data',
-        works: works.items,
+        type: 'metadata-patch',
+        worksChanged: [
+          expect.objectContaining({
+            cocktailName: '待迁移作品',
+            photoDataUrl: '',
+          }),
+        ],
+        worksDeleted: [],
         pantry: { ingredientSlugs: ['gin'] },
         favorites: { cocktailSlugs: ['mojito'] },
         academy: { completedSlugs: ['tools'] },
@@ -504,6 +567,61 @@ describe('work store', () => {
         }),
       }),
     )
+    expect(JSON.stringify(push.mock.calls[0][0])).not.toContain('large-photo')
+  })
+
+  it('only sends changed and deleted work metadata after the first lightweight sync', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-05T00:00:00.000Z',
+      }),
+    )
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
+    const works = useWorkStore()
+    const first = works.add({
+      madeAt: '2026-08-03',
+      cocktailSlug: '',
+      cocktailName: '第一杯',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const second = works.add({
+      madeAt: '2026-08-04',
+      cocktailSlug: '',
+      cocktailName: '第二杯',
+      photoDataUrl: '',
+      ingredientsText: '饮料：汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    await works.pushAllToCloud()
+    push.mockClear()
+    works.update(second.id, {
+      ...second,
+      cocktailName: '第二杯改良',
+      photoDataUrl: 'data:image/jpeg;base64,next-photo',
+    })
+    works.remove(first.id)
+    await works.pushAllToCloud()
+
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push.mock.calls[0][0]).toMatchObject({
+      type: 'metadata-patch',
+      worksChanged: [expect.objectContaining({ id: second.id, cocktailName: '第二杯改良' })],
+      worksDeleted: [expect.objectContaining({ id: first.id })],
+    })
+    expect(JSON.stringify(push.mock.calls[0][0])).not.toContain('next-photo')
   })
 
   it('persists automatic cloud backup settings', () => {
@@ -588,7 +706,7 @@ describe('work store', () => {
   it('records last successful cloud backup time after pushing to cloud', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T09:30:00.000Z'))
-    const push = vi.spyOn(cloudWorks, 'syncCloudAppData').mockResolvedValue(undefined)
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
     const works = useWorkStore()
     works.setAutoBackupEnabled(true)
     works.add({
@@ -625,7 +743,7 @@ describe('work store', () => {
   })
 
   it('keeps cloud sync errors visible in store state', async () => {
-    vi.spyOn(cloudWorks, 'syncCloudAppData').mockRejectedValue(new Error('权限不足'))
+    vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockRejectedValue(new Error('权限不足'))
     const works = useWorkStore()
     works.add({
       madeAt: '2026-08-03',

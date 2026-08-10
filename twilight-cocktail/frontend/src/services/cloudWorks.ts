@@ -65,6 +65,26 @@ export type CloudAppData = {
   }
 }
 
+export type CloudDeletedWork = {
+  id: string
+  deletedAt: string
+}
+
+export type CloudMetadataPatch = {
+  version: 1
+  app: 'twilight-mixbook'
+  type: 'metadata-patch'
+  changedAt: string
+  worksChanged: WorkRecord[]
+  worksDeleted: CloudDeletedWork[]
+  pantry: CloudAppData['pantry']
+  favorites: CloudAppData['favorites']
+  academy: CloudAppData['academy']
+  dailyPick: CloudAppData['dailyPick']
+  customOptions: CloudAppData['customOptions']
+  autoBackup: CloudAppData['autoBackup']
+}
+
 type CloudWorksResponse = {
   ok?: boolean
   status?: string
@@ -155,6 +175,16 @@ export const createEmptyCloudAppData = (): CloudAppData => ({
 })
 
 const createAppDataPayload = (appData: CloudAppData): CloudAppData => normalizeCloudAppData(appData)
+
+const createMetadataRecord = (record: WorkRecord): WorkRecord => ({
+  ...record,
+  photoDataUrl: '',
+})
+
+const createMetadataPatchPayload = (patch: CloudMetadataPatch): CloudMetadataPatch => ({
+  ...patch,
+  worksChanged: patch.worksChanged.map(createMetadataRecord),
+})
 
 const byteLength = (value: string) => new Blob([value]).size
 
@@ -547,6 +577,21 @@ export const syncCloudAppData = async (appData: CloudAppData) => {
     recordCount: payload.works.length,
     chunkCount: chunks.length,
   })
+}
+
+export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
+  const session = getRequiredCloudSession()
+  const result = await postCloudWorksAction({
+    action: 'metadata-patch',
+    accountName: session.accountName,
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    patch: createMetadataPatchPayload(patch),
+  })
+
+  if (result.status !== 'metadata_saved') {
+    throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
+  }
 }
 
 export const createCloudWorkDocument = (

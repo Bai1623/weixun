@@ -231,6 +231,79 @@ function buildAppDataPayload(payload) {
   };
 }
 
+function safeMetadataRecord(record) {
+  const source = record && typeof record === "object" ? record : {};
+  const createdAt = safeString(source.createdAt, 40);
+  return {
+    id: safeString(source.id, 128),
+    madeAt: safeString(source.madeAt, 40),
+    cocktailSlug: safeString(source.cocktailSlug, 120),
+    cocktailName: safeString(source.cocktailName, 120),
+    photoDataUrl: "",
+    ingredientsText: safeString(source.ingredientsText, 1200),
+    ingredientGroups: source.ingredientGroups ? safeIngredientGroups(source.ingredientGroups) : undefined,
+    rating: Math.max(0, Math.min(5, safeNumber(source.rating, 0))),
+    mood: safeString(source.mood, 120),
+    selfReview: safeString(source.selfReview, 1200),
+    notes: safeString(source.notes, 1200),
+    createdAt,
+    updatedAt: safeString(source.updatedAt, 40) || createdAt,
+  };
+}
+
+function safeMetadataChangedRecords(records) {
+  if (!Array.isArray(records)) return [];
+  return records.map(safeMetadataRecord).filter((record) => record.id && record.createdAt).slice(0, MAX_RECORDS);
+}
+
+function safeMetadataDeletedRecords(records) {
+  if (!Array.isArray(records)) return [];
+  return records
+    .map((record) => {
+      const source = record && typeof record === "object" ? record : {};
+      return {
+        id: safeString(source.id, 128),
+        deletedAt: safeString(source.deletedAt, 40),
+      };
+    })
+    .filter((record) => record.id && record.deletedAt)
+    .slice(0, MAX_RECORDS);
+}
+
+function sortMetadataWorks(works) {
+  return [...works].sort((a, b) =>
+    String(b.updatedAt || b.createdAt || "").localeCompare(String(a.updatedAt || a.createdAt || "")),
+  );
+}
+
+function buildMetadataPayloadFromPatch(existingPayload, patch) {
+  const sourcePatch = patch && typeof patch === "object" ? patch : {};
+  const existing = buildAppDataPayload(existingPayload || {});
+  const worksById = new Map();
+  safeMetadataChangedRecords(existing.works).forEach((record) => {
+    worksById.set(record.id, record);
+  });
+  const deletedRecords = safeMetadataDeletedRecords(sourcePatch.worksDeleted);
+  deletedRecords.forEach((record) => {
+    worksById.delete(record.id);
+  });
+  const changedRecords = safeMetadataChangedRecords(sourcePatch.worksChanged);
+  changedRecords.forEach((record) => {
+    worksById.set(record.id, record);
+  });
+
+  return buildAppDataPayload({
+    ...existing,
+    works: sortMetadataWorks(Array.from(worksById.values())),
+    pantry: sourcePatch.pantry,
+    favorites: sourcePatch.favorites,
+    academy: sourcePatch.academy,
+    dailyPick: sourcePatch.dailyPick,
+    customOptions: sourcePatch.customOptions,
+    autoBackup: sourcePatch.autoBackup,
+  });
+}
+
 function buildAccountPayload(payload, payloadType = "") {
   if (payloadType === "app-data" || payload?.type === "app-data") {
     return buildAppDataPayload(payload);
@@ -240,6 +313,11 @@ function buildAccountPayload(payload, payloadType = "") {
 
 function payloadRecordCount(payload) {
   return safeRecords(payload).length;
+}
+
+function accountRecordCount(doc) {
+  if (doc?.metadataUpdatedAt) return Number(doc?.metadataRecordCount || 0);
+  return Number(doc?.recordCount || payloadRecordCount(doc?.payload));
 }
 
 async function assertAccountPassword(accountNameKey, passwordVerifier) {
@@ -386,7 +464,7 @@ exports.main = async (event = {}) => {
         ok: true,
         status: "matched",
         accountName: doc.accountName || "",
-        recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
+        recordCount: accountRecordCount(doc),
         backupCreatedAt: doc.backupCreatedAt || "",
       });
     }
@@ -414,6 +492,9 @@ exports.main = async (event = {}) => {
         payloadType: "app-data",
         backupCreatedAt: "",
         payload: buildAppDataPayload({}),
+        metadataPayload: buildAppDataPayload({}),
+        metadataUpdatedAt: "",
+        metadataRecordCount: 0,
       });
       return response({ ok: true, status: "created", recordCount: 0 });
     }
@@ -442,6 +523,7 @@ exports.main = async (event = {}) => {
         activeUploadId: "",
         backupCreatedAt: now,
         payload: accountPayload,
+        metadataUpdatedAt: "",
       });
       return response({ ok: true, status: doc ? "updated" : "created", recordCount: payloadRecordCount(accountPayload) });
     }
@@ -542,8 +624,47 @@ exports.main = async (event = {}) => {
         payloadType,
         backupCreatedAt: now,
         payload: payloadType === "app-data" ? buildAppDataPayload({}) : buildWorksPayload({ records: [] }),
+        metadataUpdatedAt: "",
       });
       return response({ ok: true, status: "saved", recordCount: Number(recordCount || 0), chunkCount: Number(chunkCount || 0) });
+    }
+
+    if (method === "POST" && action === "metadata-patch") {
+      const { accountNameKey, passwordVerifier, accountName = "", patch = {} } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+
+      const existingPayload =
+        account.doc?.metadataUpdatedAt && account.doc?.metadataPayload
+          ? account.doc.metadataPayload
+          : account.doc?.payload || buildAppDataPayload({});
+      const metadataPayload = buildMetadataPayloadFromPatch(existingPayload, patch);
+      const changedCount = safeMetadataChangedRecords(patch?.worksChanged).length;
+      const deletedCount = safeMetadataDeletedRecords(patch?.worksDeleted).length;
+      const now = new Date().toISOString();
+      await saveDoc(accountDocId(accountNameKey), {
+        type: "twilight-account-works",
+        accountName: accountName || account.doc?.accountName || "",
+        accountNameKey,
+        passwordVerifier,
+        recordCount: metadataPayload.works.length,
+        payloadType: account.doc?.payloadType || "app-data",
+        metadataPayload,
+        metadataUpdatedAt: now,
+        metadataRecordCount: metadataPayload.works.length,
+        backupCreatedAt: now,
+      });
+      return response({
+        ok: true,
+        status: "metadata_saved",
+        recordCount: metadataPayload.works.length,
+        changedCount,
+        deletedCount,
+        metadataUpdatedAt: now,
+      });
     }
 
     if (method === "POST" && action === "works-get") {
@@ -561,9 +682,12 @@ exports.main = async (event = {}) => {
         ok: true,
         status: "matched",
         accountName: doc.accountName || "",
-        recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
-        backupCreatedAt: doc.backupCreatedAt || "",
-        payload: await readChunkedPayload(doc),
+        recordCount: accountRecordCount(doc),
+        backupCreatedAt: doc.metadataUpdatedAt || doc.backupCreatedAt || "",
+        payload:
+          doc.metadataUpdatedAt && doc.metadataPayload
+            ? buildAppDataPayload(doc.metadataPayload)
+            : await readChunkedPayload(doc),
       });
     }
 
@@ -578,13 +702,24 @@ exports.main = async (event = {}) => {
         return response({ ok: false, status: "password_mismatch" });
       }
 
+      if (doc.metadataUpdatedAt && doc.metadataPayload) {
+        return response({
+          ok: true,
+          status: "matched",
+          accountName: doc.accountName || "",
+          recordCount: accountRecordCount(doc),
+          backupCreatedAt: doc.metadataUpdatedAt || doc.backupCreatedAt || "",
+          payload: buildAppDataPayload(doc.metadataPayload),
+        });
+      }
+
       const chunkCount = Number(doc.chunkCount || 0);
       if (!chunkCount) {
         return response({
           ok: true,
           status: "matched",
           accountName: doc.accountName || "",
-          recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
+          recordCount: accountRecordCount(doc),
           backupCreatedAt: doc.backupCreatedAt || "",
           payload: buildAccountPayload(doc.payload, doc.payloadType),
         });

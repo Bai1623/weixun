@@ -5,9 +5,9 @@ import {
   fetchCloudAppData,
   getCloudWorksSession,
   loginCloudWorksAccount,
-  syncCloudAppData,
+  syncCloudMetadataPatch,
 } from '@/services/cloudWorks'
-import type { CloudAppData } from '@/services/cloudWorks'
+import type { CloudAppData, CloudDeletedWork, CloudMetadataPatch } from '@/services/cloudWorks'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -19,7 +19,9 @@ import {
 } from '@/utils/workFormOptions'
 
 const storageKey = 'cocktail_work_records'
+const deletedRecordsStorageKey = 'cocktail_work_deleted_records'
 const autoBackupStorageKey = 'cocktail_work_auto_backup'
+const metadataSyncStorageKeyPrefix = 'twilight_cloud_metadata_sync'
 const autoBackupIntervalMs = 24 * 60 * 60 * 1000
 const pantryStorageKey = 'pantry_ingredient_slugs'
 const favoritesStorageKey = 'favorite_cocktail_slugs'
@@ -47,6 +49,7 @@ export type WorkRecordInput = {
 export type WorkRecord = WorkRecordInput & {
   id: string
   createdAt: string
+  updatedAt?: string
 }
 
 export type WorkIngredientGroups = {
@@ -91,6 +94,11 @@ const createCloudAccountState = (): WorkCloudAccountState => {
     accountName: session?.accountName ?? '',
     updatedAt: session?.updatedAt ?? '',
   }
+}
+
+const metadataSyncStorageKey = () => {
+  const session = getCloudWorksSession()
+  return session ? `${metadataSyncStorageKeyPrefix}:${session.accountNameKey}` : ''
 }
 
 const createAutoBackupState = (): WorkAutoBackupState => {
@@ -169,6 +177,7 @@ const toWorkRecord = (item: unknown): WorkRecord | undefined => {
     selfReview: typeof candidate.selfReview === 'string' ? candidate.selfReview : '',
     notes: typeof candidate.notes === 'string' ? candidate.notes : '',
     createdAt,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : createdAt,
   }
 }
 
@@ -180,6 +189,7 @@ const normalizeRecord = (record: WorkRecord): WorkRecord => ({
   mood: record.mood.trim(),
   selfReview: record.selfReview.trim(),
   notes: record.notes.trim(),
+  updatedAt: record.updatedAt || record.createdAt,
 })
 
 const readRecords = (): WorkRecord[] => {
@@ -276,6 +286,39 @@ const writeRecords = (records: WorkRecord[]) => {
   window.localStorage.setItem(storageKey, JSON.stringify(records))
 }
 
+const readDeletedRecords = (): CloudDeletedWork[] => {
+  const value = window.localStorage.getItem(deletedRecordsStorageKey)
+  if (!value) return []
+
+  try {
+    const parsed: unknown = JSON.parse(value)
+    if (!Array.isArray(parsed)) return []
+    return parsed.flatMap((item) => {
+      if (!item || typeof item !== 'object') return []
+      const candidate = item as Partial<CloudDeletedWork>
+      return typeof candidate.id === 'string' && typeof candidate.deletedAt === 'string'
+        ? [{ id: candidate.id, deletedAt: candidate.deletedAt }]
+        : []
+    })
+  } catch {
+    return []
+  }
+}
+
+const writeDeletedRecords = (records: CloudDeletedWork[]) => {
+  window.localStorage.setItem(deletedRecordsStorageKey, JSON.stringify(records))
+}
+
+const readLastMetadataSyncAt = () => {
+  const key = metadataSyncStorageKey()
+  return key ? window.localStorage.getItem(key) || '' : ''
+}
+
+const writeLastMetadataSyncAt = (timestamp: string) => {
+  const key = metadataSyncStorageKey()
+  if (key) window.localStorage.setItem(key, timestamp)
+}
+
 const writeAutoBackupState = (state: WorkAutoBackupState) => {
   window.localStorage.setItem(autoBackupStorageKey, JSON.stringify(state))
 }
@@ -318,6 +361,41 @@ const createAccountBackupData = (
   }
 }
 
+const createMetadataRecord = (record: WorkRecord): WorkRecord => ({
+  ...normalizeRecord(record),
+  photoDataUrl: '',
+})
+
+const createAccountMetadataPatch = (
+  works: readonly WorkRecord[],
+  autoBackup: WorkAutoBackupState,
+  changedAt: string,
+): CloudMetadataPatch => {
+  const appData = createAccountBackupData(works, autoBackup)
+  const lastSyncedAt = readLastMetadataSyncAt()
+  const worksChanged = lastSyncedAt
+    ? appData.works.filter((record) => (record.updatedAt || record.createdAt) > lastSyncedAt)
+    : appData.works
+  const worksDeleted = readDeletedRecords().filter(
+    (record) => !lastSyncedAt || record.deletedAt > lastSyncedAt,
+  )
+
+  return {
+    version: 1,
+    app: 'twilight-mixbook',
+    type: 'metadata-patch',
+    changedAt,
+    worksChanged: worksChanged.map(createMetadataRecord),
+    worksDeleted,
+    pantry: appData.pantry,
+    favorites: appData.favorites,
+    academy: appData.academy,
+    dailyPick: appData.dailyPick,
+    customOptions: appData.customOptions,
+    autoBackup: appData.autoBackup,
+  }
+}
+
 const hasRestorableAccountData = (appData: CloudAppData) =>
   appData.works.length > 0 ||
   appData.pantry.ingredientSlugs.length > 0 ||
@@ -357,8 +435,15 @@ const applyAccountBackupData = (appData: CloudAppData) => {
   const favorites = useFavoriteStore()
   const academy = useAcademyStore()
   const daily = useDailyPickStore()
+  const localPhotosById = new Map(readRecords().map((record) => [record.id, record.photoDataUrl]))
+  const restoredWorks = appData.works.map((record) =>
+    normalizeRecord({
+      ...record,
+      photoDataUrl: record.photoDataUrl || localPhotosById.get(record.id) || '',
+    }),
+  )
 
-  writeRecords(appData.works)
+  writeRecords(restoredWorks)
   setStoredStringArray(pantryStorageKey, appData.pantry.ingredientSlugs)
   setStoredStringArray(favoritesStorageKey, appData.favorites.cocktailSlugs)
   setStoredStringArray(academyStorageKey, appData.academy.completedSlugs)
@@ -399,12 +484,14 @@ export const useWorkStore = defineStore('works', {
   },
   actions: {
     add(input: WorkRecordInput): WorkRecord {
+      const createdAt = new Date().toISOString()
       const record: WorkRecord = {
         ...input,
         ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
         ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
         id: createId(),
-        createdAt: new Date().toISOString(),
+        createdAt,
+        updatedAt: createdAt,
       }
       const nextItems = [record, ...this.items]
       writeRecords(nextItems)
@@ -413,6 +500,9 @@ export const useWorkStore = defineStore('works', {
     },
     remove(id: string) {
       const nextItems = this.items.filter((item) => item.id !== id)
+      const deletedAt = new Date().toISOString()
+      const deletedRecords = readDeletedRecords().filter((record) => record.id !== id)
+      writeDeletedRecords([{ id, deletedAt }, ...deletedRecords])
       writeRecords(nextItems)
       this.items = nextItems
     },
@@ -425,6 +515,7 @@ export const useWorkStore = defineStore('works', {
         ...input,
         ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
         ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
+        updatedAt: new Date().toISOString(),
       }
       const nextItems = this.items.map((item) => (item.id === id ? record : item))
       writeRecords(nextItems)
@@ -506,7 +597,7 @@ export const useWorkStore = defineStore('works', {
         }
 
         applyAccountBackupData(appData)
-        this.items = appData.works
+        this.items = readRecords()
         this.autoBackup = appData.autoBackup
         writeAutoBackupState(this.autoBackup)
         this.setCloudSync(
@@ -523,19 +614,24 @@ export const useWorkStore = defineStore('works', {
       }
     },
     async pushAllToCloud(): Promise<number> {
-      this.setCloudSync('syncing', '正在上传完整账号数据到 CloudBase 云端...')
+      this.setCloudSync('syncing', '正在轻量同步账号数据到 CloudBase 云端...')
       try {
         const backupAt = new Date().toISOString()
-        await syncCloudAppData(
-          createAccountBackupData(this.items, {
+        const patch = createAccountMetadataPatch(
+          this.items,
+          {
             ...this.autoBackup,
             lastBackupAt: backupAt,
-          }),
+          },
+          backupAt,
         )
+        await syncCloudMetadataPatch(patch)
+        writeLastMetadataSyncAt(backupAt)
+        writeDeletedRecords(readDeletedRecords().filter((record) => record.deletedAt > backupAt))
         this.markCloudBackupSuccess(backupAt)
         this.setCloudSync(
           'success',
-          `已上传完整账号数据到 CloudBase 云端（作品 ${this.items.length} 条）。`,
+          `已轻量同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，不含照片）。`,
         )
         return this.items.length
       } catch (error) {

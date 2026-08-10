@@ -279,7 +279,7 @@ describe('WorksPage', () => {
   it('prompts and uploads automatically when the last cloud backup is older than one day', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T10:00:00.000Z'))
-    const push = vi.spyOn(cloudWorks, 'syncCloudAppData').mockResolvedValue(undefined)
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
     window.localStorage.setItem(
       'twilight_cloud_works_session',
       JSON.stringify({
@@ -324,9 +324,11 @@ describe('WorksPage', () => {
       await flushPromises()
 
       const works = useWorkStore()
-      expect(push).toHaveBeenCalledWith(expect.objectContaining({ works: works.items }))
+      expect(push).toHaveBeenCalledWith(expect.objectContaining({ worksChanged: works.items }))
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T10:00:00.000Z')
-      expect(wrapper.text()).toContain('已上传完整账号数据到 CloudBase 云端（作品 1 条）。')
+      expect(wrapper.text()).toContain(
+        '已轻量同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，不含照片）。',
+      )
     } finally {
       vi.useRealTimers()
     }

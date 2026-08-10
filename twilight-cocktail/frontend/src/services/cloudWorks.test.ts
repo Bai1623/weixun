@@ -12,6 +12,7 @@ import {
   fetchCloudWorks,
   getCloudWorksSession,
   loginCloudWorksAccount,
+  syncCloudMetadataPatch,
   syncCloudAppData,
   syncCloudWorks,
   toCloudWorkWriteData,
@@ -203,6 +204,54 @@ describe('cloud works service', () => {
     expect(fetchMock.mock.calls[1][1].body).toContain('"type":"app-data"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"payloadType":"app-data"')
     expect(restored).toEqual(appData)
+  })
+
+  it('syncs a lightweight metadata patch without photo payloads', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          status: 'metadata_saved',
+          recordCount: 1,
+          changedCount: 1,
+          deletedCount: 0,
+        }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await syncCloudMetadataPatch({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'metadata-patch',
+      changedAt: '2026-08-10T10:00:00.000Z',
+      worksChanged: [record],
+      worksDeleted: [],
+      pantry: { ingredientSlugs: ['gin'] },
+      favorites: { cocktailSlugs: ['mojito'] },
+      academy: { completedSlugs: ['tools'] },
+      dailyPick: { selectedSlug: 'negroni', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: ['蓝橙力娇酒'], beverages: ['水溶C'] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    })
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.action).toBe('metadata-patch')
+    expect(body.patch.worksChanged[0]).toMatchObject({
+      id: record.id,
+      cocktailName: record.cocktailName,
+      photoDataUrl: '',
+    })
+    expect(JSON.stringify(body)).not.toContain('data:image/jpeg;base64,abc')
   })
 
   it('fetches full account app data through bounded download chunks', async () => {

@@ -76,7 +76,7 @@
           </button>
         </div>
         <p class="mt-3 text-sm leading-6 text-muted">
-          距离上次云端备份已超过 1 天。是否现在把当前完整账号数据上传到云端？
+          距离上次云端备份已超过 1 天。是否现在轻量同步当前账号数据到云端？
         </p>
         <div class="mt-5 grid gap-3 sm:grid-cols-2">
           <button
@@ -501,7 +501,7 @@
               <span>
                 <span class="block text-sm font-semibold text-cream">自动备份</span>
                 <span class="mt-1 block text-sm leading-6 text-muted">
-                  打开作品页时检查上次云端备份，超过 1 天会先询问再上传完整账号数据。
+                  打开作品页时检查上次云端备份，超过 1 天会先询问再轻量同步账号数据。
                 </span>
               </span>
               <input
@@ -619,7 +619,7 @@
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">
-              上传和恢复会操作当前云端账号的完整本地数据：作品、酒柜、收藏、学院进度、每日酒单和自定义选项。
+              上传会优先轻量同步账号数据：作品文字、酒柜、收藏、学院进度、每日酒单和自定义选项；照片暂不包含在轻量同步里。
             </div>
             <div class="flex flex-wrap gap-3">
               <button

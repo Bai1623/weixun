@@ -295,6 +295,118 @@ test("account backup can be restored through bounded download chunks", async () 
   assert.equal(restored.works[0].photoDataUrl, appData.works[0].photoDataUrl);
 });
 
+test("metadata patches merge lightweight work changes and deletions", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+
+  const firstPatch = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    patch: {
+      version: 1,
+      app: "twilight-mixbook",
+      type: "metadata-patch",
+      changedAt: "2026-08-10T10:00:00.000Z",
+      worksChanged: [
+        {
+          id: "work-1",
+          madeAt: "2026-08-09",
+          cocktailSlug: "",
+          cocktailName: "第一杯",
+          photoDataUrl: "data:image/jpeg;base64,should-not-store",
+          ingredientsText: "饮料：苏打水",
+          rating: 0,
+          mood: "",
+          selfReview: "",
+          notes: "",
+          createdAt: "2026-08-09T10:00:00.000Z",
+          updatedAt: "2026-08-09T10:00:00.000Z",
+        },
+        {
+          id: "work-2",
+          madeAt: "2026-08-10",
+          cocktailSlug: "",
+          cocktailName: "第二杯",
+          photoDataUrl: "",
+          ingredientsText: "饮料：汤力水",
+          rating: 0,
+          mood: "",
+          selfReview: "",
+          notes: "",
+          createdAt: "2026-08-10T10:00:00.000Z",
+          updatedAt: "2026-08-10T10:00:00.000Z",
+        },
+      ],
+      worksDeleted: [],
+      pantry: { ingredientSlugs: ["gin"] },
+      favorites: { cocktailSlugs: ["mojito"] },
+      academy: { completedSlugs: ["tools"] },
+      dailyPick: { selectedSlug: "", selectedDate: "", reason: "", rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: ["水溶C"] },
+      autoBackup: { enabled: false, lastBackupAt: "2026-08-10T10:00:00.000Z" },
+    },
+  });
+
+  const secondPatch = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    patch: {
+      version: 1,
+      app: "twilight-mixbook",
+      type: "metadata-patch",
+      changedAt: "2026-08-10T11:00:00.000Z",
+      worksChanged: [
+        {
+          id: "work-2",
+          madeAt: "2026-08-10",
+          cocktailSlug: "",
+          cocktailName: "第二杯改良",
+          photoDataUrl: "",
+          ingredientsText: "饮料：汤力水",
+          rating: 5,
+          mood: "清爽",
+          selfReview: "",
+          notes: "",
+          createdAt: "2026-08-10T10:00:00.000Z",
+          updatedAt: "2026-08-10T11:00:00.000Z",
+        },
+      ],
+      worksDeleted: [{ id: "work-1", deletedAt: "2026-08-10T11:00:00.000Z" }],
+      pantry: { ingredientSlugs: ["gin", "tonic-water"] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: ["tools"] },
+      dailyPick: { selectedSlug: "", selectedDate: "", reason: "", rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: ["水溶C"] },
+      autoBackup: { enabled: false, lastBackupAt: "2026-08-10T11:00:00.000Z" },
+    },
+  });
+  const restored = await post(api, {
+    action: "works-get-start",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+
+  assert.equal(firstPatch.body.status, "metadata_saved");
+  assert.equal(secondPatch.body.changedCount, 1);
+  assert.equal(secondPatch.body.deletedCount, 1);
+  assert.equal(restored.body.payload.type, "app-data");
+  assert.equal(restored.body.payload.works.length, 1);
+  assert.equal(restored.body.payload.works[0].id, "work-2");
+  assert.equal(restored.body.payload.works[0].cocktailName, "第二杯改良");
+  assert.equal(restored.body.payload.works[0].photoDataUrl, "");
+  assert.deepEqual(restored.body.payload.pantry.ingredientSlugs, ["gin", "tonic-water"]);
+});
+
 test("legacy work-record chunk backups still restore as work records", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);
