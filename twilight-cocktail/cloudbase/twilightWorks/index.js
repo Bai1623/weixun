@@ -347,6 +347,21 @@ async function readChunkedPayload(doc) {
   return buildWorksPayload({ records: legacyRecords });
 }
 
+async function readPayloadChunk(doc, chunkIndex) {
+  const chunkCount = Number(doc?.chunkCount || 0);
+  const index = Number(chunkIndex || 0);
+  if (!Number.isInteger(index) || index < 0 || index >= chunkCount) {
+    throw new Error("invalid_chunk_index");
+  }
+
+  const activeUploadId = doc.activeUploadId || "";
+  const chunk = activeUploadId
+    ? await getDoc(accountChunkDocId(doc.accountNameKey, activeUploadId, index)).catch(() => null)
+    : await getDoc(legacyAccountChunkDocId(doc.accountNameKey, index)).catch(() => null);
+  if (!chunk) throw new Error("missing_upload_chunk");
+  return chunk;
+}
+
 exports.main = async (event = {}) => {
   const method = event.httpMethod || event.method || event.requestContext?.http?.method || "GET";
   const body = parseBody(event.body);
@@ -549,6 +564,71 @@ exports.main = async (event = {}) => {
         recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
         backupCreatedAt: doc.backupCreatedAt || "",
         payload: await readChunkedPayload(doc),
+      });
+    }
+
+    if (method === "POST" && action === "works-get-start") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
+      if (!doc) return response({ ok: true, status: "account_not_found", payload: buildAppDataPayload({}) });
+      if (doc.passwordVerifier !== passwordVerifier) {
+        return response({ ok: false, status: "password_mismatch" });
+      }
+
+      const chunkCount = Number(doc.chunkCount || 0);
+      if (!chunkCount) {
+        return response({
+          ok: true,
+          status: "matched",
+          accountName: doc.accountName || "",
+          recordCount: Number(doc.recordCount || payloadRecordCount(doc.payload)),
+          backupCreatedAt: doc.backupCreatedAt || "",
+          payload: buildAccountPayload(doc.payload, doc.payloadType),
+        });
+      }
+
+      return response({
+        ok: true,
+        status: "chunked",
+        accountName: doc.accountName || "",
+        recordCount: Number(doc.recordCount || 0),
+        backupCreatedAt: doc.backupCreatedAt || "",
+        payloadType: doc.payloadType || "work-records",
+        chunkCount,
+      });
+    }
+
+    if (method === "POST" && action === "works-get-chunk") {
+      const { accountNameKey, passwordVerifier, chunkIndex = 0 } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
+      if (!doc) return response({ error: "account_not_found" }, 404);
+      if (doc.passwordVerifier !== passwordVerifier) {
+        return response({ ok: false, status: "password_mismatch" });
+      }
+
+      const chunk = await readPayloadChunk(doc, chunkIndex);
+      if (typeof chunk.payloadText === "string") {
+        return response({
+          ok: true,
+          status: "chunk",
+          chunkIndex: Number(chunk.chunkIndex || chunkIndex),
+          payloadType: chunk.payloadType || doc.payloadType || "",
+          payloadText: chunk.payloadText,
+        });
+      }
+
+      return response({
+        ok: true,
+        status: "chunk",
+        chunkIndex: Number(chunk.chunkIndex || chunkIndex),
+        payloadType: chunk.payloadType || doc.payloadType || "",
+        payload: chunk.payload,
       });
     }
 

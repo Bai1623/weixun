@@ -130,7 +130,7 @@ describe('cloud works service', () => {
     expect(fetchMock.mock.calls[1][1].body).toContain('"payloadText"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"action":"works-put-commit"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"uploadId":"up-1"')
-    expect(fetchMock.mock.calls[3][1].body).toContain('"action":"works-get"')
+    expect(fetchMock.mock.calls[3][1].body).toContain('"action":"works-get-start"')
     expect(records).toEqual([record])
   })
 
@@ -202,6 +202,82 @@ describe('cloud works service', () => {
     expect(fetchMock.mock.calls[0][1].body).toContain('"payloadType":"app-data"')
     expect(fetchMock.mock.calls[1][1].body).toContain('"type":"app-data"')
     expect(fetchMock.mock.calls[2][1].body).toContain('"payloadType":"app-data"')
+    expect(restored).toEqual(appData)
+  })
+
+  it('fetches full account app data through bounded download chunks', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    const appData = {
+      version: 1 as const,
+      app: 'twilight-mixbook' as const,
+      type: 'app-data' as const,
+      works: [
+        {
+          ...record,
+          id: 'large-cloud-work',
+          photoDataUrl: `data:image/jpeg;base64,${'a'.repeat(2000)}`,
+        },
+      ],
+      pantry: { ingredientSlugs: ['gin'] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: [] },
+      dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    }
+    const payloadText = JSON.stringify(appData)
+    const firstChunk = payloadText.slice(0, 1200)
+    const secondChunk = payloadText.slice(1200)
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'chunked',
+            chunkCount: 2,
+            recordCount: 1,
+            payloadType: 'app-data',
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'chunk',
+            chunkIndex: 0,
+            payloadText: firstChunk,
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'chunk',
+            chunkIndex: 1,
+            payloadText: secondChunk,
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const restored = await fetchCloudAppData()
+
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"works-get-start"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-get-chunk"')
+    expect(fetchMock.mock.calls[1][1].body).toContain('"chunkIndex":0')
+    expect(fetchMock.mock.calls[2][1].body).toContain('"chunkIndex":1')
     expect(restored).toEqual(appData)
   })
 
@@ -290,6 +366,23 @@ describe('cloud works service', () => {
 
   it('requires cloud account login before syncing records', async () => {
     await expect(syncCloudWorks([record])).rejects.toThrow('请先在作品分享里登录云端账号。')
+  })
+
+  it('uses neutral sync wording when the cloud function cannot be reached', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-03T12:00:00.000Z',
+      }),
+    )
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(fetchCloudAppData()).rejects.toThrow(
+      '无法连接云函数。若登录正常但同步失败，请重新部署新版 twilightWorks 云函数后再试。',
+    )
   })
 
   it('clears the saved cloud session', async () => {

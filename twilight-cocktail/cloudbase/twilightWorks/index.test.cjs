@@ -189,6 +189,112 @@ test("account backup stores and returns full app data payloads", async () => {
   assert.equal(restored.body.payload.autoBackup.enabled, true);
 });
 
+test("account backup can be restored through bounded download chunks", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const appData = {
+    version: 1,
+    app: "twilight-mixbook",
+    type: "app-data",
+    works: [
+      {
+        id: "large-work",
+        madeAt: "2026-08-10",
+        cocktailSlug: "",
+        cocktailName: "带照片作品",
+        photoDataUrl: `data:image/jpeg;base64,${"a".repeat(2000)}`,
+        ingredientsText: "饮料：葡萄味气泡水",
+        createdAt: "2026-08-10T10:00:00.000Z",
+      },
+    ],
+    pantry: { ingredientSlugs: ["gin"] },
+    favorites: { cocktailSlugs: [] },
+    academy: { completedSlugs: [] },
+    dailyPick: {
+      selectedSlug: "",
+      selectedDate: "",
+      reason: "",
+      rerollCount: 0,
+    },
+    customOptions: {
+      cocktails: [],
+      flavorLiquors: [],
+      beverages: [],
+    },
+    autoBackup: {
+      enabled: false,
+      lastBackupAt: "",
+    },
+  };
+  const payloadText = JSON.stringify(appData);
+  const chunks = [payloadText.slice(0, 1200), payloadText.slice(1200)];
+
+  const start = await post(api, {
+    action: "works-put-start",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    payloadType: "app-data",
+    recordCount: 1,
+    chunkCount: chunks.length,
+  });
+  for (const [index, payloadText] of chunks.entries()) {
+    await post(api, {
+      action: "works-put-chunk",
+      accountNameKey: validKey,
+      passwordVerifier: validPassword,
+      uploadId: start.body.uploadId,
+      chunkIndex: index,
+      payloadType: "app-data",
+      payloadText,
+    });
+  }
+  await post(api, {
+    action: "works-put-commit",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    uploadId: start.body.uploadId,
+    accountName: "mix",
+    payloadType: "app-data",
+    recordCount: 1,
+    chunkCount: chunks.length,
+  });
+
+  const download = await post(api, {
+    action: "works-get-start",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  const firstChunk = await post(api, {
+    action: "works-get-chunk",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    chunkIndex: 0,
+  });
+  const secondChunk = await post(api, {
+    action: "works-get-chunk",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    chunkIndex: 1,
+  });
+  const restored = JSON.parse(firstChunk.body.payloadText + secondChunk.body.payloadText);
+
+  assert.equal(download.statusCode, 200);
+  assert.equal(download.body.status, "chunked");
+  assert.equal(download.body.chunkCount, 2);
+  assert.equal(download.body.payload, undefined);
+  assert.equal(firstChunk.body.chunkIndex, 0);
+  assert.equal(secondChunk.body.chunkIndex, 1);
+  assert.equal(restored.type, "app-data");
+  assert.equal(restored.works[0].photoDataUrl, appData.works[0].photoDataUrl);
+});
+
 test("legacy work-record chunk backups still restore as work records", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);

@@ -72,8 +72,12 @@ type CloudWorksResponse = {
   message?: string
   accountName?: string
   recordCount?: number
+  chunkCount?: number
+  chunkIndex?: number
   uploadId?: string
-  payload?: CloudWorksPayload
+  payload?: unknown
+  payloadText?: string
+  payloadType?: string
 }
 
 type CloudWorkDocument = {
@@ -236,7 +240,7 @@ const postCloudWorksAction = async (body: Record<string, unknown>): Promise<Clou
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        '无法连接云函数。若登录正常但上传失败，请重新部署新版 twilightWorks 云函数后再试。',
+        '无法连接云函数。若登录正常但同步失败，请重新部署新版 twilightWorks 云函数后再试。',
       )
     }
     throw error
@@ -394,14 +398,75 @@ export const normalizeCloudAppData = (payload: unknown): CloudAppData => {
   }
 }
 
-export const fetchCloudAppData = async () => {
-  const session = getRequiredCloudSession()
+const fetchLegacyCloudAppData = async (session: CloudWorksSession) => {
   const result = await postCloudWorksAction({
     action: 'works-get',
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
   })
   return normalizeCloudAppData(result.payload)
+}
+
+export const fetchCloudAppData = async () => {
+  const session = getRequiredCloudSession()
+  const startResult = await postCloudWorksAction({
+    action: 'works-get-start',
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+  })
+
+  if (startResult.payload !== undefined) {
+    return normalizeCloudAppData(startResult.payload)
+  }
+
+  const chunkCount =
+    typeof startResult.chunkCount === 'number' && Number.isFinite(startResult.chunkCount)
+      ? Math.max(0, Math.floor(startResult.chunkCount))
+      : 0
+
+  if (!chunkCount) {
+    return fetchLegacyCloudAppData(session)
+  }
+
+  const textChunks: string[] = []
+  const legacyPayloads: unknown[] = []
+  for (let chunkIndex = 0; chunkIndex < chunkCount; chunkIndex += 1) {
+    const chunk = await postCloudWorksAction({
+      action: 'works-get-chunk',
+      accountNameKey: session.accountNameKey,
+      passwordVerifier: session.passwordVerifier,
+      chunkIndex,
+    })
+
+    if (typeof chunk.payloadText === 'string') {
+      textChunks[chunkIndex] = chunk.payloadText
+      continue
+    }
+    if (chunk.payload !== undefined) {
+      legacyPayloads.push(chunk.payload)
+      continue
+    }
+    throw new Error('云端备份分片缺失，请重新上传后再恢复。')
+  }
+
+  if (textChunks.length) {
+    try {
+      return normalizeCloudAppData(JSON.parse(textChunks.join('')))
+    } catch {
+      throw new Error('云端备份分片内容损坏，请重新上传后再恢复。')
+    }
+  }
+
+  if (legacyPayloads.length === 1) {
+    return normalizeCloudAppData(legacyPayloads[0])
+  }
+
+  return normalizeCloudAppData({
+    version: 1,
+    app: 'twilight-mixbook',
+    type: 'work-records',
+    records: legacyPayloads.flatMap((payload) => normalizeCloudRecords(payload)),
+  })
 }
 
 export const fetchCloudWorks = async () => {
