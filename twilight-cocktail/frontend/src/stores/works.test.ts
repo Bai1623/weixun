@@ -440,6 +440,13 @@ describe('work store', () => {
       updatedAt: '2026-08-22T09:00:00.000Z',
     })
     const works = useWorkStore()
+    works.cloudSnapshot = {
+      status: 'ready',
+      relation: 'same-base',
+      checkedAt: '2026-08-22T09:30:00.000Z',
+      message: '旧账号摘要',
+      snapshot: cloudSummaryFixture({ accountName: 'current' }),
+    }
     works.add({
       madeAt: '2026-08-21',
       cocktailSlug: '',
@@ -548,6 +555,11 @@ describe('work store', () => {
     ])
     expect(works.autoBackup).toEqual(preview.appData.autoBackup)
     expect(works.cloudAccount.accountName).toBe('target')
+    expect(works.cloudSnapshot).toMatchObject({
+      status: 'idle',
+      snapshot: null,
+      message: '尚未检查云端。',
+    })
     expect(cloudWorks.getCloudWorksSession()).toEqual(preview.session)
     expect(window.localStorage.getItem('cocktail_work_deleted_records')).toBe('[]')
     expect(clearPhotos).toHaveBeenCalledOnce()
@@ -723,7 +735,7 @@ describe('work store', () => {
     })
   })
 
-  it('keeps existing local photos when restoring lightweight cloud metadata', async () => {
+  it('respects a cloud photo removal instead of reviving a legacy local preview', async () => {
     const works = useWorkStore()
     const local = works.add({
       madeAt: '2026-08-03',
@@ -761,7 +773,7 @@ describe('work store', () => {
     expect(works.items[0]).toMatchObject({
       id: local.id,
       cocktailName: '云端改名作品',
-      photoDataUrl: 'data:image/jpeg;base64,local-photo',
+      photoDataUrl: '',
     })
   })
 
@@ -898,6 +910,140 @@ describe('work store', () => {
     expect(works.items).toEqual([])
     expect(usePantryStore().ingredientSlugs).toEqual(['local-gin', 'local-rum'])
     expect(works.hasRestoreCheckpoint).toBe(false)
+  })
+
+  it('counts pending IndexedDB photos and legacy previews in the local restore summary', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    const pending = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '待上传照片',
+      photoDataUrl: '',
+      ingredientsText: '苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    await works.attachPreparedPhoto(pending.id, {
+      revision: 'pending-r1',
+      original: new File(['original'], 'pending.jpg', { type: 'image/jpeg' }),
+      preview: new Blob(['preview'], { type: 'image/jpeg' }),
+      previewDataUrl: 'data:image/jpeg;base64,pending-preview',
+    })
+    works.add({
+      madeAt: '2026-08-21',
+      cocktailSlug: '',
+      cocktailName: '旧版照片',
+      photoDataUrl: 'data:image/jpeg;base64,legacy-preview',
+      ingredientsText: '汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudAppDataSnapshot').mockResolvedValue({
+      appData: cloudWorks.createEmptyCloudAppData(),
+      snapshotId: '',
+      backupCreatedAt: '',
+    })
+
+    const preview = await works.prepareCloudRestore()
+
+    expect(preview.localSummary).toMatchObject({
+      works: 2,
+      previewPhotos: 2,
+      originalPhotos: 1,
+    })
+  })
+
+  it('does not reuse a stale local preview when the cloud replaced or removed the photo', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    const changed = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '云端换图',
+      photoDataUrl: 'data:image/jpeg;base64,old-changed',
+      photoRevision: 'old-r1',
+      photoPreviewObjectKey: 'photos/account/changed/old-r1/preview.jpg',
+      ingredientsText: '苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const removed = works.add({
+      madeAt: '2026-08-21',
+      cocktailSlug: '',
+      cocktailName: '云端删图',
+      photoDataUrl: 'data:image/jpeg;base64,old-removed',
+      ingredientsText: '汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const remoteAppData: cloudWorks.CloudAppData = {
+      ...cloudWorks.createEmptyCloudAppData(),
+      works: [
+        {
+          ...changed,
+          photoDataUrl: '',
+          photoRevision: 'new-r1',
+          photoPreviewObjectKey: 'photos/account/changed/new-r1/preview.jpg',
+        },
+        {
+          ...removed,
+          photoDataUrl: '',
+          photoRevision: '',
+          photoPreviewObjectKey: '',
+          photoOriginalObjectKey: '',
+          photoOriginalName: '',
+          photoOriginalMime: '',
+          photoOriginalSize: 0,
+          photoBackupMode: 'none',
+        },
+      ],
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudAppDataSnapshot').mockResolvedValue({
+      appData: remoteAppData,
+      snapshotId: 'snapshot-photo',
+      backupCreatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(
+      cloudSummaryFixture({ snapshotId: 'snapshot-photo' }),
+    )
+    vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockResolvedValue({
+      completed: 1,
+      total: 1,
+      failedWorkIds: [changed.id],
+    })
+    vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(undefined)
+
+    const preview = await works.prepareCloudRestore()
+    await works.restorePreparedCloudData(preview)
+
+    expect(works.items.find((item) => item.id === changed.id)).toMatchObject({
+      photoRevision: 'new-r1',
+      photoDataUrl: '',
+    })
+    expect(works.items.find((item) => item.id === removed.id)).toMatchObject({
+      photoRevision: '',
+      photoPreviewObjectKey: '',
+      photoDataUrl: '',
+    })
   })
 
   it('creates a same-account restore point and can undo the complete cloud replacement', async () => {
@@ -1191,6 +1337,7 @@ describe('work store', () => {
           lastBackupAt: expect.any(String),
         }),
       }),
+      '',
     )
     expect(JSON.stringify(push.mock.calls[0][0])).not.toContain('large-photo')
   })
@@ -1235,12 +1382,14 @@ describe('work store', () => {
     const works = useWorkStore()
 
     await works.refreshCloudSnapshot()
+    works.cloudSnapshot.checkedAt = '2026-08-22T10:05:00.000Z'
     await expect(works.refreshCloudSnapshot()).rejects.toThrow('网络不可用')
 
     expect(fetchSummary).toHaveBeenCalledTimes(2)
     expect(works.cloudSnapshot).toMatchObject({
       status: 'error',
       snapshot: remote,
+      checkedAt: '2026-08-22T10:05:00.000Z',
       message: '网络不可用',
     })
   })
@@ -1494,6 +1643,7 @@ describe('work store', () => {
             lastBackupAt: '2026-08-07T09:30:00.000Z',
           },
         }),
+        '',
       )
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T09:30:00.000Z')
       expect(JSON.parse(window.localStorage.getItem('cocktail_work_auto_backup') ?? '{}')).toEqual({

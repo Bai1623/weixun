@@ -10,16 +10,23 @@ const MAX_DRINK_TEXT = {
   note: 160,
 };
 let cachedCollection = null;
+let cachedDatabase = null;
 let cachedPhotoService = null;
 const crypto = require("crypto");
 
-function getCollection() {
-  if (cachedCollection) return cachedCollection;
+function getDatabase() {
+  if (cachedDatabase) return cachedDatabase;
   const cloudbase = require("@cloudbase/node-sdk");
   const app = cloudbase.init({
     env: cloudbase.SYMBOL_CURRENT_ENV,
   });
-  cachedCollection = app.database().collection("bai");
+  cachedDatabase = app.database();
+  return cachedDatabase;
+}
+
+function getCollection() {
+  if (cachedCollection) return cachedCollection;
+  cachedCollection = getDatabase().collection("bai");
   return cachedCollection;
 }
 
@@ -109,26 +116,34 @@ function createDrinkRequestId() {
   return `drink_req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-async function getDoc(lookupKey) {
-  const result = await getCollection().where({ lookupKey }).limit(1).get();
+async function getDocFromCollection(collection, lookupKey) {
+  const result = await collection.where({ lookupKey }).limit(1).get();
   return result?.data?.[0] || null;
 }
 
-async function saveDoc(lookupKey, data) {
-  const oldDoc = await getDoc(lookupKey).catch(() => null);
+async function getDoc(lookupKey) {
+  return getDocFromCollection(getCollection(), lookupKey);
+}
+
+async function saveDocToCollection(collection, lookupKey, data, oldDoc) {
+  const existingDoc = oldDoc === undefined ? await getDocFromCollection(collection, lookupKey).catch(() => null) : oldDoc;
   const payload = {
     lookupKey,
     ...data,
     updatedAt: new Date().toISOString(),
   };
 
-  if (oldDoc?._id) {
+  if (existingDoc?._id) {
     const { _id, ...updatablePayload } = payload;
-    await getCollection().doc(oldDoc._id).update(updatablePayload);
+    await collection.doc(existingDoc._id).update(updatablePayload);
     return;
   }
 
-  await getCollection().add(payload);
+  await collection.add(payload);
+}
+
+async function saveDoc(lookupKey, data) {
+  await saveDocToCollection(getCollection(), lookupKey, data);
 }
 
 function safeRecords(payload) {
@@ -423,8 +438,8 @@ function accountPayloadSummary(payload) {
   };
 }
 
-async function assertAccountPassword(accountNameKey, passwordVerifier) {
-  const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
+async function assertAccountPassword(accountNameKey, passwordVerifier, collection = getCollection()) {
+  const doc = await getDocFromCollection(collection, accountDocId(accountNameKey)).catch(() => null);
   if (doc && doc.passwordVerifier !== passwordVerifier) {
     return { ok: false, status: "password_mismatch", doc };
   }
@@ -802,53 +817,122 @@ exports.main = async (event = {}) => {
     }
 
     if (method === "POST" && action === "metadata-patch") {
-      const { accountNameKey, passwordVerifier, accountName = "", patch = {} } = body;
+      const {
+        accountNameKey,
+        passwordVerifier,
+        accountName = "",
+        expectedSnapshotId,
+        operationId = "",
+        patch = {},
+      } = body;
       if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
       if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
 
-      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
-      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
-
-      const existingPayload =
-        account.doc?.metadataUpdatedAt && account.doc?.metadataPayload
-          ? account.doc.metadataPayload
-          : account.doc?.payload || buildAppDataPayload({});
       await validateChangedPhotoMetadata(accountNameKey, patch?.worksChanged);
-      const cleanupKeys = photoCleanupKeysFromPatch(existingPayload, patch);
-      const pendingCleanupKeys = Array.from(
-        new Set([
-          ...(Array.isArray(account.doc?.photoCleanupKeys) ? account.doc.photoCleanupKeys : []),
-          ...cleanupKeys,
-        ]),
-      ).filter(Boolean);
-      const metadataPayload = buildMetadataPayloadFromPatch(existingPayload, patch);
-      const changedCount = safeMetadataChangedRecords(patch?.worksChanged).length;
-      const deletedCount = safeMetadataDeletedRecords(patch?.worksDeleted).length;
-      const now = new Date().toISOString();
-      await saveDoc(accountDocId(accountNameKey), {
-        type: "twilight-account-works",
-        accountName: accountName || account.doc?.accountName || "",
-        accountNameKey,
-        passwordVerifier,
-        recordCount: metadataPayload.works.length,
-        payloadType: account.doc?.payloadType || "app-data",
-        metadataPayload,
-        metadataUpdatedAt: now,
-        metadataRecordCount: metadataPayload.works.length,
-        backupCreatedAt: now,
-        photoCleanupKeys: pendingCleanupKeys,
-      });
-      if (pendingCleanupKeys.length) {
-        const remainingCleanupKeys = await deletePhotoKeys(accountNameKey, pendingCleanupKeys);
+      let transactionResult = null;
+      try {
+        await getDatabase().runTransaction(async (transaction) => {
+          const collection = transaction.collection("bai");
+          const account = await assertAccountPassword(accountNameKey, passwordVerifier, collection);
+          if (!account.ok) {
+            const error = new Error("password_mismatch");
+            error.code = "password_mismatch";
+            throw error;
+          }
+
+          const currentSnapshotId = account.doc?.metadataUpdatedAt || account.doc?.backupCreatedAt || "";
+          const hasExpectedSnapshot = typeof expectedSnapshotId === "string";
+          if (hasExpectedSnapshot && currentSnapshotId !== expectedSnapshotId) {
+            if (operationId && account.doc?.lastMetadataOperationId === operationId) {
+              transactionResult = {
+                idempotent: true,
+                metadataUpdatedAt: currentSnapshotId,
+                recordCount: accountRecordCount(account.doc),
+                changedCount: Number(account.doc?.lastMetadataChangedCount || 0),
+                deletedCount: Number(account.doc?.lastMetadataDeletedCount || 0),
+                pendingCleanupKeys: [],
+              };
+              return;
+            }
+            const error = new Error("snapshot_conflict");
+            error.code = "snapshot_conflict";
+            error.snapshotId = currentSnapshotId;
+            throw error;
+          }
+
+          const existingPayload =
+            account.doc?.metadataUpdatedAt && account.doc?.metadataPayload
+              ? account.doc.metadataPayload
+              : account.doc?.payload || buildAppDataPayload({});
+          const cleanupKeys = photoCleanupKeysFromPatch(existingPayload, patch);
+          const pendingCleanupKeys = Array.from(
+            new Set([
+              ...(Array.isArray(account.doc?.photoCleanupKeys) ? account.doc.photoCleanupKeys : []),
+              ...cleanupKeys,
+            ]),
+          ).filter(Boolean);
+          const metadataPayload = buildMetadataPayloadFromPatch(existingPayload, patch);
+          const changedCount = safeMetadataChangedRecords(patch?.worksChanged).length;
+          const deletedCount = safeMetadataDeletedRecords(patch?.worksDeleted).length;
+          const now = new Date().toISOString();
+          await saveDocToCollection(
+            collection,
+            accountDocId(accountNameKey),
+            {
+              type: "twilight-account-works",
+              accountName: accountName || account.doc?.accountName || "",
+              accountNameKey,
+              passwordVerifier,
+              recordCount: metadataPayload.works.length,
+              payloadType: account.doc?.payloadType || "app-data",
+              metadataPayload,
+              metadataUpdatedAt: now,
+              metadataRecordCount: metadataPayload.works.length,
+              backupCreatedAt: now,
+              photoCleanupKeys: pendingCleanupKeys,
+              lastMetadataOperationId: operationId,
+              lastMetadataChangedCount: changedCount,
+              lastMetadataDeletedCount: deletedCount,
+            },
+            account.doc,
+          );
+          transactionResult = {
+            idempotent: false,
+            metadataUpdatedAt: now,
+            recordCount: metadataPayload.works.length,
+            changedCount,
+            deletedCount,
+            pendingCleanupKeys,
+          };
+        });
+      } catch (error) {
+        if (error?.code === "password_mismatch") {
+          return response({ ok: false, status: "password_mismatch" });
+        }
+        if (error?.code === "snapshot_conflict") {
+          return response({
+            ok: true,
+            status: "snapshot_conflict",
+            snapshotId: error.snapshotId || "",
+          });
+        }
+        throw error;
+      }
+
+      if (transactionResult?.pendingCleanupKeys.length) {
+        const remainingCleanupKeys = await deletePhotoKeys(
+          accountNameKey,
+          transactionResult.pendingCleanupKeys,
+        );
         await saveDoc(accountDocId(accountNameKey), { photoCleanupKeys: remainingCleanupKeys });
       }
       return response({
         ok: true,
         status: "metadata_saved",
-        recordCount: metadataPayload.works.length,
-        changedCount,
-        deletedCount,
-        metadataUpdatedAt: now,
+        recordCount: transactionResult?.recordCount || 0,
+        changedCount: transactionResult?.changedCount || 0,
+        deletedCount: transactionResult?.deletedCount || 0,
+        metadataUpdatedAt: transactionResult?.metadataUpdatedAt || "",
       });
     }
 
@@ -1100,7 +1184,7 @@ exports.main = async (event = {}) => {
       return response({ ok: true, status: "deleted", requestCount: nextRequests.length });
     }
 
-    return response({ name: "twilight-works-api", status: "ok" });
+    return response({ error: "unknown_action" }, 400);
   } catch (error) {
     const clientErrorCodes = new Set([
       "incomplete_photo_backup",

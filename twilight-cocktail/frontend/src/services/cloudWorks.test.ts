@@ -354,6 +354,29 @@ describe('cloud works service', () => {
     })
   })
 
+  it('rejects the legacy unknown-action response instead of treating the cloud as empty', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      }),
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'ok' }),
+      }),
+    )
+
+    await expect(fetchCloudSnapshotSummary()).rejects.toThrow(
+      '云函数不支持云端备份摘要，请先部署新版 twilightWorks 云函数后再试。',
+    )
+  })
+
   it('stages full cloud app data with the exact snapshot version', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
@@ -415,23 +438,28 @@ describe('cloud works service', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const syncResult = await syncCloudMetadataPatch({
-      version: 1,
-      app: 'twilight-mixbook',
-      type: 'metadata-patch',
-      changedAt: '2026-08-10T10:00:00.000Z',
-      worksChanged: [record],
-      worksDeleted: [],
-      pantry: { ingredientSlugs: ['gin'] },
-      favorites: { cocktailSlugs: ['mojito'] },
-      academy: { completedSlugs: ['tools'] },
-      dailyPick: { selectedSlug: 'negroni', selectedDate: '', reason: '', rerollCount: 0 },
-      customOptions: { cocktails: [], flavorLiquors: ['蓝橙力娇酒'], beverages: ['水溶C'] },
-      autoBackup: { enabled: false, lastBackupAt: '' },
-    })
+    const syncResult = await syncCloudMetadataPatch(
+      {
+        version: 1,
+        app: 'twilight-mixbook',
+        type: 'metadata-patch',
+        changedAt: '2026-08-10T10:00:00.000Z',
+        worksChanged: [record],
+        worksDeleted: [],
+        pantry: { ingredientSlugs: ['gin'] },
+        favorites: { cocktailSlugs: ['mojito'] },
+        academy: { completedSlugs: ['tools'] },
+        dailyPick: { selectedSlug: 'negroni', selectedDate: '', reason: '', rerollCount: 0 },
+        customOptions: { cocktails: [], flavorLiquors: ['蓝橙力娇酒'], beverages: ['水溶C'] },
+        autoBackup: { enabled: false, lastBackupAt: '' },
+      },
+      'snapshot-before',
+    )
 
     const body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(body.action).toBe('metadata-patch')
+    expect(body.expectedSnapshotId).toBe('snapshot-before')
+    expect(body.operationId).toBe('2026-08-10T10:00:00.000Z')
     expect(body.patch.worksChanged[0]).toMatchObject({
       id: record.id,
       cocktailName: record.cocktailName,
@@ -442,6 +470,49 @@ describe('cloud works service', () => {
       snapshotId: '2026-08-10T10:01:00.000Z',
       recordCount: 1,
     })
+  })
+
+  it('surfaces a server-side snapshot conflict without retrying the write', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T06:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          status: 'snapshot_conflict',
+          snapshotId: 'snapshot-new',
+        }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(
+      syncCloudMetadataPatch(
+        {
+          version: 1,
+          app: 'twilight-mixbook',
+          type: 'metadata-patch',
+          changedAt: '2026-08-22T06:00:00.000Z',
+          worksChanged: [],
+          worksDeleted: [],
+          pantry: { ingredientSlugs: [] },
+          favorites: { cocktailSlugs: [] },
+          academy: { completedSlugs: [] },
+          dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+          customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+          autoBackup: { enabled: false, lastBackupAt: '' },
+        },
+        'snapshot-old',
+      ),
+    ).rejects.toThrow('云端备份在上传期间发生了变化，请先恢复最新云端数据后再试。')
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 
   it('retries an idempotent metadata patch once after a temporary connection failure', async () => {

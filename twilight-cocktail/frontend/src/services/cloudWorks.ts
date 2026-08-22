@@ -101,6 +101,10 @@ export type CloudAppDataSnapshot = {
   backupCreatedAt: string
 }
 
+export class CloudSnapshotConflictError extends Error {
+  override name = 'CloudSnapshotConflictError'
+}
+
 export type CloudDeletedWork = {
   id: string
   deletedAt: string
@@ -450,6 +454,17 @@ export const fetchCloudSnapshotSummary = async (): Promise<CloudSnapshotSummary>
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
   })
+  if (
+    (result.status !== 'matched' && result.status !== 'account_not_found') ||
+    typeof result.snapshotId !== 'string' ||
+    typeof result.backupCreatedAt !== 'string' ||
+    typeof result.dataLastBackupAt !== 'string' ||
+    typeof result.recordCount !== 'number' ||
+    !result.summary ||
+    typeof result.summary !== 'object'
+  ) {
+    throw new Error('云函数不支持云端备份摘要，请先部署新版 twilightWorks 云函数后再试。')
+  }
   const summary = normalizeCloudAccountDataSummary(result.summary)
   return {
     status: result.status === 'account_not_found' ? 'account_not_found' : 'matched',
@@ -822,16 +837,26 @@ export const syncCloudAppData = async (appData: CloudAppData) => {
   })
 }
 
-export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
+export const syncCloudMetadataPatch = async (
+  patch: CloudMetadataPatch,
+  expectedSnapshotId = '',
+) => {
   const session = getRequiredCloudSession()
   const result = await postIdempotentCloudWorksAction({
     action: 'metadata-patch',
     accountName: session.accountName,
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
+    expectedSnapshotId,
+    operationId: patch.changedAt,
     patch: createMetadataPatchPayload(patch),
   })
 
+  if (result.status === 'snapshot_conflict') {
+    throw new CloudSnapshotConflictError(
+      '云端备份在上传期间发生了变化，请先恢复最新云端数据后再试。',
+    )
+  }
   if (result.status !== 'metadata_saved') {
     throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
   }

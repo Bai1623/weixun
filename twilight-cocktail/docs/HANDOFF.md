@@ -14,12 +14,12 @@
 
 - 当前代码仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`（旧 `weixun.git` 会跳转到此仓库）
 - 当前开发分支：`codex/twilight-cocktail-prototype`
-- 最近确认的源码 commit：`b806223`
+- 最近确认的功能源码 commit：部署完成后回填
 - 当前 Pages 仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`
 - 当前 Pages 分支：`gh-pages`
-- 最近确认的 Pages 分支 commit：`b19ec7c`
+- 最近确认的 Pages 分支 commit：部署完成后回填
 - 线上地址：[https://bai1623.github.io/weixun-Twilight-Mixbook/](https://bai1623.github.io/weixun-Twilight-Mixbook/)
-- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=b806223#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=b806223#/works)
+- 带缓存刷新参数的作品页：部署完成后回填
 
 ## 目录说明
 
@@ -64,10 +64,14 @@ CloudBase 环境：
 - 用户在“我的作品”里输入云端账号和密码，这是一套应用自己的轻量账号逻辑，不是腾讯云账号。
 - 登录/创建账号、上传、恢复、朋友点单都通过 `/share` HTTP 云函数路由。
 - 登录或切换账号会先读取目标账号摘要并请求确认；确认后以云端为准，整包替换本机的作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。取消时本机数据不变。
+- “我的作品”在登录状态下每次打开都会调用只读 `account-summary` 查询云端备份，也可手动重新查询；页面分别展示备份时间、作品数、预览图/原图覆盖量和其他账号数据数量。“最近操作”与云端实际状态分开展示。
+- “从云端恢复”会先下载并暂存云端数据，展示本机与云端完整数据范围；用户二次确认前不会修改本地。确认时会再次校验云端版本，若备份已变化则中止并要求重新查询。
+- 覆盖本地前会按当前云端账号保存一次本地恢复点。恢复成功后可执行一次“撤销本次恢复”；已迁移照片继续留在 IndexedDB，只有尚未迁移的旧版 Base64 照片会保留在恢复点中。
+- 每次手动或自动上传前都会重新查询云端版本。发现另一台设备已更新，或无法确认本机基于哪个云端版本时，会阻止上传，避免静默覆盖远端数据；云函数写入时还会在数据库事务内再次比较预期版本，防止“查询后、写入前”另一台设备抢先更新。
 - 最新版本上传使用 `metadata-patch`：第一次同步全部轻量元数据，之后只同步新增/编辑/删除过的作品元数据。
 - 照片二进制不会进入轻量同步包。数据库只保存 OSS 对象键；浏览器使用云函数签发的短期 PUT/GET URL 直传 OSS。
 - 新增照片先写入本机 IndexedDB，再由一次统一云同步上传；照片签名和轻量元数据遇到临时网络错误会重试一次。云端仍失败时作品保留在本机并提示稍后手动上传。
-- 同一台电脑从云端恢复时，如果云端记录没有照片，本地已有照片会被保留。
+- 完整恢复以云端照片元数据为准：只有照片版本和对象键完全一致时才复用本机缓存；云端已换图或删图时不会继续显示旧本地照片。
 - 新电脑无本地作品时，登录后会自动恢复账号数据，并默认下载全部作品预览图；支持进度、暂停、继续和失败重试。
 - 手机原图不会批量自动下载，在作品卡片上按需下载。
 - IndexedDB 保存本地照片 Blob；带云端照片版本的记录不会再把 Base64 图片写入 localStorage。
@@ -148,6 +152,8 @@ cd twilight-cocktail/cloudbase/twilightWorks
 node --test index.test.cjs
 ```
 
+2026-08-22 云端备份安全版本验证结果：前端 `18` 个测试文件、`134` 个测试通过；云函数 `14` 个测试通过；ESLint 无报错；GitHub Pages 构建通过。
+
 重新生成酒单 catalog：
 
 ```bash
@@ -187,7 +193,7 @@ tcb -e bai-d0g23uiiz96a4f50d fn deploy scfnodejshelloworld11 \
   --dir cloudbase/twilightWorks --force --install-dependency true
 ```
 
-如果前端提示“云函数不支持轻量同步”或“无法连接云函数”，优先检查：
+必须先部署云函数、再部署对应前端。新版前端会严格检查 `account-summary` 返回契约，旧云函数的未知成功响应不会被误判为空备份。如果前端提示“云函数不支持云端备份摘要”“云函数不支持轻量同步”或“无法连接云函数”，优先检查：
 
 - `scfnodejshelloworld11` 是否部署的是最新代码。
 - HTTP 网关/默认域名是否能访问。
@@ -245,7 +251,7 @@ git -C "$TMP_DIR" push origin gh-pages
 优先级中等：
 
 - 构建时有 chunk 大小提示，主要来自大酒单/详情数据，后续可拆分数据或做懒加载。
-- CloudBase 当前是单集合 `works` 存账号、备份和点单数据，个人使用够用；多人正式使用前要重新设计权限和数据模型。
+- CloudBase 当前是单集合 `bai` 存账号、备份和点单数据，个人使用够用；多人正式使用前要重新设计权限和数据模型。
 - 本地 localStorage 仍是页面即时缓存，云端是账号备份源。未来可改成云端主数据源。
 
 ## 给 Codex 的接手提示

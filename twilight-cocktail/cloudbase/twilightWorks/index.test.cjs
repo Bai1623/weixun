@@ -72,12 +72,17 @@ function loadFunction(collection, ossState = createFakeOssState()) {
   const originalLoad = Module._load;
   const patchedLoad = function patchedLoad(request, parent, isMain) {
     if (request === "@cloudbase/node-sdk") {
+      const database = {
+        collection: () => collection,
+        runTransaction: async (callback) =>
+          callback({
+            collection: () => collection,
+          }),
+      };
       return {
         SYMBOL_CURRENT_ENV: "test",
         init: () => ({
-          database: () => ({
-            collection: () => collection,
-          }),
+          database: () => database,
         }),
       };
     }
@@ -387,6 +392,105 @@ test("account summary reports cloud data and photo coverage without mutating the
   assert.equal(JSON.stringify(collection.docs), before);
   assert.equal(mismatch.body.status, "password_mismatch");
   assert.equal(mismatch.body.summary, undefined);
+});
+
+test("metadata patch atomically rejects a stale snapshot and accepts an idempotent retry", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  const work = (id, cocktailName) => ({
+    id,
+    madeAt: "2026-08-22",
+    cocktailSlug: "",
+    cocktailName,
+    photoDataUrl: "",
+    ingredientsText: "苏打水",
+    rating: 0,
+    mood: "",
+    selfReview: "",
+    notes: "",
+    createdAt: "2026-08-22T10:00:00.000Z",
+    updatedAt: "2026-08-22T10:00:00.000Z",
+  });
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+
+  const first = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    expectedSnapshotId: "",
+    operationId: "operation-first",
+    patch: metadataPatch({
+      worksChanged: [work("first", "第一杯")],
+      autoBackup: { enabled: true, lastBackupAt: "2026-08-22T10:00:00.000Z" },
+    }),
+  });
+  assert.equal(first.body.status, "metadata_saved");
+
+  const second = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    expectedSnapshotId: first.body.metadataUpdatedAt,
+    operationId: "operation-second",
+    patch: metadataPatch({
+      worksChanged: [work("second", "第二杯")],
+      autoBackup: { enabled: true, lastBackupAt: "2026-08-22T10:01:00.000Z" },
+    }),
+  });
+  assert.equal(second.body.status, "metadata_saved");
+
+  const retry = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    expectedSnapshotId: first.body.metadataUpdatedAt,
+    operationId: "operation-second",
+    patch: metadataPatch({
+      worksChanged: [work("second", "第二杯")],
+    }),
+  });
+  assert.equal(retry.body.status, "metadata_saved");
+  assert.equal(retry.body.metadataUpdatedAt, second.body.metadataUpdatedAt);
+
+  const stale = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    expectedSnapshotId: first.body.metadataUpdatedAt,
+    operationId: "operation-stale",
+    patch: metadataPatch({
+      worksChanged: [work("stale", "过期设备作品")],
+    }),
+  });
+  assert.equal(stale.body.status, "snapshot_conflict");
+  assert.equal(stale.body.snapshotId, second.body.metadataUpdatedAt);
+
+  const restored = await post(api, {
+    action: "works-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  assert.deepEqual(
+    restored.body.payload.works.map((record) => record.id),
+    ["first", "second"],
+  );
+});
+
+test("unknown actions fail instead of returning a successful compatibility response", async () => {
+  const api = loadFunction(createFakeCollection());
+  const result = await post(api, { action: "future-action" });
+
+  assert.equal(result.statusCode, 400);
+  assert.equal(result.body.error, "unknown_action");
 });
 
 test("account backup can be restored through bounded download chunks", async () => {

@@ -28,7 +28,7 @@ import {
   type PreparedWorkPhoto,
   type WorkPhotoRestoreProgress,
 } from '@/services/workPhotos'
-import { clearAllWorkPhotos, deleteWorkPhotos } from '@/services/workPhotoCache'
+import { clearAllWorkPhotos, deleteWorkPhotos, getWorkPhoto } from '@/services/workPhotoCache'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -554,6 +554,32 @@ export const summarizeAccountData = (appData: CloudAppData): CloudAccountDataSum
   customBeverages: appData.customOptions.beverages.length,
 })
 
+const summarizeLocalAccountData = async (
+  appData: CloudAppData,
+): Promise<CloudAccountDataSummary> => {
+  const summary = summarizeAccountData(appData)
+  const localPhotos = await Promise.all(
+    appData.works.map(async (record) => {
+      if (!record.photoRevision) {
+        return { preview: Boolean(record.photoDataUrl), original: false }
+      }
+      const [preview, original] = await Promise.all([
+        getWorkPhoto(record.id, record.photoRevision, 'preview').catch(() => undefined),
+        getWorkPhoto(record.id, record.photoRevision, 'original').catch(() => undefined),
+      ])
+      return {
+        preview: Boolean(record.photoDataUrl || preview),
+        original: Boolean(original),
+      }
+    }),
+  )
+  return {
+    ...summary,
+    previewPhotos: localPhotos.filter((photo) => photo.preview).length,
+    originalPhotos: localPhotos.filter((photo) => photo.original).length,
+  }
+}
+
 const hasCloudSnapshotData = (snapshot: CloudSnapshotSummary) =>
   snapshot.status === 'matched' &&
   (Boolean(snapshot.snapshotId || snapshot.dataLastBackupAt) ||
@@ -652,15 +678,23 @@ const applyAccountBackupData = (
   const favorites = useFavoriteStore()
   const academy = useAcademyStore()
   const daily = useDailyPickStore()
-  const localPhotosById = options.preserveLocalPhotos
-    ? new Map(readRecords().map((record) => [record.id, record.photoDataUrl]))
-    : new Map<string, string>()
-  const restoredWorks = appData.works.map((record) =>
-    normalizeRecord({
+  const localRecordsById = options.preserveLocalPhotos
+    ? new Map(readRecords().map((record) => [record.id, record]))
+    : new Map<string, WorkRecord>()
+  const restoredWorks = appData.works.map((record) => {
+    const localRecord = localRecordsById.get(record.id)
+    const canReuseLocalPreview = Boolean(
+      record.photoRevision &&
+      record.photoRevision === localRecord?.photoRevision &&
+      record.photoPreviewObjectKey &&
+      record.photoPreviewObjectKey === localRecord?.photoPreviewObjectKey,
+    )
+    return normalizeRecord({
       ...record,
-      photoDataUrl: record.photoDataUrl || localPhotosById.get(record.id) || '',
-    }),
-  )
+      photoDataUrl:
+        record.photoDataUrl || (canReuseLocalPreview ? localRecord?.photoDataUrl || '' : ''),
+    })
+  })
 
   writeRecords(restoredWorks)
   setStoredStringArray(pantryStorageKey, appData.pantry.ingredientSlugs)
@@ -780,13 +814,21 @@ export const useWorkStore = defineStore('works', {
       }
     },
     async refreshCloudSnapshot() {
+      const session = getCloudWorksSession()
+      const previousState =
+        this.cloudSnapshot.snapshot?.accountName === session?.accountName
+          ? this.cloudSnapshot
+          : createCloudSnapshotState()
       this.cloudSnapshot = {
-        ...this.cloudSnapshot,
+        ...previousState,
         status: 'checking',
         message: '正在检查云端备份...',
       }
       try {
         const snapshot = await fetchCloudSnapshotSummary()
+        if (getCloudWorksSession()?.accountNameKey !== session?.accountNameKey) {
+          throw new Error('云端账号已切换，本次查询结果已忽略。')
+        }
         const relation = cloudSnapshotRelation(snapshot, this.autoBackup.lastBackupAt)
         this.cloudSnapshot = {
           status: 'ready',
@@ -797,10 +839,10 @@ export const useWorkStore = defineStore('works', {
         }
         return snapshot
       } catch (error) {
+        if (getCloudWorksSession()?.accountNameKey !== session?.accountNameKey) throw error
         this.cloudSnapshot = {
-          ...this.cloudSnapshot,
+          ...previousState,
           status: 'error',
-          checkedAt: new Date().toISOString(),
           message: getErrorMessage(error, '检查云端备份失败，请稍后重试。'),
         }
         throw error
@@ -1004,6 +1046,7 @@ export const useWorkStore = defineStore('works', {
           accountName: session.accountName,
           updatedAt: session.updatedAt,
         }
+        this.cloudSnapshot = createCloudSnapshotState()
         this.restoreCheckpointAvailable = Boolean(readRestoreCheckpoint())
       } catch (error) {
         try {
@@ -1060,7 +1103,9 @@ export const useWorkStore = defineStore('works', {
           snapshotId: remote.snapshotId,
           backupCreatedAt: remote.backupCreatedAt,
           dataLastBackupAt: remote.appData.autoBackup.lastBackupAt,
-          localSummary: summarizeAccountData(createAccountBackupData(this.items, this.autoBackup)),
+          localSummary: await summarizeLocalAccountData(
+            createAccountBackupData(this.items, this.autoBackup),
+          ),
           cloudSummary: summarizeAccountData(remote.appData),
         }
         this.setCloudSync('success', '已读取云端备份详情，等待确认恢复。')
@@ -1238,7 +1283,10 @@ export const useWorkStore = defineStore('works', {
           },
           backupAt,
         )
-        const syncResult = await syncCloudMetadataPatch(patch)
+        const syncResult = await syncCloudMetadataPatch(
+          patch,
+          this.cloudSnapshot.snapshot?.snapshotId || '',
+        )
         writeLastMetadataSyncAt(backupAt)
         writeDeletedRecords(readDeletedRecords().filter((record) => record.deletedAt > backupAt))
         this.markCloudBackupSuccess(backupAt)

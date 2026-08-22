@@ -406,6 +406,9 @@ describe('WorksPage', () => {
     expect(summary.text()).toContain('15 张原图')
     expect(summary.text()).toContain('酒柜 8')
     expect(summary.text()).toContain('收藏 6')
+    expect(summary.text()).toContain('自定义酒单 2')
+    expect(summary.text()).toContain('自定义风味酒 3')
+    expect(summary.text()).toContain('自定义饮料 5')
 
     await wrapper.get('[data-testid="cloud-summary-refresh"]').trigger('click')
     await flushPromises()
@@ -483,6 +486,58 @@ describe('WorksPage', () => {
     await wrapper.get('[data-testid="cloud-restore-undo"]').trigger('click')
     await flushPromises()
     expect(undo).toHaveBeenCalledOnce()
+  })
+
+  it('shows restore conflicts inside the dialog and can reload the preview', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    vi.spyOn(works, 'refreshCloudSnapshot').mockResolvedValue(null)
+    const oldPreview = {
+      appData: cloudWorks.createEmptyCloudAppData(),
+      snapshotId: 'snapshot-old',
+      backupCreatedAt: '2026-08-22T10:00:00.000Z',
+      dataLastBackupAt: '2026-08-22T09:59:00.000Z',
+      localSummary: cloudWorks.createEmptyCloudAccountDataSummary(),
+      cloudSummary: cloudWorks.createEmptyCloudAccountDataSummary(),
+    }
+    const newPreview = {
+      ...oldPreview,
+      snapshotId: 'snapshot-new',
+      backupCreatedAt: '2026-08-22T10:01:00.000Z',
+      cloudSummary: { ...oldPreview.cloudSummary, works: 18 },
+    }
+    const prepare = vi
+      .spyOn(works, 'prepareCloudRestore')
+      .mockResolvedValueOnce(oldPreview)
+      .mockResolvedValueOnce(newPreview)
+    vi.spyOn(works, 'restorePreparedCloudData').mockRejectedValue(
+      new Error('云端备份在确认期间发生了变化，请重新检查后再恢复。'),
+    )
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="cloud-restore-start"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="cloud-restore-confirm"]').trigger('click')
+    await flushPromises()
+
+    const dialog = wrapper.get('[data-testid="cloud-restore-dialog"]')
+    expect(dialog.text()).toContain('云端备份在确认期间发生了变化')
+    expect(wrapper.find('[data-testid="cloud-restore-dialog"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="cloud-restore-refresh"]').trigger('click')
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-testid="cloud-restore-dialog"]').text()).toContain('云端 18')
+    expect(wrapper.get('[data-testid="cloud-restore-dialog"]').text()).not.toContain(
+      '云端备份在确认期间发生了变化',
+    )
   })
 
   it('previews and confirms complete local replacement before switching cloud accounts', async () => {
@@ -646,7 +701,10 @@ describe('WorksPage', () => {
       await flushPromises()
 
       const works = useWorkStore()
-      expect(push).toHaveBeenCalledWith(expect.objectContaining({ worksChanged: works.items }))
+      expect(push).toHaveBeenCalledWith(
+        expect.objectContaining({ worksChanged: works.items }),
+        'snapshot-before-upload',
+      )
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T10:00:00.000Z')
       expect(wrapper.text()).toContain(
         '已同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
@@ -697,6 +755,7 @@ describe('WorksPage', () => {
     })
     vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
     vi.spyOn(cloudDrinkRequests, 'deleteDrinkRequest').mockResolvedValue()
+    vi.spyOn(useWorkStore(), 'refreshCloudSnapshot').mockResolvedValue(null)
 
     const wrapper = mount(WorksPage)
     await flushPromises()
@@ -765,6 +824,7 @@ describe('WorksPage', () => {
     ])
     const disable = vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    vi.spyOn(useWorkStore(), 'refreshCloudSnapshot').mockResolvedValue(null)
     const wrapper = mount(WorksPage)
     await flushPromises()
 

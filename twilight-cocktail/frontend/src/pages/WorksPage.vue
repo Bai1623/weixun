@@ -210,6 +210,22 @@
         >
           将覆盖当前账号完整数据包：作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。
         </p>
+        <div
+          v-if="cloudRestoreError"
+          class="mt-3 rounded-md border border-wine/60 bg-wine/20 px-3 py-3 text-sm leading-6 text-cream"
+          role="alert"
+        >
+          <p>{{ cloudRestoreError }}</p>
+          <button
+            data-testid="cloud-restore-refresh"
+            class="mt-3 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            :disabled="isSyncingCloud"
+            @click="loadWorksFromCloud"
+          >
+            {{ isSyncingCloud ? '重新读取中' : '重新读取云端备份' }}
+          </button>
+        </div>
         <div class="mt-5 grid gap-3 sm:grid-cols-2">
           <button
             class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
@@ -631,12 +647,10 @@
               <p class="mt-2 text-sm leading-6 text-muted">
                 酒柜 {{ cloudSnapshotSummary.pantry }} · 收藏 {{ cloudSnapshotSummary.favorites }} ·
                 课程 {{ cloudSnapshotSummary.academy }} · 每日推荐
-                {{ cloudSnapshotSummary.dailyPick }} · 自定义内容
-                {{
-                  cloudSnapshotSummary.customCocktails +
-                  cloudSnapshotSummary.customFlavorLiquors +
-                  cloudSnapshotSummary.customBeverages
-                }}
+                {{ cloudSnapshotSummary.dailyPick }} · 自定义酒单
+                {{ cloudSnapshotSummary.customCocktails }} · 自定义风味酒
+                {{ cloudSnapshotSummary.customFlavorLiquors }} · 自定义饮料
+                {{ cloudSnapshotSummary.customBeverages }}
               </p>
               <p class="mt-2 text-xs leading-5 text-muted">
                 云端备份：{{
@@ -1221,6 +1235,7 @@ const pendingPhoto = ref<PreparedWorkPhoto | null>(null)
 const isPhotoRemoved = ref(false)
 const autoBackupPrompt = ref(false)
 const cloudRestorePreview = ref<CloudRestorePreview | null>(null)
+const cloudRestoreError = ref('')
 const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
@@ -1867,6 +1882,7 @@ const deleteDrinkRequestItem = async (request: DrinkRequest) => {
 
 const loadWorksFromCloud = async () => {
   shareMessage.value = ''
+  cloudRestoreError.value = ''
   if (!works.cloudAccount.accountName) {
     shareMessage.value = '请先登录云端账号。'
     return
@@ -1883,6 +1899,7 @@ const loadWorksFromCloud = async () => {
 
 const cancelCloudRestore = () => {
   cloudRestorePreview.value = null
+  cloudRestoreError.value = ''
   shareMessage.value = '已取消恢复，本地账号数据未改变。'
 }
 
@@ -1894,8 +1911,10 @@ const confirmCloudRestore = async () => {
     await works.restorePreparedCloudData(preview)
     cloudRestorePreview.value = null
     shareMessage.value = works.cloudSync.message
-  } catch {
-    shareMessage.value = works.cloudSync.message
+  } catch (error) {
+    const message = error instanceof Error ? error.message : works.cloudSync.message
+    shareMessage.value = message
+    cloudRestoreError.value = message
   } finally {
     isSyncingCloud.value = false
   }

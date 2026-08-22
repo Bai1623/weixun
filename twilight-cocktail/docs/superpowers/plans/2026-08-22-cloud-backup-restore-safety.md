@@ -229,15 +229,17 @@ Add a project-styled dialog with separate Cancel and destructive Confirm buttons
 - Consumes: all previous tasks.
 - Produces: verified CloudBase and GitHub Pages deployment on `codex/twilight-cocktail-prototype`.
 
-- [ ] **Step 1: Run all verification**
+- [x] **Step 1: Run all verification**
 
 Run the CloudBase Node tests, all Vitest tests, ESLint, `vue-tsc -b`, the GitHub Pages production build, and `git diff --check`. Expected: zero failures and no whitespace errors.
+
+Review hardening completed before deployment: server-side transactional snapshot comparison and idempotency, strict old-function response rejection, same-account snapshot isolation, photo revision-aware restore, accurate local photo counts, and in-dialog restore conflict recovery.
 
 - [ ] **Step 2: Update handoff documentation**
 
 Record the new `account-summary` action, UI behavior, conflict rule, checkpoint scope, test counts, deployed function, Pages commit, and online verification results.
 
-- [ ] **Step 3: Review the complete diff**
+- [x] **Step 3: Review the complete diff**
 
 Confirm no secrets, credentials, unrelated files, old blind restore confirmation, or “尚未同步云端” default status remain.
 
