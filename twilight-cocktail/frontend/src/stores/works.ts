@@ -8,6 +8,16 @@ import {
   syncCloudMetadataPatch,
 } from '@/services/cloudWorks'
 import type { CloudAppData, CloudDeletedWork, CloudMetadataPatch } from '@/services/cloudWorks'
+import {
+  cacheLegacyWorkPreview,
+  cachePreparedWorkPhoto,
+  getCachedWorkPreviewDataUrl,
+  restoreAllWorkPreviews,
+  uploadCachedWorkPhoto,
+  type PreparedWorkPhoto,
+  type WorkPhotoRestoreProgress,
+} from '@/services/workPhotos'
+import { deleteWorkPhotos } from '@/services/workPhotoCache'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -44,9 +54,28 @@ export type WorkRecordInput = {
   mood: string
   selfReview: string
   notes: string
+  photoOriginalObjectKey?: string
+  photoPreviewObjectKey?: string
+  photoOriginalName?: string
+  photoOriginalMime?: string
+  photoOriginalSize?: number
+  photoRevision?: string
+  photoBackupMode?: WorkPhotoBackupMode
 }
 
-export type WorkRecord = WorkRecordInput & {
+export type WorkPhotoBackupMode = 'none' | 'preview-only' | 'original-and-preview'
+
+export type WorkPhotoMetadata = {
+  photoOriginalObjectKey: string
+  photoPreviewObjectKey: string
+  photoOriginalName: string
+  photoOriginalMime: string
+  photoOriginalSize: number
+  photoRevision: string
+  photoBackupMode: WorkPhotoBackupMode
+}
+
+export type WorkRecord = Omit<WorkRecordInput, keyof WorkPhotoMetadata> & WorkPhotoMetadata & {
   id: string
   createdAt: string
   updatedAt?: string
@@ -82,11 +111,26 @@ export type WorkAutoBackupState = {
   lastBackupAt: string
 }
 
+export type WorkPhotoRestoreState = WorkPhotoRestoreProgress & {
+  status: 'idle' | 'restoring' | 'paused' | 'success' | 'error'
+  message: string
+}
+
 const createCloudSyncState = (): WorkCloudSyncState => ({
   status: 'idle',
   message: '尚未同步云端。',
   updatedAt: '',
 })
+
+const createPhotoRestoreState = (): WorkPhotoRestoreState => ({
+  status: 'idle',
+  completed: 0,
+  total: 0,
+  failedWorkIds: [],
+  message: '尚未恢复云端照片。',
+})
+
+let photoRestoreController: AbortController | undefined
 
 const createCloudAccountState = (): WorkCloudAccountState => {
   const session = getCloudWorksSession()
@@ -170,6 +214,22 @@ const toWorkRecord = (item: unknown): WorkRecord | undefined => {
     cocktailSlug: typeof candidate.cocktailSlug === 'string' ? candidate.cocktailSlug : '',
     cocktailName,
     photoDataUrl: typeof candidate.photoDataUrl === 'string' ? candidate.photoDataUrl : '',
+    photoOriginalObjectKey:
+      typeof candidate.photoOriginalObjectKey === 'string' ? candidate.photoOriginalObjectKey : '',
+    photoPreviewObjectKey:
+      typeof candidate.photoPreviewObjectKey === 'string' ? candidate.photoPreviewObjectKey : '',
+    photoOriginalName:
+      typeof candidate.photoOriginalName === 'string' ? candidate.photoOriginalName : '',
+    photoOriginalMime:
+      typeof candidate.photoOriginalMime === 'string' ? candidate.photoOriginalMime : '',
+    photoOriginalSize:
+      typeof candidate.photoOriginalSize === 'number' ? Math.max(0, candidate.photoOriginalSize) : 0,
+    photoRevision: typeof candidate.photoRevision === 'string' ? candidate.photoRevision : '',
+    photoBackupMode:
+      candidate.photoBackupMode === 'preview-only' ||
+      candidate.photoBackupMode === 'original-and-preview'
+        ? candidate.photoBackupMode
+        : 'none',
     ingredientsText,
     ingredientGroups: toIngredientGroups(candidate.ingredientGroups),
     rating: typeof candidate.rating === 'number' ? candidate.rating : 0,
@@ -468,6 +528,7 @@ export const useWorkStore = defineStore('works', {
     cloudSync: createCloudSyncState(),
     cloudAccount: createCloudAccountState(),
     autoBackup: createAutoBackupState(),
+    photoRestore: createPhotoRestoreState(),
   }),
   getters: {
     totalCount: (state) => state.items.length,
@@ -487,6 +548,13 @@ export const useWorkStore = defineStore('works', {
       const createdAt = new Date().toISOString()
       const record: WorkRecord = {
         ...input,
+        photoOriginalObjectKey: input.photoOriginalObjectKey || '',
+        photoPreviewObjectKey: input.photoPreviewObjectKey || '',
+        photoOriginalName: input.photoOriginalName || '',
+        photoOriginalMime: input.photoOriginalMime || '',
+        photoOriginalSize: Math.max(0, input.photoOriginalSize || 0),
+        photoRevision: input.photoRevision || '',
+        photoBackupMode: input.photoBackupMode || 'none',
         ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
         ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
         id: createId(),
@@ -505,6 +573,7 @@ export const useWorkStore = defineStore('works', {
       writeDeletedRecords([{ id, deletedAt }, ...deletedRecords])
       writeRecords(nextItems)
       this.items = nextItems
+      void deleteWorkPhotos(id)
     },
     update(id: string, input: WorkRecordInput): WorkRecord | undefined {
       const existing = this.items.find((item) => item.id === id)
@@ -513,6 +582,14 @@ export const useWorkStore = defineStore('works', {
       const record: WorkRecord = {
         ...existing,
         ...input,
+        photoOriginalObjectKey:
+          input.photoOriginalObjectKey ?? existing.photoOriginalObjectKey,
+        photoPreviewObjectKey: input.photoPreviewObjectKey ?? existing.photoPreviewObjectKey,
+        photoOriginalName: input.photoOriginalName ?? existing.photoOriginalName,
+        photoOriginalMime: input.photoOriginalMime ?? existing.photoOriginalMime,
+        photoOriginalSize: input.photoOriginalSize ?? existing.photoOriginalSize,
+        photoRevision: input.photoRevision ?? existing.photoRevision,
+        photoBackupMode: input.photoBackupMode ?? existing.photoBackupMode,
         ingredientsText: input.ingredientsText.trim() || formatWorkIngredients(input),
         ingredientGroups: normalizeIngredientGroups(input.ingredientGroups),
         updatedAt: new Date().toISOString(),
@@ -564,6 +641,128 @@ export const useWorkStore = defineStore('works', {
       if (!Number.isFinite(lastBackupTime)) return true
       return now.getTime() - lastBackupTime >= autoBackupIntervalMs
     },
+    async attachPreparedPhoto(id: string, photo: PreparedWorkPhoto) {
+      const existing = this.items.find((item) => item.id === id)
+      if (!existing) throw new Error('没有找到要保存照片的作品。')
+      await cachePreparedWorkPhoto(id, photo)
+      const pendingRecord: WorkRecord = {
+        ...existing,
+        photoDataUrl: photo.previewDataUrl,
+        photoOriginalObjectKey: '',
+        photoPreviewObjectKey: '',
+        photoOriginalName: photo.original.name,
+        photoOriginalMime: photo.original.type,
+        photoOriginalSize: photo.original.size,
+        photoRevision: photo.revision,
+        photoBackupMode: 'none',
+        updatedAt: new Date().toISOString(),
+      }
+      this.items = this.items.map((item) => (item.id === id ? pendingRecord : item))
+      writeRecords(this.items)
+      if (getCloudWorksSession()) await this.syncWorkPhoto(id)
+      return this.items.find((item) => item.id === id) as WorkRecord
+    },
+    async syncWorkPhoto(id: string) {
+      const existing = this.items.find((item) => item.id === id)
+      if (!existing?.photoRevision) throw new Error('这条作品没有待上传的照片。')
+      const metadata = await uploadCachedWorkPhoto(id, existing.photoRevision)
+      const updated: WorkRecord = {
+        ...existing,
+        ...metadata,
+        updatedAt: new Date().toISOString(),
+      }
+      this.items = this.items.map((item) => (item.id === id ? updated : item))
+      writeRecords(this.items)
+      return updated
+    },
+    async migrateLegacyPhotoBackups() {
+      const legacyRecords = this.items.filter(
+        (item) => item.photoDataUrl && !item.photoRevision && !item.photoPreviewObjectKey,
+      )
+      for (const record of legacyRecords) {
+        try {
+          const revision = await cacheLegacyWorkPreview(record.id, record.photoDataUrl)
+          const pending: WorkRecord = {
+            ...record,
+            photoRevision: revision,
+            photoBackupMode: 'none',
+            updatedAt: new Date().toISOString(),
+          }
+          this.items = this.items.map((item) => (item.id === record.id ? pending : item))
+          writeRecords(this.items)
+          await this.syncWorkPhoto(record.id)
+        } catch {
+          // Keep unreadable legacy data URLs local instead of blocking all metadata backups.
+        }
+      }
+    },
+    async syncPendingWorkPhotos() {
+      const pending = this.items.filter(
+        (item) => item.photoRevision && !item.photoPreviewObjectKey,
+      )
+      for (const record of pending) await this.syncWorkPhoto(record.id)
+    },
+    pausePhotoRestore() {
+      photoRestoreController?.abort()
+      if (this.photoRestore.status === 'restoring') {
+        this.photoRestore = {
+          ...this.photoRestore,
+          status: 'paused',
+          message: `照片恢复已暂停（${this.photoRestore.completed}/${this.photoRestore.total}）。`,
+        }
+      }
+    },
+    async restorePhotoPreviews() {
+      photoRestoreController?.abort()
+      photoRestoreController = new AbortController()
+      this.photoRestore = {
+        status: 'restoring',
+        completed: 0,
+        total: 0,
+        failedWorkIds: [],
+        message: '正在恢复全部作品预览图...',
+      }
+      try {
+        const result = await restoreAllWorkPreviews(this.items, {
+          signal: photoRestoreController.signal,
+          onProgress: (progress) => {
+            this.photoRestore = {
+              ...progress,
+              status: photoRestoreController?.signal.aborted ? 'paused' : 'restoring',
+              message: `正在恢复全部作品预览图（${progress.completed}/${progress.total}）...`,
+            }
+          },
+        })
+        if (photoRestoreController.signal.aborted) return result
+
+        const dataUrls = await Promise.all(
+          this.items.map((item) =>
+            item.photoRevision
+              ? getCachedWorkPreviewDataUrl(item.id, item.photoRevision)
+              : Promise.resolve(item.photoDataUrl),
+          ),
+        )
+        this.items = this.items.map((item, index) => ({
+          ...item,
+          photoDataUrl: dataUrls[index] || item.photoDataUrl,
+        }))
+        this.photoRestore = {
+          ...result,
+          status: result.failedWorkIds.length ? 'error' : 'success',
+          message: result.failedWorkIds.length
+            ? `已恢复 ${result.completed - result.failedWorkIds.length}/${result.total} 张预览图，${result.failedWorkIds.length} 张失败，可重试。`
+            : `已恢复全部 ${result.total} 张作品预览图。`,
+        }
+        return result
+      } catch (error) {
+        this.photoRestore = {
+          ...this.photoRestore,
+          status: 'error',
+          message: getErrorMessage(error, '照片恢复失败，请稍后重试。'),
+        }
+        throw error
+      }
+    },
     async loginCloudAccount(accountName: string, password: string) {
       this.setCloudSync('syncing', '正在登录 CloudBase 云端账号...')
       try {
@@ -572,7 +771,12 @@ export const useWorkStore = defineStore('works', {
           accountName: session.accountName,
           updatedAt: session.updatedAt,
         }
-        this.setCloudSync('success', `已登录云端账号「${session.accountName}」。`)
+        if (!this.items.length) {
+          await this.loadFromCloud()
+        } else {
+          await this.restorePhotoPreviews()
+          this.setCloudSync('success', `已登录云端账号「${session.accountName}」。`)
+        }
         return session
       } catch (error) {
         this.setCloudSync(
@@ -600,6 +804,7 @@ export const useWorkStore = defineStore('works', {
         this.items = readRecords()
         this.autoBackup = appData.autoBackup
         writeAutoBackupState(this.autoBackup)
+        await this.restorePhotoPreviews()
         this.setCloudSync(
           'success',
           `已从 CloudBase 云端恢复账号数据（作品 ${appData.works.length} 条）。`,
@@ -616,6 +821,8 @@ export const useWorkStore = defineStore('works', {
     async pushAllToCloud(): Promise<number> {
       this.setCloudSync('syncing', '正在轻量同步账号数据到 CloudBase 云端...')
       try {
+        await this.migrateLegacyPhotoBackups()
+        await this.syncPendingWorkPhotos()
         const backupAt = new Date().toISOString()
         const patch = createAccountMetadataPatch(
           this.items,
@@ -631,7 +838,7 @@ export const useWorkStore = defineStore('works', {
         this.markCloudBackupSuccess(backupAt)
         this.setCloudSync(
           'success',
-          `已轻量同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，不含照片）。`,
+          `已同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，照片使用 OSS 备份）。`,
         )
         return this.items.length
       } catch (error) {

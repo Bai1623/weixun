@@ -154,6 +154,13 @@ type CloudWorkDocument = {
   cocktailName?: string
   photoDataUrl?: string
   photoFileId?: string
+  photoOriginalObjectKey?: string
+  photoPreviewObjectKey?: string
+  photoOriginalName?: string
+  photoOriginalMime?: string
+  photoOriginalSize?: number
+  photoRevision?: string
+  photoBackupMode?: 'none' | 'preview-only' | 'original-and-preview'
   ingredientsText?: string
   ingredientGroups?: WorkIngredientGroups
   rating?: number
@@ -721,6 +728,13 @@ export const createCloudWorkDocument = (
   cocktailName: record.cocktailName,
   photoDataUrl: record.photoDataUrl,
   photoFileId: '',
+  photoOriginalObjectKey: record.photoOriginalObjectKey,
+  photoPreviewObjectKey: record.photoPreviewObjectKey,
+  photoOriginalName: record.photoOriginalName,
+  photoOriginalMime: record.photoOriginalMime,
+  photoOriginalSize: record.photoOriginalSize,
+  photoRevision: record.photoRevision,
+  photoBackupMode: record.photoBackupMode,
   ingredientsText: record.ingredientsText,
   ingredientGroups: record.ingredientGroups ?? {
     baseLiquors: [],
@@ -753,6 +767,17 @@ export const toWorkRecordFromCloudDocument = (document: CloudWorkDocument): Work
     cocktailSlug: document.cocktailSlug ?? '',
     cocktailName: document.cocktailName,
     photoDataUrl: document.photoDataUrl ?? '',
+    photoOriginalObjectKey: document.photoOriginalObjectKey ?? '',
+    photoPreviewObjectKey: document.photoPreviewObjectKey ?? '',
+    photoOriginalName: document.photoOriginalName ?? '',
+    photoOriginalMime: document.photoOriginalMime ?? '',
+    photoOriginalSize: document.photoOriginalSize ?? 0,
+    photoRevision: document.photoRevision ?? '',
+    photoBackupMode:
+      document.photoBackupMode === 'preview-only' ||
+      document.photoBackupMode === 'original-and-preview'
+        ? document.photoBackupMode
+        : 'none',
     ingredientsText: document.ingredientsText ?? '',
     ingredientGroups: isIngredientGroups(document.ingredientGroups)
       ? document.ingredientGroups

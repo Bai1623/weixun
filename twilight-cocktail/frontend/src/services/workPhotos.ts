@@ -147,6 +147,37 @@ export const cachePreparedWorkPhoto = async (workId: string, photo: PreparedWork
   ])
 }
 
+export const cacheLegacyWorkPreview = async (workId: string, dataUrl: string) => {
+  const source = await fetch(dataUrl)
+  if (!source.ok) throw new Error('旧版照片读取失败。')
+  const sourceBlob = await source.blob()
+  const preview =
+    sourceBlob.type === 'image/jpeg'
+      ? sourceBlob
+      : await createPreviewBlob(
+          new File([sourceBlob], 'legacy-photo', { type: sourceBlob.type || 'image/png' }),
+        )
+  const revision = createRevision()
+  await putWorkPhoto({
+    workId,
+    revision,
+    kind: 'preview',
+    blob: preview,
+    name: 'preview.jpg',
+    mime: 'image/jpeg',
+    size: preview.size,
+    syncState: 'pending',
+    errorMessage: '',
+    updatedAt: new Date().toISOString(),
+  })
+  return revision
+}
+
+export const getCachedWorkPreviewDataUrl = async (workId: string, revision: string) => {
+  const preview = await getWorkPhoto(workId, revision, 'preview')
+  return preview ? readBlobDataUrl(preview.blob) : ''
+}
+
 const putSignedPhoto = async (target: NonNullable<CloudPhotoUploadPreparation['preview']>, blob: Blob) => {
   const response = await fetch(target.url, {
     method: 'PUT',

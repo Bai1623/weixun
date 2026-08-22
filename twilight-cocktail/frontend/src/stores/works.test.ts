@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
 import * as cloudWorks from '@/services/cloudWorks'
+import * as workPhotos from '@/services/workPhotos'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -127,6 +128,38 @@ describe('work store', () => {
       mood: '',
       selfReview: '',
       notes: '',
+    })
+  })
+
+  it('preserves cloud photo metadata when reading local records', () => {
+    window.localStorage.setItem(
+      'cocktail_work_records',
+      JSON.stringify([
+        {
+          id: 'cloud-photo-work',
+          madeAt: '2026-08-22',
+          cocktailName: '暮色',
+          ingredientsText: '金酒、汤力水',
+          createdAt: '2026-08-22T10:00:00.000Z',
+          photoOriginalObjectKey: 'photos/a/cloud-photo-work/r1/original.heic',
+          photoPreviewObjectKey: 'photos/a/cloud-photo-work/r1/preview.jpg',
+          photoOriginalName: 'IMG_001.HEIC',
+          photoOriginalMime: 'image/heic',
+          photoOriginalSize: 123456,
+          photoRevision: 'r1',
+          photoBackupMode: 'original-and-preview',
+        },
+      ]),
+    )
+
+    expect(useWorkStore().items[0]).toMatchObject({
+      photoOriginalObjectKey: 'photos/a/cloud-photo-work/r1/original.heic',
+      photoPreviewObjectKey: 'photos/a/cloud-photo-work/r1/preview.jpg',
+      photoOriginalName: 'IMG_001.HEIC',
+      photoOriginalMime: 'image/heic',
+      photoOriginalSize: 123456,
+      photoRevision: 'r1',
+      photoBackupMode: 'original-and-preview',
     })
   })
 
@@ -476,6 +509,118 @@ describe('work store', () => {
     })
   })
 
+  it('restores all cloud previews after account data is loaded', async () => {
+    const cloudRecord = {
+      id: 'remote-photo-work',
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '云端暮色',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+      createdAt: '2026-08-22T10:00:00.000Z',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+      photoOriginalObjectKey: 'photos/a/remote-photo-work/r1/original.jpg',
+      photoPreviewObjectKey: 'photos/a/remote-photo-work/r1/preview.jpg',
+      photoOriginalName: 'night.jpg',
+      photoOriginalMime: 'image/jpeg',
+      photoOriginalSize: 123,
+      photoRevision: 'r1',
+      photoBackupMode: 'original-and-preview' as const,
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudAppData').mockResolvedValue({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'app-data',
+      works: [cloudRecord],
+      pantry: { ingredientSlugs: [] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: [] },
+      dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    })
+    const restore = vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockImplementation(
+      async (_records, options) => {
+        options?.onProgress?.({ completed: 1, total: 1, failedWorkIds: [] })
+        return { completed: 1, total: 1, failedWorkIds: [] }
+      },
+    )
+    vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
+      'data:image/jpeg;base64,restored',
+    )
+    const works = useWorkStore()
+
+    await works.loadFromCloud()
+
+    expect(restore).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: 'remote-photo-work', photoRevision: 'r1' })],
+      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+    )
+    expect(works.items[0].photoDataUrl).toBe('data:image/jpeg;base64,restored')
+    expect(works.photoRestore).toMatchObject({
+      status: 'success',
+      completed: 1,
+      total: 1,
+      failedWorkIds: [],
+    })
+  })
+
+  it('caches and uploads a newly selected original plus preview', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      }),
+    )
+    const works = useWorkStore()
+    const record = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '新照片',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const original = new File(['original'], 'night.png', { type: 'image/png' })
+    const preview = new Blob(['preview'], { type: 'image/jpeg' })
+    const cache = vi.spyOn(workPhotos, 'cachePreparedWorkPhoto').mockResolvedValue(undefined)
+    vi.spyOn(workPhotos, 'uploadCachedWorkPhoto').mockResolvedValue({
+      photoOriginalObjectKey: `photos/a/${record.id}/r-new/original.png`,
+      photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
+      photoOriginalName: 'night.png',
+      photoOriginalMime: 'image/png',
+      photoOriginalSize: original.size,
+      photoRevision: 'r-new',
+      photoBackupMode: 'original-and-preview',
+    })
+
+    await works.attachPreparedPhoto(record.id, {
+      revision: 'r-new',
+      original,
+      preview,
+      previewDataUrl: 'data:image/jpeg;base64,preview',
+    })
+
+    expect(cache).toHaveBeenCalledWith(record.id, expect.objectContaining({ revision: 'r-new' }))
+    expect(works.items[0]).toMatchObject({
+      photoDataUrl: 'data:image/jpeg;base64,preview',
+      photoRevision: 'r-new',
+      photoOriginalObjectKey: `photos/a/${record.id}/r-new/original.png`,
+      photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
+      photoBackupMode: 'original-and-preview',
+    })
+  })
+
   it('pushes lightweight metadata changes to cloud without photos', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
@@ -537,7 +682,7 @@ describe('work store', () => {
     expect(count).toBe(1)
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '已轻量同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，不含照片）。',
+      message: '已同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
     })
     expect(push).toHaveBeenCalledWith(
       expect.objectContaining({
