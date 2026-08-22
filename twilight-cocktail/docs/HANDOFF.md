@@ -14,12 +14,12 @@
 
 - 当前代码仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`（旧 `weixun.git` 会跳转到此仓库）
 - 当前开发分支：`codex/twilight-cocktail-prototype`
-- 最近确认的功能源码 commit：`968ff3a`
+- 最近确认的功能源码 commit：`e25d9ae`
 - 当前 Pages 仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`
 - 当前 Pages 分支：`gh-pages`
-- 最近确认的 Pages 分支 commit：`861da24`
+- 最近确认的 Pages 分支 commit：`e1e9fe6`
 - 线上地址：[https://bai1623.github.io/weixun-Twilight-Mixbook/](https://bai1623.github.io/weixun-Twilight-Mixbook/)
-- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=968ff3a#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=968ff3a#/works)
+- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=e25d9ae#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=e25d9ae#/works)
 
 ## 目录说明
 
