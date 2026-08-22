@@ -18,7 +18,7 @@ function getCollection() {
   const app = cloudbase.init({
     env: cloudbase.SYMBOL_CURRENT_ENV,
   });
-  cachedCollection = app.database().collection("works");
+  cachedCollection = app.database().collection("bai");
   return cachedCollection;
 }
 

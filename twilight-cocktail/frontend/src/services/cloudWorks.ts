@@ -2,7 +2,7 @@ import type { WorkIngredientGroups, WorkRecord } from '@/stores/works'
 
 export const CLOUD_WORKS_COLLECTION = 'works'
 const defaultCloudWorksApiUrl =
-  'https://weixun-d8g9xwqak83952747-1462034992.ap-shanghai.app.tcloudbase.com/twilightWorks'
+  'https://bai-d0g23uiiz96a4f50d-1428838698.ap-shanghai.app.tcloudbase.com/share'
 const cloudWorksApiUrl = import.meta.env.VITE_CLOUDBASE_WORKS_API_URL || defaultCloudWorksApiUrl
 const cloudSessionStorageKey = 'twilight_cloud_works_session'
 const defaultUploadChunkBytes = 24 * 1024
