@@ -14,6 +14,13 @@ export type CloudWorksSession = {
   updatedAt: string
 }
 
+export type CloudAccountPreview = {
+  session: CloudWorksSession
+  status: 'matched' | 'new'
+  appData: CloudAppData
+  recordCount: number
+}
+
 type CloudWorksPayload = {
   version: 1
   app: 'twilight-mixbook'
@@ -302,6 +309,14 @@ export const clearCloudWorksSession = () => {
   window.localStorage.removeItem(cloudSessionStorageKey)
 }
 
+export const replaceCloudWorksSession = (session: CloudWorksSession | null) => {
+  if (session) {
+    saveCloudSession(session)
+    return
+  }
+  clearCloudWorksSession()
+}
+
 const getRequiredCloudSession = () => {
   const session = readCloudSession()
   if (!session) throw new Error('请先在作品分享里登录云端账号。')
@@ -338,26 +353,59 @@ const postCloudWorksAction = async (body: Record<string, unknown>): Promise<Clou
   return data
 }
 
-export const loginCloudWorksAccount = async (accountName: string, password: string) => {
+export const previewCloudWorksAccount = async (
+  accountName: string,
+  password: string,
+): Promise<CloudAccountPreview> => {
   const identity = await buildCloudWorksIdentity(accountName, password)
   const result = await postCloudWorksAction({
     action: 'account-login',
     ...identity,
   })
 
-  if (result.status === 'account_not_found') {
-    await postCloudWorksAction({
-      action: 'account-create',
-      ...identity,
-    })
-  }
-
   const session: CloudWorksSession = {
     ...identity,
     updatedAt: new Date().toISOString(),
   }
-  saveCloudSession(session)
-  return session
+
+  if (result.status === 'account_not_found') {
+    return {
+      session,
+      status: 'new',
+      appData: createEmptyCloudAppData(),
+      recordCount: 0,
+    }
+  }
+
+  const appData = await fetchCloudAppDataForSession(session)
+  return {
+    session,
+    status: 'matched',
+    appData,
+    recordCount:
+      typeof result.recordCount === 'number' && Number.isFinite(result.recordCount)
+        ? Math.max(0, Math.floor(result.recordCount))
+        : appData.works.length,
+  }
+}
+
+export const activateCloudWorksAccount = async (preview: CloudAccountPreview) => {
+  if (preview.status === 'new') {
+    await postCloudWorksAction({
+      action: 'account-create',
+      accountName: preview.session.accountName,
+      accountNameKey: preview.session.accountNameKey,
+      passwordVerifier: preview.session.passwordVerifier,
+    })
+  }
+
+  saveCloudSession(preview.session)
+  return preview.session
+}
+
+export const loginCloudWorksAccount = async (accountName: string, password: string) => {
+  const preview = await previewCloudWorksAccount(accountName, password)
+  return activateCloudWorksAccount(preview)
 }
 
 const isIngredientGroups = (value: unknown): value is WorkIngredientGroups => {
@@ -490,8 +538,7 @@ const fetchLegacyCloudAppData = async (session: CloudWorksSession) => {
   return normalizeCloudAppData(result.payload)
 }
 
-export const fetchCloudAppData = async () => {
-  const session = getRequiredCloudSession()
+const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
   const startResult = await postCloudWorksAction({
     action: 'works-get-start',
     accountNameKey: session.accountNameKey,
@@ -551,6 +598,9 @@ export const fetchCloudAppData = async () => {
     records: legacyPayloads.flatMap((payload) => normalizeCloudRecords(payload)),
   })
 }
+
+export const fetchCloudAppData = async () =>
+  fetchCloudAppDataForSession(getRequiredCloudSession())
 
 export const fetchCloudWorks = async () => {
   const appData = await fetchCloudAppData()

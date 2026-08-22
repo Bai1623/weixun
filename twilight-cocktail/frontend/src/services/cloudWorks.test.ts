@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { WorkRecord } from '@/stores/works'
 import {
   CLOUD_WORKS_COLLECTION,
+  activateCloudWorksAccount,
   buildCloudWorksIdentity,
   clearCloudWorksSession,
+  createEmptyCloudAppData,
   createCloudAppDataChunks,
   createCloudWorkDocument,
   createCloudWorkChunks,
@@ -14,6 +16,7 @@ import {
   loginCloudWorksAccount,
   prepareCloudPhotoDownloads,
   prepareCloudPhotoUpload,
+  previewCloudWorksAccount,
   syncCloudMetadataPatch,
   syncCloudAppData,
   syncCloudWorks,
@@ -78,6 +81,82 @@ describe('cloud works service', () => {
       accountNameKey: session.accountNameKey,
       passwordVerifier: session.passwordVerifier,
     })
+  })
+
+  it('previews a new cloud account without creating or persisting it', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ ok: true, status: 'account_not_found', recordCount: 0 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const preview = await previewCloudWorksAccount('target', 'pass')
+
+    expect(preview).toMatchObject({
+      status: 'new',
+      recordCount: 0,
+      appData: createEmptyCloudAppData(),
+      session: { accountName: 'target' },
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][1].body).toContain('"action":"account-login"')
+    expect(getCloudWorksSession()).toBeNull()
+  })
+
+  it('previews matched cloud data without replacing the current session', async () => {
+    const currentSession = {
+      accountName: 'current',
+      accountNameKey: 'current-account-key',
+      passwordVerifier: 'current-password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    }
+    window.localStorage.setItem('twilight_cloud_works_session', JSON.stringify(currentSession))
+    const appData = {
+      ...createEmptyCloudAppData(),
+      works: [record],
+      pantry: { ingredientSlugs: ['gin'] },
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'matched', recordCount: 1 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'matched', payload: appData }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const preview = await previewCloudWorksAccount('target', 'pass')
+
+    expect(preview).toMatchObject({ status: 'matched', recordCount: 1, appData })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"works-get-start"')
+    expect(getCloudWorksSession()).toEqual(currentSession)
+  })
+
+  it('creates and persists a new cloud account only when activated', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'account_not_found', recordCount: 0 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'created', recordCount: 0 }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const preview = await previewCloudWorksAccount('target', 'pass')
+    expect(getCloudWorksSession()).toBeNull()
+
+    const session = await activateCloudWorksAccount(preview)
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1].body).toContain('"action":"account-create"')
+    expect(getCloudWorksSession()).toEqual(session)
   })
 
   it('syncs and fetches work records through the saved cloud account session', async () => {
