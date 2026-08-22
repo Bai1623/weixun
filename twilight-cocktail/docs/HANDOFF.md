@@ -1,6 +1,6 @@
 # Twilight Mixbook Handoff
 
-更新日期：2026-08-22
+更新日期：2026-08-23
 
 ## 项目是什么
 
@@ -14,12 +14,12 @@
 
 - 当前代码仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`（旧 `weixun.git` 会跳转到此仓库）
 - 当前开发分支：`codex/twilight-cocktail-prototype`
-- 最近确认的功能源码 commit：部署完成后回填
+- 最近确认的功能源码 commit：`968ff3a`
 - 当前 Pages 仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`
 - 当前 Pages 分支：`gh-pages`
-- 最近确认的 Pages 分支 commit：部署完成后回填
+- 最近确认的 Pages 分支 commit：`861da24`
 - 线上地址：[https://bai1623.github.io/weixun-Twilight-Mixbook/](https://bai1623.github.io/weixun-Twilight-Mixbook/)
-- 带缓存刷新参数的作品页：部署完成后回填
+- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=968ff3a#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=968ff3a#/works)
 
 ## 目录说明
 
@@ -152,7 +152,7 @@ cd twilight-cocktail/cloudbase/twilightWorks
 node --test index.test.cjs
 ```
 
-2026-08-22 云端备份安全版本验证结果：前端 `18` 个测试文件、`134` 个测试通过；云函数 `14` 个测试通过；ESLint 无报错；GitHub Pages 构建通过。
+2026-08-23 云端备份安全版本验证结果：前端 `18` 个测试文件、`134` 个测试通过；云函数 `14` 个测试通过；ESLint 无报错；GitHub Pages 构建通过。线上 `/share` 已确认返回新版只读 `account-summary` 完整摘要，并拒绝未知 action；线上入口和作品页资源与本地生产构建 SHA-256 一致。
 
 重新生成酒单 catalog：
 

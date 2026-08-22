@@ -235,7 +235,7 @@ Run the CloudBase Node tests, all Vitest tests, ESLint, `vue-tsc -b`, the GitHub
 
 Review hardening completed before deployment: server-side transactional snapshot comparison and idempotency, strict old-function response rejection, same-account snapshot isolation, photo revision-aware restore, accurate local photo counts, and in-dialog restore conflict recovery.
 
-- [ ] **Step 2: Update handoff documentation**
+- [x] **Step 2: Update handoff documentation**
 
 Record the new `account-summary` action, UI behavior, conflict rule, checkpoint scope, test counts, deployed function, Pages commit, and online verification results.
 
@@ -243,14 +243,16 @@ Record the new `account-summary` action, UI behavior, conflict rule, checkpoint 
 
 Confirm no secrets, credentials, unrelated files, old blind restore confirmation, or “尚未同步云端” default status remain.
 
-- [ ] **Step 4: Commit and push the source branch**
+- [x] **Step 4: Commit and push the source branch**
 
 Commit the cohesive feature and documentation changes, then push `codex/twilight-cocktail-prototype` to `origin`.
 
-- [ ] **Step 5: Deploy CloudBase and GitHub Pages**
+- [x] **Step 5: Deploy CloudBase and GitHub Pages**
 
 Deploy the actual function backing the `/share` HTTP route, publish the verified Pages build, and avoid displaying or persisting OSS/CloudBase secrets in logs or source.
 
-- [ ] **Step 6: Verify production read-only paths**
+- [x] **Step 6: Verify production read-only paths**
 
 Open the deployed works page, confirm automatic summary retrieval and manual refresh, stage a restore preview without confirming it, and verify the cloud function responds to authenticated summary requests through the UI. Do not overwrite or delete the user's production data during verification.
+
+Production verification used a nonexistent random account for the read-only summary contract, confirmed the published `index` and `WorksPage` hashes match the verified build, and confirmed all summary/restore test IDs are present. No production account restore, upload, overwrite, or delete action was executed.
