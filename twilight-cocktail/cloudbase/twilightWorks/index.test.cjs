@@ -273,6 +273,122 @@ test("account backup stores and returns full app data payloads", async () => {
   assert.equal(restored.body.payload.autoBackup.enabled, true);
 });
 
+test("account summary reports cloud data and photo coverage without mutating the account", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+    patch: metadataPatch({
+      worksChanged: [
+        {
+          id: "work-photo",
+          madeAt: "2026-08-22",
+          cocktailSlug: "",
+          cocktailName: "照片作品",
+          photoDataUrl: "",
+          photoOriginalObjectKey: `photos/${validKey}/work-photo/revision-photo/original.jpg`,
+          photoPreviewObjectKey: `photos/${validKey}/work-photo/revision-photo/preview.jpg`,
+          photoOriginalName: "original.jpg",
+          photoOriginalMime: "image/jpeg",
+          photoOriginalSize: 2048,
+          photoRevision: "revision-photo",
+          photoBackupMode: "original-and-preview",
+          ingredientsText: "饮料：苏打水",
+          rating: 0,
+          mood: "",
+          selfReview: "",
+          notes: "",
+          createdAt: "2026-08-22T09:00:00.000Z",
+          updatedAt: "2026-08-22T09:00:00.000Z",
+        },
+        {
+          id: "work-text",
+          madeAt: "2026-08-22",
+          cocktailSlug: "",
+          cocktailName: "文字作品",
+          photoDataUrl: "",
+          ingredientsText: "饮料：汤力水",
+          rating: 0,
+          mood: "",
+          selfReview: "",
+          notes: "",
+          createdAt: "2026-08-22T09:30:00.000Z",
+          updatedAt: "2026-08-22T09:30:00.000Z",
+        },
+      ],
+      pantry: { ingredientSlugs: ["gin", "tonic-water"] },
+      favorites: { cocktailSlugs: ["mojito"] },
+      academy: { completedSlugs: ["tools"] },
+      dailyPick: {
+        selectedSlug: "negroni",
+        selectedDate: "2026-08-22",
+        reason: "今晚适合苦甜风味。",
+        rerollCount: 1,
+      },
+      customOptions: {
+        cocktails: [
+          {
+            value: "custom-sunset",
+            slug: "custom-sunset",
+            nameZh: "自定义日落",
+            nameEn: "Custom Sunset",
+            ingredientsText: "金酒、橙汁",
+            isCustom: true,
+            createdAt: "2026-08-22T08:00:00.000Z",
+          },
+        ],
+        flavorLiquors: ["蓝橙力娇酒"],
+        beverages: ["水溶C"],
+      },
+      autoBackup: {
+        enabled: true,
+        lastBackupAt: "2026-08-22T10:00:00.000Z",
+      },
+    }),
+  });
+
+  const before = JSON.stringify(collection.docs);
+  const summary = await post(api, {
+    action: "account-summary",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  const mismatch = await post(api, {
+    action: "account-summary",
+    accountNameKey: validKey,
+    passwordVerifier: "c".repeat(64),
+  });
+
+  assert.equal(summary.statusCode, 200);
+  assert.equal(summary.body.status, "matched");
+  assert.equal(summary.body.dataLastBackupAt, "2026-08-22T10:00:00.000Z");
+  assert.ok(summary.body.snapshotId);
+  assert.deepEqual(summary.body.summary, {
+    works: 2,
+    previewPhotos: 1,
+    originalPhotos: 1,
+    pantry: 2,
+    favorites: 1,
+    academy: 1,
+    dailyPick: 1,
+    customCocktails: 1,
+    customFlavorLiquors: 1,
+    customBeverages: 1,
+  });
+  assert.equal(JSON.stringify(collection.docs), before);
+  assert.equal(mismatch.body.status, "password_mismatch");
+  assert.equal(mismatch.body.summary, undefined);
+});
+
 test("account backup can be restored through bounded download chunks", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);
@@ -377,6 +493,14 @@ test("account backup can be restored through bounded download chunks", async () 
   assert.equal(secondChunk.body.chunkIndex, 1);
   assert.equal(restored.type, "app-data");
   assert.equal(restored.works[0].photoDataUrl, appData.works[0].photoDataUrl);
+
+  const summary = await post(api, {
+    action: "account-summary",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  assert.equal(summary.body.summary.works, 1);
+  assert.equal(summary.body.summary.pantry, 1);
 });
 
 test("metadata patches merge lightweight work changes and deletions", async () => {

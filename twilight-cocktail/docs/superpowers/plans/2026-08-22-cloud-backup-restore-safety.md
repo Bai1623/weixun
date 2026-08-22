@@ -31,7 +31,7 @@
 - Produces: `POST { action: 'account-summary', accountNameKey, passwordVerifier }`.
 - Returns: `{ status, accountName, snapshotId, backupCreatedAt, dataLastBackupAt, recordCount, summary }`.
 
-- [ ] **Step 1: Write failing cloud-function tests**
+- [x] **Step 1: Write failing cloud-function tests**
 
 Add a test that saves app data containing two works, one preview, one original, pantry, favorites, academy, daily pick, and custom options, then calls `account-summary` and asserts literal counts:
 
@@ -54,17 +54,17 @@ assert.ok(summary.body.snapshotId);
 
 Add password-mismatch and legacy chunked-payload cases.
 
-- [ ] **Step 2: Run the targeted test and verify RED**
+- [x] **Step 2: Run the targeted test and verify RED**
 
 Run: `node --test cloudbase/twilightWorks/index.test.cjs --test-name-pattern="account summary"`
 
 Expected: FAIL because `account-summary` is not handled.
 
-- [ ] **Step 3: Implement summary derivation and the read-only action**
+- [x] **Step 3: Implement summary derivation and the read-only action**
 
 Add `accountPayloadSummary(payload)` beside the existing payload normalization helpers. Count object-key-backed photos and bounded arrays from normalized app data. In `account-summary`, authenticate with `assertAccountPassword`, read `metadataPayload` when present or `readChunkedPayload(doc)` otherwise, and return the version fields without modifying the account document.
 
-- [ ] **Step 4: Run the complete cloud-function suite and verify GREEN**
+- [x] **Step 4: Run the complete cloud-function suite and verify GREEN**
 
 Run: `node --test cloudbase/twilightWorks/index.test.cjs`
 

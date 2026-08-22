@@ -397,6 +397,32 @@ function accountRecordCount(doc) {
   return Number(doc?.recordCount || payloadRecordCount(doc?.payload));
 }
 
+function accountPayloadSummary(payload) {
+  const appData =
+    payload?.type === "app-data"
+      ? buildAppDataPayload(payload)
+      : buildAppDataPayload({ works: safeRecords(payload) });
+  return {
+    works: appData.works.length,
+    previewPhotos: appData.works.filter((record) => record.photoPreviewObjectKey).length,
+    originalPhotos: appData.works.filter((record) => record.photoOriginalObjectKey).length,
+    pantry: appData.pantry.ingredientSlugs.length,
+    favorites: appData.favorites.cocktailSlugs.length,
+    academy: appData.academy.completedSlugs.length,
+    dailyPick: Number(
+      Boolean(
+        appData.dailyPick.selectedSlug ||
+          appData.dailyPick.selectedDate ||
+          appData.dailyPick.reason ||
+          appData.dailyPick.rerollCount,
+      ),
+    ),
+    customCocktails: appData.customOptions.cocktails.length,
+    customFlavorLiquors: appData.customOptions.flavorLiquors.length,
+    customBeverages: appData.customOptions.beverages.length,
+  };
+}
+
 async function assertAccountPassword(accountNameKey, passwordVerifier) {
   const doc = await getDoc(accountDocId(accountNameKey)).catch(() => null);
   if (doc && doc.passwordVerifier !== passwordVerifier) {
@@ -545,6 +571,46 @@ exports.main = async (event = {}) => {
         accountName: doc.accountName || "",
         recordCount: accountRecordCount(doc),
         backupCreatedAt: doc.backupCreatedAt || "",
+      });
+    }
+
+    if (method === "POST" && action === "account-summary") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+      if (!account.doc) {
+        return response({
+          ok: true,
+          status: "account_not_found",
+          snapshotId: "",
+          backupCreatedAt: "",
+          dataLastBackupAt: "",
+          recordCount: 0,
+          summary: accountPayloadSummary(buildAppDataPayload({})),
+        });
+      }
+
+      const payload =
+        account.doc.metadataUpdatedAt && account.doc.metadataPayload
+          ? buildAppDataPayload(account.doc.metadataPayload)
+          : await readChunkedPayload(account.doc);
+      const appData =
+        payload?.type === "app-data"
+          ? buildAppDataPayload(payload)
+          : buildAppDataPayload({ works: safeRecords(payload) });
+      const backupCreatedAt = account.doc.metadataUpdatedAt || account.doc.backupCreatedAt || "";
+      return response({
+        ok: true,
+        status: "matched",
+        accountName: account.doc.accountName || "",
+        snapshotId: backupCreatedAt,
+        backupCreatedAt,
+        dataLastBackupAt: appData.autoBackup.lastBackupAt,
+        recordCount: appData.works.length,
+        summary: accountPayloadSummary(appData),
       });
     }
 
