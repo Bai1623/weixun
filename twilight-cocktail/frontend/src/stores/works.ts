@@ -4,6 +4,7 @@ import {
   activateCloudWorksAccount,
   clearCloudWorksSession,
   fetchCloudAppData,
+  fetchCloudSnapshotSummary,
   getCloudWorksSession,
   previewCloudWorksAccount,
   replaceCloudWorksSession,
@@ -11,9 +12,11 @@ import {
 } from '@/services/cloudWorks'
 import type {
   CloudAccountPreview,
+  CloudAccountDataSummary,
   CloudAppData,
   CloudDeletedWork,
   CloudMetadataPatch,
+  CloudSnapshotSummary,
 } from '@/services/cloudWorks'
 import {
   cacheLegacyWorkPreview,
@@ -109,6 +112,21 @@ export type WorkCloudSyncState = {
   updatedAt: string
 }
 
+export type WorkCloudSnapshotStatus = 'idle' | 'checking' | 'ready' | 'error'
+export type WorkCloudSnapshotRelation =
+  | 'empty'
+  | 'same-base'
+  | 'cloud-changed'
+  | 'unknown-base'
+
+export type WorkCloudSnapshotState = {
+  status: WorkCloudSnapshotStatus
+  relation: WorkCloudSnapshotRelation
+  checkedAt: string
+  message: string
+  snapshot: CloudSnapshotSummary | null
+}
+
 export type WorkCloudAccountState = {
   accountName: string
   updatedAt: string
@@ -126,8 +144,16 @@ export type WorkPhotoRestoreState = WorkPhotoRestoreProgress & {
 
 const createCloudSyncState = (): WorkCloudSyncState => ({
   status: 'idle',
-  message: '尚未同步云端。',
+  message: '尚未执行云端操作。',
   updatedAt: '',
+})
+
+const createCloudSnapshotState = (): WorkCloudSnapshotState => ({
+  status: 'idle',
+  relation: 'empty',
+  checkedAt: '',
+  message: '尚未检查云端。',
+  snapshot: null,
 })
 
 const createPhotoRestoreState = (): WorkPhotoRestoreState => ({
@@ -169,6 +195,10 @@ const createAutoBackupState = (): WorkAutoBackupState => {
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback
+
+export class CloudBackupConflictError extends Error {
+  override name = 'CloudBackupConflictError'
+}
 
 const createId = () => {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -436,6 +466,47 @@ const createAccountBackupData = (
   }
 }
 
+export const summarizeAccountData = (appData: CloudAppData): CloudAccountDataSummary => ({
+  works: appData.works.length,
+  previewPhotos: appData.works.filter((record) => record.photoPreviewObjectKey).length,
+  originalPhotos: appData.works.filter((record) => record.photoOriginalObjectKey).length,
+  pantry: appData.pantry.ingredientSlugs.length,
+  favorites: appData.favorites.cocktailSlugs.length,
+  academy: appData.academy.completedSlugs.length,
+  dailyPick: Number(
+    Boolean(
+      appData.dailyPick.selectedSlug ||
+        appData.dailyPick.selectedDate ||
+        appData.dailyPick.reason ||
+        appData.dailyPick.rerollCount,
+    ),
+  ),
+  customCocktails: appData.customOptions.cocktails.length,
+  customFlavorLiquors: appData.customOptions.flavorLiquors.length,
+  customBeverages: appData.customOptions.beverages.length,
+})
+
+const hasCloudSnapshotData = (snapshot: CloudSnapshotSummary) =>
+  snapshot.status === 'matched' &&
+  (Boolean(snapshot.snapshotId || snapshot.dataLastBackupAt) ||
+    Object.values(snapshot.summary).some((count) => count > 0))
+
+const cloudSnapshotRelation = (
+  snapshot: CloudSnapshotSummary,
+  localLastBackupAt: string,
+): WorkCloudSnapshotRelation => {
+  if (!hasCloudSnapshotData(snapshot)) return 'empty'
+  if (!localLastBackupAt) return 'unknown-base'
+  return snapshot.dataLastBackupAt === localLastBackupAt ? 'same-base' : 'cloud-changed'
+}
+
+const cloudSnapshotMessage = (relation: WorkCloudSnapshotRelation) => {
+  if (relation === 'empty') return '云端账号目前没有备份数据。'
+  if (relation === 'same-base') return '已检查云端，本机基于当前云端备份。'
+  if (relation === 'cloud-changed') return '云端已有其他设备更新的备份，请先查看后再操作。'
+  return '已发现云端备份，但本机没有可验证的同步基线。'
+}
+
 const createMetadataRecord = (record: WorkRecord): WorkRecord => ({
   ...normalizeRecord(record),
   photoDataUrl: '',
@@ -546,6 +617,7 @@ export const useWorkStore = defineStore('works', {
   state: () => ({
     items: readRecords(),
     cloudSync: createCloudSyncState(),
+    cloudSnapshot: createCloudSnapshotState(),
     cloudAccount: createCloudAccountState(),
     autoBackup: createAutoBackupState(),
     photoRestore: createPhotoRestoreState(),
@@ -635,6 +707,33 @@ export const useWorkStore = defineStore('works', {
         status,
         message,
         updatedAt: new Date().toISOString(),
+      }
+    },
+    async refreshCloudSnapshot() {
+      this.cloudSnapshot = {
+        ...this.cloudSnapshot,
+        status: 'checking',
+        message: '正在检查云端备份...',
+      }
+      try {
+        const snapshot = await fetchCloudSnapshotSummary()
+        const relation = cloudSnapshotRelation(snapshot, this.autoBackup.lastBackupAt)
+        this.cloudSnapshot = {
+          status: 'ready',
+          relation,
+          checkedAt: new Date().toISOString(),
+          message: cloudSnapshotMessage(relation),
+          snapshot,
+        }
+        return snapshot
+      } catch (error) {
+        this.cloudSnapshot = {
+          ...this.cloudSnapshot,
+          status: 'error',
+          checkedAt: new Date().toISOString(),
+          message: getErrorMessage(error, '检查云端备份失败，请稍后重试。'),
+        }
+        throw error
       }
     },
     setAutoBackupEnabled(enabled: boolean) {
@@ -877,6 +976,7 @@ export const useWorkStore = defineStore('works', {
     logoutCloudAccount() {
       clearCloudWorksSession()
       this.cloudAccount = { accountName: '', updatedAt: '' }
+      this.cloudSnapshot = createCloudSnapshotState()
       this.setCloudSync('idle', '已退出云端账号。')
     },
     async loadFromCloud(): Promise<number> {
@@ -909,6 +1009,15 @@ export const useWorkStore = defineStore('works', {
     async pushAllToCloud(): Promise<number> {
       this.setCloudSync('syncing', '正在轻量同步账号数据到 CloudBase 云端...')
       try {
+        await this.refreshCloudSnapshot()
+        if (
+          this.cloudSnapshot.relation === 'cloud-changed' ||
+          this.cloudSnapshot.relation === 'unknown-base'
+        ) {
+          throw new CloudBackupConflictError(
+            '检测到云端已有较新备份，请先检查并恢复云端数据，避免覆盖其他设备的更新。',
+          )
+        }
         await this.migrateLegacyPhotoBackups()
         await this.syncPendingWorkPhotos()
         const backupAt = new Date().toISOString()
@@ -920,10 +1029,26 @@ export const useWorkStore = defineStore('works', {
           },
           backupAt,
         )
-        await syncCloudMetadataPatch(patch)
+        const syncResult = await syncCloudMetadataPatch(patch)
         writeLastMetadataSyncAt(backupAt)
         writeDeletedRecords(readDeletedRecords().filter((record) => record.deletedAt > backupAt))
         this.markCloudBackupSuccess(backupAt)
+        const uploadedAppData = createAccountBackupData(this.items, this.autoBackup)
+        this.cloudSnapshot = {
+          status: 'ready',
+          relation: 'same-base',
+          checkedAt: new Date().toISOString(),
+          message: '云端备份已更新，本机与云端版本一致。',
+          snapshot: {
+            status: 'matched',
+            accountName: this.cloudAccount.accountName,
+            snapshotId: syncResult.snapshotId,
+            backupCreatedAt: syncResult.snapshotId,
+            dataLastBackupAt: backupAt,
+            recordCount: syncResult.recordCount,
+            summary: summarizeAccountData(uploadedAppData),
+          },
+        }
         this.setCloudSync(
           'success',
           `已同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，照片使用 OSS 备份）。`,

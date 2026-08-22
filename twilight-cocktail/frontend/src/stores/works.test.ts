@@ -10,9 +10,57 @@ import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
 import { usePantryStore } from '@/stores/pantry'
 
+const cloudSummaryFixture = (
+  overrides: Partial<cloudWorks.CloudSnapshotSummary> = {},
+): cloudWorks.CloudSnapshotSummary => ({
+  status: 'matched',
+  accountName: 'mix',
+  snapshotId: '2026-08-22T10:00:01.000Z',
+  backupCreatedAt: '2026-08-22T10:00:01.000Z',
+  dataLastBackupAt: '2026-08-22T10:00:00.000Z',
+  recordCount: 1,
+  summary: {
+    works: 1,
+    previewPhotos: 1,
+    originalPhotos: 1,
+    pantry: 2,
+    favorites: 1,
+    academy: 1,
+    dailyPick: 1,
+    customCocktails: 1,
+    customFlavorLiquors: 1,
+    customBeverages: 1,
+  },
+  ...overrides,
+})
+
+const emptyCloudSummaryFixture = (): cloudWorks.CloudSnapshotSummary =>
+  cloudSummaryFixture({
+    status: 'account_not_found',
+    accountName: 'mix',
+    snapshotId: '',
+    backupCreatedAt: '',
+    dataLastBackupAt: '',
+    recordCount: 0,
+    summary: {
+      works: 0,
+      previewPhotos: 0,
+      originalPhotos: 0,
+      pantry: 0,
+      favorites: 0,
+      academy: 0,
+      dailyPick: 0,
+      customCocktails: 0,
+      customFlavorLiquors: 0,
+      customBeverages: 0,
+    },
+  })
+
 describe('work store', () => {
   beforeEach(() => {
     window.localStorage.clear()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     setActivePinia(createPinia())
   })
 
@@ -849,7 +897,11 @@ describe('work store', () => {
         updatedAt: '2026-08-05T00:00:00.000Z',
       }),
     )
-    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: '2026-08-22T11:00:00.000Z',
+      recordCount: 1,
+    })
     const works = useWorkStore()
     const pantry = usePantryStore()
     const favorites = useFavoriteStore()
@@ -933,6 +985,130 @@ describe('work store', () => {
     expect(JSON.stringify(push.mock.calls[0][0])).not.toContain('large-photo')
   })
 
+  it('refreshes the real cloud snapshot and relates it to the local backup baseline', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({ enabled: true, lastBackupAt: '2026-08-22T10:00:00.000Z' }),
+    )
+    const remote = cloudSummaryFixture()
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(remote)
+    const works = useWorkStore()
+
+    await expect(works.refreshCloudSnapshot()).resolves.toEqual(remote)
+
+    expect(works.cloudSnapshot).toMatchObject({
+      status: 'ready',
+      relation: 'same-base',
+      snapshot: remote,
+      checkedAt: expect.any(String),
+    })
+  })
+
+  it('keeps the last successful cloud snapshot visible when a refresh fails', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const remote = cloudSummaryFixture()
+    const fetchSummary = vi
+      .spyOn(cloudWorks, 'fetchCloudSnapshotSummary')
+      .mockResolvedValueOnce(remote)
+      .mockRejectedValueOnce(new Error('网络不可用'))
+    const works = useWorkStore()
+
+    await works.refreshCloudSnapshot()
+    await expect(works.refreshCloudSnapshot()).rejects.toThrow('网络不可用')
+
+    expect(fetchSummary).toHaveBeenCalledTimes(2)
+    expect(works.cloudSnapshot).toMatchObject({
+      status: 'error',
+      snapshot: remote,
+      message: '网络不可用',
+    })
+  })
+
+  it('blocks a stale device from uploading over a different cloud backup version', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({ enabled: true, lastBackupAt: '2026-08-22T09:00:00.000Z' }),
+    )
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(
+      cloudSummaryFixture({ dataLastBackupAt: '2026-08-22T10:00:00.000Z' }),
+    )
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch')
+    const works = useWorkStore()
+
+    await expect(works.pushAllToCloud()).rejects.toThrow(
+      '检测到云端已有较新备份，请先检查并恢复云端数据，避免覆盖其他设备的更新。',
+    )
+
+    expect(push).not.toHaveBeenCalled()
+    expect(works.cloudSnapshot.relation).toBe('cloud-changed')
+  })
+
+  it('uploads when the cloud baseline matches and records the new server snapshot', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-22T11:00:00.000Z'))
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    window.localStorage.setItem(
+      'cocktail_work_auto_backup',
+      JSON.stringify({ enabled: true, lastBackupAt: '2026-08-22T10:00:00.000Z' }),
+    )
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(cloudSummaryFixture())
+    vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: '2026-08-22T11:00:01.000Z',
+      recordCount: 1,
+    })
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '新作品',
+      photoDataUrl: '',
+      ingredientsText: '饮料：苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+
+    try {
+      await works.pushAllToCloud()
+
+      expect(works.autoBackup.lastBackupAt).toBe('2026-08-22T11:00:00.000Z')
+      expect(works.cloudSnapshot).toMatchObject({
+        status: 'ready',
+        relation: 'same-base',
+        snapshot: {
+          snapshotId: '2026-08-22T11:00:01.000Z',
+          dataLastBackupAt: '2026-08-22T11:00:00.000Z',
+          recordCount: 1,
+        },
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('only sends changed and deleted work metadata after the first lightweight sync', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
@@ -943,7 +1119,11 @@ describe('work store', () => {
         updatedAt: '2026-08-05T00:00:00.000Z',
       }),
     )
-    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: '2026-08-22T11:00:00.000Z',
+      recordCount: 2,
+    })
     const works = useWorkStore()
     const first = works.add({
       madeAt: '2026-08-03',
@@ -1069,7 +1249,17 @@ describe('work store', () => {
   it('records last successful cloud backup time after pushing to cloud', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T09:30:00.000Z'))
-    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-07T09:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: '2026-08-07T09:30:01.000Z',
+      recordCount: 1,
+    })
     const works = useWorkStore()
     works.setAutoBackupEnabled(true)
     works.add({
@@ -1106,6 +1296,13 @@ describe('work store', () => {
   })
 
   it('keeps cloud sync errors visible in store state', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
     vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockRejectedValue(new Error('权限不足'))
     const works = useWorkStore()
     works.add({

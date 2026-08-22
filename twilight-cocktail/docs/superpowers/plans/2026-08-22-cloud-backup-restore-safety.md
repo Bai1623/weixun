@@ -113,31 +113,31 @@ Expected: all cloud service tests pass.
 - Produces: `refreshCloudSnapshot(): Promise<CloudSnapshotSummary>`.
 - Changes: `pushAllToCloud()` performs a fresh summary check and rejects mismatched cloud baselines before uploading photos or metadata.
 
-- [ ] **Step 1: Write failing store tests for cloud refresh**
+- [x] **Step 1: Write failing store tests for cloud refresh**
 
 Assert that a successful refresh stores real counts, backup time, and `checkedAt`; an error keeps the previous successful snapshot while changing status to error; matching `dataLastBackupAt` produces `same-base`; a different value produces `cloud-changed`.
 
-- [ ] **Step 2: Run store tests and verify RED**
+- [x] **Step 2: Run store tests and verify RED**
 
 Run: `npm test -- --run src/stores/works.test.ts`
 
 Expected: FAIL because `cloudSnapshot` and `refreshCloudSnapshot` do not exist.
 
-- [ ] **Step 3: Implement the cloud snapshot state**
+- [x] **Step 3: Implement the cloud snapshot state**
 
 Add the smallest state and relation helpers in `works.ts`. Do not persist the queried snapshot as truth across reloads; every reload must query again. Derive the local summary through the existing account backup builder so all account categories use identical counting rules.
 
-- [ ] **Step 4: Write the failing stale-upload test**
+- [x] **Step 4: Write the failing stale-upload test**
 
 Mock a remote summary whose `dataLastBackupAt` differs from local `autoBackup.lastBackupAt`. Call `pushAllToCloud()` and assert photo upload and metadata patch are not called. Add a matching-version case that reaches metadata sync and records the returned new snapshot.
 
-- [ ] **Step 5: Run the targeted test and verify RED**
+- [x] **Step 5: Run the targeted test and verify RED**
 
 Run: `npm test -- --run src/stores/works.test.ts`
 
 Expected: FAIL because current uploads never check remote version.
 
-- [ ] **Step 6: Implement upload version protection and verify GREEN**
+- [x] **Step 6: Implement upload version protection and verify GREEN**
 
 Call `fetchCloudSnapshotSummary()` at the start of every upload. Allow empty cloud or an exact `dataLastBackupAt` match; otherwise throw a typed conflict error with an actionable message. After successful metadata sync, update `lastBackupAt` and refresh the stored snapshot fields from the returned version. Run the full store test file and expect PASS.
 
