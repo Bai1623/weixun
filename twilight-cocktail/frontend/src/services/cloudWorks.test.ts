@@ -12,6 +12,8 @@ import {
   fetchCloudWorks,
   getCloudWorksSession,
   loginCloudWorksAccount,
+  prepareCloudPhotoDownloads,
+  prepareCloudPhotoUpload,
   syncCloudMetadataPatch,
   syncCloudAppData,
   syncCloudWorks,
@@ -252,6 +254,85 @@ describe('cloud works service', () => {
       photoDataUrl: '',
     })
     expect(JSON.stringify(body)).not.toContain('data:image/jpeg;base64,abc')
+  })
+
+  it('requests validated upload and download targets through the active cloud session', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'a'.repeat(64),
+        passwordVerifier: 'b'.repeat(64),
+        updatedAt: '2026-08-22T06:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            mode: 'original-and-preview',
+            photoRevision: 'rev-1',
+            expiresAt: '2026-08-22T06:15:00.000Z',
+            original: {
+              objectKey: 'photos/account/work-1/rev-1/original.jpg',
+              url: 'https://signed.example/original',
+              method: 'PUT',
+              contentType: 'image/jpeg',
+              expiresAt: '2026-08-22T06:15:00.000Z',
+            },
+            preview: {
+              objectKey: 'photos/account/work-1/rev-1/preview.jpg',
+              url: 'https://signed.example/preview',
+              method: 'PUT',
+              contentType: 'image/jpeg',
+              expiresAt: '2026-08-22T06:15:00.000Z',
+            },
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            downloads: [
+              {
+                workId: 'work-1',
+                objectKey: 'photos/account/work-1/rev-1/preview.jpg',
+                url: 'https://signed.example/download',
+                method: 'GET',
+                expiresAt: '2026-08-22T06:15:00.000Z',
+              },
+            ],
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const upload = await prepareCloudPhotoUpload({
+      workId: 'work-1',
+      photoRevision: 'rev-1',
+      mode: 'original-and-preview',
+      original: { name: 'photo.jpg', type: 'image/jpeg', size: 4000 },
+      preview: { type: 'image/jpeg', size: 400 },
+    })
+    const downloads = await prepareCloudPhotoDownloads(['work-1'], 'preview')
+
+    expect(upload.original?.method).toBe('PUT')
+    expect(downloads[0].workId).toBe('work-1')
+    const uploadBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    const downloadBody = JSON.parse(fetchMock.mock.calls[1][1].body)
+    expect(uploadBody).toMatchObject({
+      action: 'photo-upload-prepare',
+      accountNameKey: 'a'.repeat(64),
+      workId: 'work-1',
+    })
+    expect(downloadBody).toMatchObject({
+      action: 'photo-download-prepare',
+      kind: 'preview',
+      workIds: ['work-1'],
+    })
   })
 
   it('fetches full account app data through bounded download chunks', async () => {

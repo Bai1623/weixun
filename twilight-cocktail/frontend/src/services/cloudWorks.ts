@@ -85,6 +85,46 @@ export type CloudMetadataPatch = {
   autoBackup: CloudAppData['autoBackup']
 }
 
+export type CloudPhotoBackupMode = 'preview-only' | 'original-and-preview'
+
+export type CloudPhotoFileDescriptor = {
+  name?: string
+  type: string
+  size: number
+}
+
+export type CloudPhotoUploadInput = {
+  workId: string
+  photoRevision: string
+  mode: CloudPhotoBackupMode
+  original?: CloudPhotoFileDescriptor
+  preview: CloudPhotoFileDescriptor
+}
+
+export type CloudPhotoSignedUpload = {
+  objectKey: string
+  url: string
+  method: 'PUT'
+  contentType: string
+  expiresAt: string
+}
+
+export type CloudPhotoUploadPreparation = {
+  mode: CloudPhotoBackupMode
+  photoRevision: string
+  original?: CloudPhotoSignedUpload
+  preview: CloudPhotoSignedUpload
+  expiresAt: string
+}
+
+export type CloudPhotoDownload = {
+  workId: string
+  objectKey: string
+  url: string
+  method: 'GET'
+  expiresAt: string
+}
+
 type CloudWorksResponse = {
   ok?: boolean
   status?: string
@@ -98,6 +138,12 @@ type CloudWorksResponse = {
   payload?: unknown
   payloadText?: string
   payloadType?: string
+  mode?: string
+  photoRevision?: string
+  expiresAt?: string
+  original?: unknown
+  preview?: unknown
+  downloads?: unknown
 }
 
 type CloudWorkDocument = {
@@ -592,6 +638,76 @@ export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
   if (result.status !== 'metadata_saved') {
     throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
   }
+}
+
+const isSignedPhotoUpload = (value: unknown): value is CloudPhotoSignedUpload => {
+  if (!value || typeof value !== 'object') return false
+  const target = value as Partial<CloudPhotoSignedUpload>
+  return (
+    typeof target.objectKey === 'string' &&
+    typeof target.url === 'string' &&
+    target.method === 'PUT' &&
+    typeof target.contentType === 'string' &&
+    typeof target.expiresAt === 'string'
+  )
+}
+
+const isPhotoDownload = (value: unknown): value is CloudPhotoDownload => {
+  if (!value || typeof value !== 'object') return false
+  const target = value as Partial<CloudPhotoDownload>
+  return (
+    typeof target.workId === 'string' &&
+    typeof target.objectKey === 'string' &&
+    typeof target.url === 'string' &&
+    target.method === 'GET' &&
+    typeof target.expiresAt === 'string'
+  )
+}
+
+export const prepareCloudPhotoUpload = async (
+  input: CloudPhotoUploadInput,
+): Promise<CloudPhotoUploadPreparation> => {
+  const session = getRequiredCloudSession()
+  const result = await postCloudWorksAction({
+    action: 'photo-upload-prepare',
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    ...input,
+  })
+  if (
+    (result.mode !== 'preview-only' && result.mode !== 'original-and-preview') ||
+    typeof result.photoRevision !== 'string' ||
+    typeof result.expiresAt !== 'string' ||
+    !isSignedPhotoUpload(result.preview) ||
+    (result.mode === 'original-and-preview' && !isSignedPhotoUpload(result.original))
+  ) {
+    throw new Error('云函数返回的照片上传地址无效，请重新部署后重试。')
+  }
+  return {
+    mode: result.mode,
+    photoRevision: result.photoRevision,
+    original: isSignedPhotoUpload(result.original) ? result.original : undefined,
+    preview: result.preview,
+    expiresAt: result.expiresAt,
+  }
+}
+
+export const prepareCloudPhotoDownloads = async (
+  workIds: string[],
+  kind: 'preview' | 'original',
+): Promise<CloudPhotoDownload[]> => {
+  const session = getRequiredCloudSession()
+  const result = await postCloudWorksAction({
+    action: 'photo-download-prepare',
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+    workIds,
+    kind,
+  })
+  if (!Array.isArray(result.downloads) || !result.downloads.every(isPhotoDownload)) {
+    throw new Error('云函数返回的照片下载地址无效，请重新部署后重试。')
+  }
+  return result.downloads
 }
 
 export const createCloudWorkDocument = (
