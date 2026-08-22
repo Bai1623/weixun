@@ -1,6 +1,6 @@
 # Twilight Mixbook Handoff
 
-更新日期：2026-08-15
+更新日期：2026-08-22
 
 ## 项目是什么
 
@@ -13,8 +13,7 @@
 ## 当前版本
 
 - 当前代码仓库：`git@github.com:Bai1623/weixun.git`
-- 当前工作分支：`codex/twilight-cocktail-prototype`
-- 当前最新代码 commit：`ff28711 feat: sync account metadata incrementally`
+- 当前开发分支：`codex/twilight-photo-backup`（完成验收后并入 `codex/twilight-cocktail-prototype`）
 - 当前 Pages 仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`
 - 当前 Pages 分支：`gh-pages`
 - 最近确认的 Pages 分支 commit：`283fd6b`
@@ -47,7 +46,7 @@ twilight-cocktail/
 - 我的作品：记录日期、酒单、照片、基酒/调味酒/饮料/其他、评分、心情、自我评价、备注。
 - 我的作品分享：支持 JSON 导入导出、长图导出、筛选导出。
 - 朋友想喝：生成分享链接后，朋友可提交一条无照片点单；你在“我的作品”里查看、删除。
-- CloudBase 同步：当前是账号级轻量增量同步，覆盖作品文字信息、酒柜、收藏、学院进度、每日酒单、自定义选项和自动备份状态。
+- 跨设备同步：账号级轻量增量元数据保存在 CloudBase；作品手机原图和 1280px 预览图保存在私有阿里云 OSS。
 
 ## 云端同步现状
 
@@ -64,11 +63,20 @@ CloudBase 环境：
 - 用户在“我的作品”里输入云端账号和密码，这是一套应用自己的轻量账号逻辑，不是腾讯云账号。
 - 登录/创建账号、上传、恢复、朋友点单都通过 `twilightWorks` HTTP 云函数。
 - 最新版本上传使用 `metadata-patch`：第一次同步全部轻量元数据，之后只同步新增/编辑/删除过的作品元数据。
-- 照片不会进入轻量同步包。原因是 base64 图片会让请求非常大，之前上传和恢复会变慢或失败。
+- 照片二进制不会进入轻量同步包。数据库只保存 OSS 对象键；浏览器使用云函数签发的短期 PUT/GET URL 直传 OSS。
 - 同一台电脑从云端恢复时，如果云端记录没有照片，本地已有照片会被保留。
-- 换电脑恢复时，作品文字、原料、评分等能恢复；作品照片暂时不会跨设备恢复。
+- 新电脑无本地作品时，登录后会自动恢复账号数据，并默认下载全部作品预览图；支持进度、暂停、继续和失败重试。
+- 手机原图不会批量自动下载，在作品卡片上按需下载。
+- IndexedDB 保存本地照片 Blob；带云端照片版本的记录不会再把 Base64 图片写入 localStorage。
+- 旧版 Base64 照片会在下次云端同步时迁移为“仅预览”备份，无法补回原始手机文件。
 
-后续如果要彻底解决照片跨设备问题，下一步应做 CloudBase 云存储：照片上传到 Storage，数据库只存图片 URL 或 fileId。
+阿里云 OSS：
+
+- Bucket：`twilight-cocktail-bai`
+- Region：`oss-cn-hangzhou`
+- 对象前缀：`photos`
+- 对象格式：`photos/<账号哈希>/<作品 ID>/<照片版本>/original.<扩展名>` 和 `preview.jpg`
+- RAM 策略仅允许该 Bucket 的 `photos/*` GetObject、PutObject、DeleteObject。
 
 ## 新电脑怎么跑
 
@@ -164,9 +172,10 @@ python3.12 -m venv .venv
 1. 打开腾讯云 CloudBase 控制台。
 2. 进入环境 `weixun-d8g9xwqak83952747`。
 3. 进入云函数/托管，找到 `twilightWorks`。
-4. 用本地 `twilight-cocktail/cloudbase/twilightWorks/index.js` 覆盖线上 `index.js`。
-5. 确认依赖包含 `@cloudbase/node-sdk`，参考 `package.json`。
-6. 部署后打开“我的作品”，登录云端账号，测试“上传到云端”和“从云端恢复”。
+4. 上传整个 `twilight-cocktail/cloudbase/twilightWorks`，至少包含 `index.js`、`ossPhotos.js` 和 `package.json`，不能只覆盖 `index.js`。
+5. 安装 `package.json` 中的 `@cloudbase/node-sdk` 和 `ali-oss` 依赖。
+6. 在云函数环境变量中配置 `ALIBABA_CLOUD_ACCESS_KEY_ID`、`ALIBABA_CLOUD_ACCESS_KEY_SECRET`、`ALIYUN_OSS_REGION=oss-cn-hangzhou`、`ALIYUN_OSS_BUCKET=twilight-cocktail-bai`、`ALIYUN_OSS_PREFIX=photos`。真实密钥不得进入 Git 或前端。
+7. 部署后打开“我的作品”，登录云端账号，新增带照片作品并测试上传、跨浏览器自动恢复预览和按需下载原图。
 
 如果前端提示“云函数不支持轻量同步”或“无法连接云函数”，优先检查：
 
@@ -174,6 +183,9 @@ python3.12 -m venv .venv
 - HTTP 网关/默认域名是否能访问。
 - 数据库集合 `works` 是否存在。
 - 云函数是否能读写当前环境数据库。
+- 云函数是否已安装 `ali-oss`，以及五个 OSS 环境变量是否完整。
+- RAM 用户是否仍有 `twilight-cocktail-bai/photos/*` 权限。
+- OSS CORS 是否允许 Pages 域名、`127.0.0.1:5173` 和 `localhost:5173` 的 GET、PUT、HEAD。
 
 ## 线上怎么发布
 
@@ -203,8 +215,8 @@ git -C "$TMP_DIR" push origin gh-pages
 - 代码用 Git 迁移。
 - 本地个人数据不在代码里，浏览器 localStorage 不会跟着 Git 走。
 - 推荐在旧电脑先打开“我的作品”，登录云端账号，点击“上传到云端”。
-- 新电脑打开线上或本地站点后，用同一个云端账号登录，点击“从云端恢复”。
-- 作品照片暂时不能通过云端跨设备恢复。需要照片的话，用 JSON 导出或手动备份浏览器数据，但这不是长期方案。
+- 新电脑打开线上或本地站点后，用同一个云端账号登录。无本地作品时会自动恢复全部账号数据和作品预览图，不再需要逐张选择。
+- 等待“照片预览恢复”进度完成；失败项可重试。原图需要时从作品卡片单独下载。
 
 如果要给朋友使用：
 
@@ -217,9 +229,8 @@ git -C "$TMP_DIR" push origin gh-pages
 
 优先级较高：
 
-- 做 CloudBase Storage 照片上传，让作品照片能跨设备恢复。
+- 在真实 CloudBase 与 OSS 环境完成一次端到端验收，并观察 100～200 张照片时的恢复流量和失败率。
 - 给 GitHub Pages 增加真正的 GitHub Actions 自动部署，减少手动 `rsync`。
-- README 里部分 CloudBase 描述已落后于当前实现，后续应同步更新。
 
 优先级中等：
 

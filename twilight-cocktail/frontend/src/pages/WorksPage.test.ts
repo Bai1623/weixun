@@ -75,9 +75,7 @@ describe('WorksPage', () => {
     Object.defineProperty(photoInput.element, 'files', { value: [original], configurable: true })
     await photoInput.trigger('change')
     await flushPromises()
-    await wrapper
-      .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
-      .setValue('照片作品')
+    await wrapper.get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]').setValue('照片作品')
     await wrapper.get('[data-testid="work-save-button"]').trigger('click')
     await flushPromises()
 

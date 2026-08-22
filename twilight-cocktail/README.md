@@ -16,7 +16,7 @@
 - **我的酒柜**：登记已有原料，筛选可以直接制作、只差一种材料和部分匹配的酒。
 - **调酒学院**：8 节入门课程，本地记录学习进度。
 - **我的作品**：记录每天调过的酒，包括日期、照片、原材料、评分、自我评价、口感关键词和备注。
-- **CloudBase 同步**：我的作品支持手动上传到腾讯云 CloudBase，并可从云端恢复。
+- **跨设备同步**：作品和账号数据保存到腾讯云 CloudBase，原图与预览图保存到私有阿里云 OSS；新设备登录后会自动恢复全部作品预览图。
 - **收藏与历史**：支持本地收藏、浏览记录和匿名用户 API。
 - **离线静态演示**：GitHub Pages 版本优先读取静态 catalog，后端不可用时仍可独立使用。
 
@@ -165,10 +165,31 @@ cd frontend
 npm run build:pages
 ```
 
-仓库包含 `.github/workflows/deploy-pages.yml`。推送到 `codex/twilight-cocktail-prototype`、`main` 或 `master` 后会自动构建并发布 `gh-pages` 分支。也可以手动把 `frontend/dist` 推送到 `gh-pages`。
+当前仓库还没有可用的 GitHub Actions 发布工作流。运行 `npm run build:pages` 后，需要按 `docs/HANDOFF.md` 的步骤把 `frontend/dist` 手动发布到 Pages 仓库的 `gh-pages` 分支。
+
+## 照片云备份
+
+作品照片采用双文件备份：手机原图保持原文件上传，另生成最长边 1280px、JPEG 质量 0.82 的预览图。单张原图上限 50 MB。浏览器只把二进制缓存放在 IndexedDB；CloudBase 数据库只保存 OSS 对象键，不保存 AccessKey、签名 URL 或 Base64 图片。
+
+部署 `cloudbase/twilightWorks` 时必须同时上传 `index.js`、`ossPhotos.js`、`package.json`，安装依赖，并在 CloudBase 云函数控制台配置以下环境变量：
+
+```text
+ALIBABA_CLOUD_ACCESS_KEY_ID=<RAM 用户 AccessKey ID>
+ALIBABA_CLOUD_ACCESS_KEY_SECRET=<RAM 用户 AccessKey Secret>
+ALIYUN_OSS_REGION=oss-cn-hangzhou
+ALIYUN_OSS_BUCKET=twilight-cocktail-bai
+ALIYUN_OSS_PREFIX=photos
+```
+
+真实 AccessKey 只能保存在 CloudBase 环境变量中，不能写进前端、Git 或 `.env.example`。RAM 用户只应拥有 `twilight-cocktail-bai/photos/*` 的 GetObject、PutObject 和 DeleteObject 权限。OSS Bucket 保持私有；浏览器通过云函数返回的 15 分钟签名 URL 上传和下载。
+
+Bucket CORS 至少允许线上 Pages 域名以及本地 `http://127.0.0.1:5173`、`http://localhost:5173`，方法为 GET、PUT、HEAD，请求头为 `*`，暴露 `ETag` 与 `x-oss-request-id`。
+
+部署后按以下顺序验收：登录账号，新增带照片作品并上传；在 OSS 的 `photos/<账号哈希>/<作品 ID>/<照片版本>/` 下确认原图和 `preview.jpg`；再用无本地数据的浏览器登录，确认作品元数据和全部预览图自动恢复，最后点击作品卡片的下载按钮检查原图。
 
 ## 当前限制
 
-- “我的作品”、收藏、酒柜和课程进度当前主要保存在浏览器本地，换设备需要后续接入账号和云同步。
+- 新设备登录会自动下载全部作品预览图；原图为避免流量和空间浪费，只在用户点击时下载。
+- 旧版本只保存过压缩 Base64 图片的作品会迁移为“仅预览”备份，无法还原当时未保存的手机原图。
 - 部分无可靠来源的酒款仍使用兜底制作步骤。
 - 图片授权、来源 URL、校对时间和审核状态还可以继续精细化。

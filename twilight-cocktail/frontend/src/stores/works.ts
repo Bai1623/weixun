@@ -75,11 +75,12 @@ export type WorkPhotoMetadata = {
   photoBackupMode: WorkPhotoBackupMode
 }
 
-export type WorkRecord = Omit<WorkRecordInput, keyof WorkPhotoMetadata> & WorkPhotoMetadata & {
-  id: string
-  createdAt: string
-  updatedAt?: string
-}
+export type WorkRecord = Omit<WorkRecordInput, keyof WorkPhotoMetadata> &
+  WorkPhotoMetadata & {
+    id: string
+    createdAt: string
+    updatedAt?: string
+  }
 
 export type WorkIngredientGroups = {
   baseLiquors: string[]
@@ -223,7 +224,9 @@ const toWorkRecord = (item: unknown): WorkRecord | undefined => {
     photoOriginalMime:
       typeof candidate.photoOriginalMime === 'string' ? candidate.photoOriginalMime : '',
     photoOriginalSize:
-      typeof candidate.photoOriginalSize === 'number' ? Math.max(0, candidate.photoOriginalSize) : 0,
+      typeof candidate.photoOriginalSize === 'number'
+        ? Math.max(0, candidate.photoOriginalSize)
+        : 0,
     photoRevision: typeof candidate.photoRevision === 'string' ? candidate.photoRevision : '',
     photoBackupMode:
       candidate.photoBackupMode === 'preview-only' ||
@@ -346,9 +349,7 @@ const writeRecords = (records: WorkRecord[]) => {
   window.localStorage.setItem(
     storageKey,
     JSON.stringify(
-      records.map((record) =>
-        record.photoRevision ? { ...record, photoDataUrl: '' } : record,
-      ),
+      records.map((record) => (record.photoRevision ? { ...record, photoDataUrl: '' } : record)),
     ),
   )
 }
@@ -589,8 +590,7 @@ export const useWorkStore = defineStore('works', {
       const record: WorkRecord = {
         ...existing,
         ...input,
-        photoOriginalObjectKey:
-          input.photoOriginalObjectKey ?? existing.photoOriginalObjectKey,
+        photoOriginalObjectKey: input.photoOriginalObjectKey ?? existing.photoOriginalObjectKey,
         photoPreviewObjectKey: input.photoPreviewObjectKey ?? existing.photoPreviewObjectKey,
         photoOriginalName: input.photoOriginalName ?? existing.photoOriginalName,
         photoOriginalMime: input.photoOriginalMime ?? existing.photoOriginalMime,
@@ -723,9 +723,7 @@ export const useWorkStore = defineStore('works', {
       }
     },
     async syncPendingWorkPhotos() {
-      const pending = this.items.filter(
-        (item) => item.photoRevision && !item.photoPreviewObjectKey,
-      )
+      const pending = this.items.filter((item) => item.photoRevision && !item.photoPreviewObjectKey)
       for (const record of pending) await this.syncWorkPhoto(record.id)
     },
     pausePhotoRestore() {

@@ -79,10 +79,7 @@ const createPreviewBlob: PreviewFactory = async (file) => {
   const sourceUrl = URL.createObjectURL(file)
   try {
     const image = await loadImage(sourceUrl)
-    const scale = Math.min(
-      1,
-      maxPreviewSize / Math.max(image.naturalWidth, image.naturalHeight),
-    )
+    const scale = Math.min(1, maxPreviewSize / Math.max(image.naturalWidth, image.naturalHeight))
     const canvas = document.createElement('canvas')
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale))
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale))
@@ -178,7 +175,10 @@ export const getCachedWorkPreviewDataUrl = async (workId: string, revision: stri
   return preview ? readBlobDataUrl(preview.blob) : ''
 }
 
-const putSignedPhoto = async (target: NonNullable<CloudPhotoUploadPreparation['preview']>, blob: Blob) => {
+const putSignedPhoto = async (
+  target: NonNullable<CloudPhotoUploadPreparation['preview']>,
+  blob: Blob,
+) => {
   const response = await fetch(target.url, {
     method: 'PUT',
     headers: { 'Content-Type': target.contentType },
@@ -279,6 +279,7 @@ const runWithConcurrency = async <T>(
     while (nextIndex < items.length) {
       const item = items[nextIndex]
       nextIndex += 1
+      if (item === undefined) return
       await worker(item)
     }
   })

@@ -543,12 +543,12 @@ describe('work store', () => {
       customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
       autoBackup: { enabled: false, lastBackupAt: '' },
     })
-    const restore = vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockImplementation(
-      async (_records, options) => {
+    const restore = vi
+      .spyOn(workPhotos, 'restoreAllWorkPreviews')
+      .mockImplementation(async (_records, options) => {
         options?.onProgress?.({ completed: 1, total: 1, failedWorkIds: [] })
         return { completed: 1, total: 1, failedWorkIds: [] }
-      },
-    )
+      })
     vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
       'data:image/jpeg;base64,restored',
     )
@@ -558,7 +558,10 @@ describe('work store', () => {
 
     expect(restore).toHaveBeenCalledWith(
       [expect.objectContaining({ id: 'remote-photo-work', photoRevision: 'r1' })],
-      expect.objectContaining({ signal: expect.any(AbortSignal), onProgress: expect.any(Function) }),
+      expect.objectContaining({
+        signal: expect.any(AbortSignal),
+        onProgress: expect.any(Function),
+      }),
     )
     expect(works.items[0].photoDataUrl).toBe('data:image/jpeg;base64,restored')
     expect(works.photoRestore).toMatchObject({
@@ -619,7 +622,9 @@ describe('work store', () => {
       photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
       photoBackupMode: 'original-and-preview',
     })
-    expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')[0]).toMatchObject({
+    expect(
+      JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')[0],
+    ).toMatchObject({
       photoDataUrl: '',
       photoRevision: 'r-new',
     })

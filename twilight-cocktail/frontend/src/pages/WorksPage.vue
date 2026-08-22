@@ -524,7 +524,9 @@
                   暂停
                 </button>
                 <button
-                  v-if="works.photoRestore.status === 'paused' || works.photoRestore.status === 'error'"
+                  v-if="
+                    works.photoRestore.status === 'paused' || works.photoRestore.status === 'error'
+                  "
                   data-testid="work-photo-restore-retry"
                   class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold"
                   type="button"
@@ -670,7 +672,8 @@
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">
-              账号数据保存在 CloudBase，作品原图与预览图保存在私有 OSS。新电脑首次登录会自动恢复全部预览图，原图按需下载。
+              账号数据保存在 CloudBase，作品原图与预览图保存在私有
+              OSS。新电脑首次登录会自动恢复全部预览图，原图按需下载。
             </div>
             <div class="flex flex-wrap gap-3">
               <button

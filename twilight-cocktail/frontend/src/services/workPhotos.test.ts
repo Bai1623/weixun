@@ -1,10 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  getWorkPhoto,
-  putWorkPhoto,
-  type CachedWorkPhoto,
-} from '@/services/workPhotoCache'
+import { getWorkPhoto, putWorkPhoto, type CachedWorkPhoto } from '@/services/workPhotoCache'
 
 const { prepareCloudPhotoUpload, prepareCloudPhotoDownloads } = vi.hoisted(() => ({
   prepareCloudPhotoUpload: vi.fn(),
@@ -23,10 +19,7 @@ import {
   uploadCachedWorkPhoto,
 } from '@/services/workPhotos'
 
-const makeCachedPhoto = (
-  kind: 'original' | 'preview',
-  blob: Blob,
-): CachedWorkPhoto => ({
+const makeCachedPhoto = (kind: 'original' | 'preview', blob: Blob): CachedWorkPhoto => ({
   workId: 'work-1',
   revision: 'revision-1',
   kind,

@@ -64,7 +64,8 @@ const openDatabase = () => {
 
 const withoutStorageKey = (record: StoredWorkPhoto | undefined): CachedWorkPhoto | undefined => {
   if (!record) return undefined
-  const { key: _key, ...photo } = record
+  const photo = { ...record }
+  delete (photo as Partial<StoredWorkPhoto>).key
   return photo
 }
 
@@ -79,11 +80,7 @@ export const putWorkPhoto = async (photo: CachedWorkPhoto) => {
   await done
 }
 
-export const getWorkPhoto = async (
-  workId: string,
-  revision: string,
-  kind: WorkPhotoKind,
-) => {
+export const getWorkPhoto = async (workId: string, revision: string, kind: WorkPhotoKind) => {
   const database = await openDatabase()
   const transaction = database.transaction(photoStoreName, 'readonly')
   const stored = await requestResult<StoredWorkPhoto | undefined>(
