@@ -4,6 +4,7 @@ import {
   activateCloudWorksAccount,
   clearCloudWorksSession,
   fetchCloudAppData,
+  fetchCloudAppDataSnapshot,
   fetchCloudSnapshotSummary,
   getCloudWorksSession,
   previewCloudWorksAccount,
@@ -42,6 +43,7 @@ const storageKey = 'cocktail_work_records'
 const deletedRecordsStorageKey = 'cocktail_work_deleted_records'
 const autoBackupStorageKey = 'cocktail_work_auto_backup'
 const metadataSyncStorageKeyPrefix = 'twilight_cloud_metadata_sync'
+const restoreCheckpointStorageKeyPrefix = 'twilight_cloud_restore_checkpoint'
 const autoBackupIntervalMs = 24 * 60 * 60 * 1000
 const pantryStorageKey = 'pantry_ingredient_slugs'
 const favoritesStorageKey = 'favorite_cocktail_slugs'
@@ -142,6 +144,24 @@ export type WorkPhotoRestoreState = WorkPhotoRestoreProgress & {
   message: string
 }
 
+export type CloudRestorePreview = {
+  appData: CloudAppData
+  snapshotId: string
+  backupCreatedAt: string
+  dataLastBackupAt: string
+  localSummary: CloudAccountDataSummary
+  cloudSummary: CloudAccountDataSummary
+}
+
+type CloudRestoreCheckpoint = {
+  accountName: string
+  accountNameKey: string
+  createdAt: string
+  appData: CloudAppData
+  deletedRecords: CloudDeletedWork[]
+  lastMetadataSyncAt: string
+}
+
 const createCloudSyncState = (): WorkCloudSyncState => ({
   status: 'idle',
   message: '尚未执行云端操作。',
@@ -177,6 +197,11 @@ const createCloudAccountState = (): WorkCloudAccountState => {
 const metadataSyncStorageKey = () => {
   const session = getCloudWorksSession()
   return session ? `${metadataSyncStorageKeyPrefix}:${session.accountNameKey}` : ''
+}
+
+const restoreCheckpointStorageKey = () => {
+  const session = getCloudWorksSession()
+  return session ? `${restoreCheckpointStorageKeyPrefix}:${session.accountNameKey}` : ''
 }
 
 const createAutoBackupState = (): WorkAutoBackupState => {
@@ -424,6 +449,53 @@ const writeLastMetadataSyncAt = (timestamp: string) => {
   if (key) window.localStorage.setItem(key, timestamp)
 }
 
+const readRestoreCheckpoint = (): CloudRestoreCheckpoint | null => {
+  const session = getCloudWorksSession()
+  const key = restoreCheckpointStorageKey()
+  if (!session || !key) return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const checkpoint = JSON.parse(raw) as Partial<CloudRestoreCheckpoint>
+    if (
+      checkpoint.accountNameKey !== session.accountNameKey ||
+      typeof checkpoint.accountName !== 'string' ||
+      typeof checkpoint.createdAt !== 'string' ||
+      typeof checkpoint.lastMetadataSyncAt !== 'string' ||
+      !checkpoint.appData ||
+      checkpoint.appData.type !== 'app-data' ||
+      !Array.isArray(checkpoint.deletedRecords)
+    ) {
+      return null
+    }
+    return checkpoint as CloudRestoreCheckpoint
+  } catch {
+    return null
+  }
+}
+
+const writeRestoreCheckpoint = (checkpoint: CloudRestoreCheckpoint) => {
+  const key = restoreCheckpointStorageKey()
+  if (!key) throw new Error('请先登录云端账号，再创建本地恢复点。')
+  const appData = {
+    ...checkpoint.appData,
+    works: checkpoint.appData.works.map((record) => ({
+      ...record,
+      photoDataUrl: record.photoRevision ? '' : record.photoDataUrl,
+    })),
+  }
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ ...checkpoint, appData }))
+  } catch {
+    throw new Error('无法创建本地恢复点，已停止恢复；请先导出 JSON 或释放浏览器空间。')
+  }
+}
+
+const clearRestoreCheckpoint = () => {
+  const key = restoreCheckpointStorageKey()
+  if (key) window.localStorage.removeItem(key)
+}
+
 const writeAutoBackupState = (state: WorkAutoBackupState) => {
   window.localStorage.setItem(autoBackupStorageKey, JSON.stringify(state))
 }
@@ -621,8 +693,10 @@ export const useWorkStore = defineStore('works', {
     cloudAccount: createCloudAccountState(),
     autoBackup: createAutoBackupState(),
     photoRestore: createPhotoRestoreState(),
+    restoreCheckpointAvailable: Boolean(readRestoreCheckpoint()),
   }),
   getters: {
+    hasRestoreCheckpoint: (state) => state.restoreCheckpointAvailable,
     totalCount: (state) => state.items.length,
     latestItems: (state) =>
       [...state.items].sort((a, b) =>
@@ -934,6 +1008,7 @@ export const useWorkStore = defineStore('works', {
           accountName: session.accountName,
           updatedAt: session.updatedAt,
         }
+        this.restoreCheckpointAvailable = Boolean(readRestoreCheckpoint())
       } catch (error) {
         try {
           applyAccountBackupData(previousAppData, { preserveLocalPhotos: false })
@@ -977,7 +1052,150 @@ export const useWorkStore = defineStore('works', {
       clearCloudWorksSession()
       this.cloudAccount = { accountName: '', updatedAt: '' }
       this.cloudSnapshot = createCloudSnapshotState()
+      this.restoreCheckpointAvailable = false
       this.setCloudSync('idle', '已退出云端账号。')
+    },
+    async prepareCloudRestore(): Promise<CloudRestorePreview> {
+      this.setCloudSync('syncing', '正在读取云端备份详情...')
+      try {
+        const remote = await fetchCloudAppDataSnapshot()
+        const preview = {
+          appData: remote.appData,
+          snapshotId: remote.snapshotId,
+          backupCreatedAt: remote.backupCreatedAt,
+          dataLastBackupAt: remote.appData.autoBackup.lastBackupAt,
+          localSummary: summarizeAccountData(
+            createAccountBackupData(this.items, this.autoBackup),
+          ),
+          cloudSummary: summarizeAccountData(remote.appData),
+        }
+        this.setCloudSync('success', '已读取云端备份详情，等待确认恢复。')
+        return preview
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '读取云端备份详情失败，请稍后重试。'),
+        )
+        throw error
+      }
+    },
+    async restorePreparedCloudData(preview: CloudRestorePreview): Promise<number> {
+      this.setCloudSync('syncing', '正在验证并恢复 CloudBase 云端账号数据...')
+      try {
+        const currentSnapshot = await fetchCloudSnapshotSummary()
+        if (currentSnapshot.snapshotId !== preview.snapshotId) {
+          throw new Error('云端备份在确认期间发生了变化，请重新检查后再恢复。')
+        }
+
+        const session = getCloudWorksSession()
+        if (!session) throw new Error('请先登录云端账号。')
+        const previousAppData = createAccountBackupData(this.items, this.autoBackup)
+        const previousDeletedRecords = readDeletedRecords()
+        const previousLastMetadataSyncAt = readLastMetadataSyncAt()
+        const checkpoint: CloudRestoreCheckpoint = {
+          accountName: session.accountName,
+          accountNameKey: session.accountNameKey,
+          createdAt: new Date().toISOString(),
+          appData: previousAppData,
+          deletedRecords: previousDeletedRecords,
+          lastMetadataSyncAt: previousLastMetadataSyncAt,
+        }
+        writeRestoreCheckpoint(checkpoint)
+
+        try {
+          applyAccountBackupData(preview.appData)
+          this.items = readRecords()
+          this.autoBackup = { ...preview.appData.autoBackup }
+          writeAutoBackupState(this.autoBackup)
+          writeDeletedRecords([])
+          writeLastMetadataSyncAt(new Date().toISOString())
+          this.restoreCheckpointAvailable = true
+        } catch (error) {
+          applyAccountBackupData(previousAppData)
+          this.items = readRecords()
+          this.autoBackup = { ...previousAppData.autoBackup }
+          writeAutoBackupState(this.autoBackup)
+          writeDeletedRecords(previousDeletedRecords)
+          writeLastMetadataSyncAt(previousLastMetadataSyncAt)
+          clearRestoreCheckpoint()
+          this.restoreCheckpointAvailable = false
+          throw error
+        }
+
+        this.cloudSnapshot = {
+          status: 'ready',
+          relation: 'same-base',
+          checkedAt: new Date().toISOString(),
+          message: '已从当前云端备份恢复，本机与云端版本一致。',
+          snapshot: currentSnapshot,
+        }
+        try {
+          await this.restorePhotoPreviews()
+          this.setCloudSync(
+            'success',
+            `已从 CloudBase 云端恢复账号数据（作品 ${preview.appData.works.length} 条），可撤销本次恢复。`,
+          )
+        } catch (error) {
+          this.setCloudSync(
+            'error',
+            `账号数据已恢复，但部分照片恢复失败，可重试或撤销：${getErrorMessage(error, '未知错误')}`,
+          )
+        }
+        return this.items.length
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '恢复云端账号数据失败，本地数据未被替换。'),
+        )
+        throw error
+      }
+    },
+    async undoLastCloudRestore(): Promise<number> {
+      const checkpoint = readRestoreCheckpoint()
+      if (!checkpoint) throw new Error('当前账号没有可撤销的云端恢复记录。')
+      const currentAppData = createAccountBackupData(this.items, this.autoBackup)
+      const currentDeletedRecords = readDeletedRecords()
+      const currentLastMetadataSyncAt = readLastMetadataSyncAt()
+      this.setCloudSync('syncing', '正在撤销上一次云端恢复...')
+      try {
+        applyAccountBackupData(checkpoint.appData)
+        this.items = readRecords()
+        this.autoBackup = { ...checkpoint.appData.autoBackup }
+        writeAutoBackupState(this.autoBackup)
+        writeDeletedRecords(checkpoint.deletedRecords)
+        writeLastMetadataSyncAt(checkpoint.lastMetadataSyncAt)
+      } catch (error) {
+        applyAccountBackupData(currentAppData)
+        this.items = readRecords()
+        this.autoBackup = { ...currentAppData.autoBackup }
+        writeAutoBackupState(this.autoBackup)
+        writeDeletedRecords(currentDeletedRecords)
+        writeLastMetadataSyncAt(currentLastMetadataSyncAt)
+        this.setCloudSync('error', getErrorMessage(error, '撤销恢复失败，本地数据未改变。'))
+        throw error
+      }
+
+      clearRestoreCheckpoint()
+      this.restoreCheckpointAvailable = false
+      if (this.cloudSnapshot.snapshot) {
+        const relation = cloudSnapshotRelation(
+          this.cloudSnapshot.snapshot,
+          this.autoBackup.lastBackupAt,
+        )
+        this.cloudSnapshot = {
+          ...this.cloudSnapshot,
+          status: 'ready',
+          relation,
+          message: cloudSnapshotMessage(relation),
+        }
+      }
+      try {
+        await this.restorePhotoPreviews()
+      } catch {
+        // Account metadata is already restored; the existing photo retry panel remains available.
+      }
+      this.setCloudSync('success', '已撤销上一次云端恢复，恢复前的本地账号数据已还原。')
+      return this.items.length
     },
     async loadFromCloud(): Promise<number> {
       this.setCloudSync('syncing', '正在从 CloudBase 云端恢复账号数据...')

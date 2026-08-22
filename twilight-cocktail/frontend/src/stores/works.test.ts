@@ -828,6 +828,216 @@ describe('work store', () => {
     })
   })
 
+  it('prepares a complete local and cloud restore preview without mutating local data', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    usePantryStore().ingredientSlugs = ['local-gin', 'local-rum']
+    useFavoriteStore().slugs = ['local-favorite']
+    useAcademyStore().completedSlugs = ['local-course']
+    const remoteAppData: cloudWorks.CloudAppData = {
+      ...cloudWorks.createEmptyCloudAppData(),
+      works: [
+        {
+          id: 'remote-work',
+          madeAt: '2026-08-22',
+          cocktailSlug: '',
+          cocktailName: '云端作品',
+          photoDataUrl: '',
+          photoOriginalObjectKey: 'photos/account/remote-work/r1/original.jpg',
+          photoPreviewObjectKey: 'photos/account/remote-work/r1/preview.jpg',
+          photoOriginalName: 'remote.jpg',
+          photoOriginalMime: 'image/jpeg',
+          photoOriginalSize: 2048,
+          photoRevision: 'r1',
+          photoBackupMode: 'original-and-preview',
+          ingredientsText: '金酒、汤力水',
+          rating: 5,
+          mood: '',
+          selfReview: '',
+          notes: '',
+          createdAt: '2026-08-22T09:00:00.000Z',
+          updatedAt: '2026-08-22T09:00:00.000Z',
+        },
+      ],
+      pantry: { ingredientSlugs: ['remote-gin'] },
+      favorites: { cocktailSlugs: ['remote-favorite'] },
+      academy: { completedSlugs: ['remote-course', 'remote-course-2'] },
+      autoBackup: { enabled: true, lastBackupAt: '2026-08-22T09:30:00.000Z' },
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudAppDataSnapshot').mockResolvedValue({
+      appData: remoteAppData,
+      snapshotId: 'snapshot-remote',
+      backupCreatedAt: '2026-08-22T09:30:01.000Z',
+    })
+
+    const preview = await works.prepareCloudRestore()
+
+    expect(preview).toMatchObject({
+      snapshotId: 'snapshot-remote',
+      dataLastBackupAt: '2026-08-22T09:30:00.000Z',
+      localSummary: {
+        works: 0,
+        pantry: 2,
+        favorites: 1,
+        academy: 1,
+      },
+      cloudSummary: {
+        works: 1,
+        previewPhotos: 1,
+        originalPhotos: 1,
+        pantry: 1,
+        favorites: 1,
+        academy: 2,
+      },
+    })
+    expect(works.items).toEqual([])
+    expect(usePantryStore().ingredientSlugs).toEqual(['local-gin', 'local-rum'])
+    expect(works.hasRestoreCheckpoint).toBe(false)
+  })
+
+  it('creates a same-account restore point and can undo the complete cloud replacement', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    const localWork = works.add({
+      madeAt: '2026-08-21',
+      cocktailSlug: '',
+      cocktailName: '本地作品',
+      photoDataUrl: 'data:image/jpeg;base64,legacy-local',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 3,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    usePantryStore().ingredientSlugs = ['local-rum']
+    useFavoriteStore().slugs = ['local-favorite']
+    useAcademyStore().completedSlugs = ['local-course']
+    window.localStorage.setItem(
+      'cocktail_work_deleted_records',
+      JSON.stringify([{ id: 'local-deleted', deletedAt: '2026-08-22T08:00:00.000Z' }]),
+    )
+    window.localStorage.setItem(
+      'twilight_cloud_metadata_sync:account-key',
+      '2026-08-22T08:30:00.000Z',
+    )
+    const remoteWork = {
+      ...localWork,
+      id: 'remote-work',
+      cocktailName: '云端作品',
+      photoDataUrl: '',
+      createdAt: '2026-08-22T09:00:00.000Z',
+      updatedAt: '2026-08-22T09:00:00.000Z',
+    }
+    const remoteAppData: cloudWorks.CloudAppData = {
+      ...cloudWorks.createEmptyCloudAppData(),
+      works: [remoteWork],
+      pantry: { ingredientSlugs: ['remote-gin'] },
+      favorites: { cocktailSlugs: ['remote-favorite'] },
+      academy: { completedSlugs: ['remote-course'] },
+      autoBackup: { enabled: true, lastBackupAt: '2026-08-22T09:30:00.000Z' },
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudAppDataSnapshot').mockResolvedValue({
+      appData: remoteAppData,
+      snapshotId: 'snapshot-remote',
+      backupCreatedAt: '2026-08-22T09:30:01.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(
+      cloudSummaryFixture({
+        snapshotId: 'snapshot-remote',
+        backupCreatedAt: '2026-08-22T09:30:01.000Z',
+        dataLastBackupAt: '2026-08-22T09:30:00.000Z',
+      }),
+    )
+    vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockResolvedValue({
+      completed: 0,
+      total: 0,
+      failedWorkIds: [],
+    })
+    const clearPhotos = vi.spyOn(workPhotoCache, 'clearAllWorkPhotos')
+    const preview = await works.prepareCloudRestore()
+
+    await works.restorePreparedCloudData(preview)
+
+    expect(works.items[0].cocktailName).toBe('云端作品')
+    expect(usePantryStore().ingredientSlugs).toEqual(['remote-gin'])
+    expect(works.hasRestoreCheckpoint).toBe(true)
+    expect(clearPhotos).not.toHaveBeenCalled()
+    expect(
+      JSON.parse(
+        window.localStorage.getItem('twilight_cloud_restore_checkpoint:account-key') ?? '{}',
+      ),
+    ).toMatchObject({
+      accountNameKey: 'account-key',
+      appData: { works: [expect.objectContaining({ cocktailName: '本地作品' })] },
+      deletedRecords: [{ id: 'local-deleted' }],
+      lastMetadataSyncAt: '2026-08-22T08:30:00.000Z',
+    })
+
+    await works.undoLastCloudRestore()
+
+    expect(works.items[0]).toMatchObject({
+      id: localWork.id,
+      cocktailName: '本地作品',
+      photoDataUrl: 'data:image/jpeg;base64,legacy-local',
+    })
+    expect(usePantryStore().ingredientSlugs).toEqual(['local-rum'])
+    expect(useFavoriteStore().slugs).toEqual(['local-favorite'])
+    expect(useAcademyStore().completedSlugs).toEqual(['local-course'])
+    expect(works.hasRestoreCheckpoint).toBe(false)
+    expect(window.localStorage.getItem('twilight_cloud_restore_checkpoint:account-key')).toBeNull()
+  })
+
+  it('stops restore when the cloud changes after the preview was prepared', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    const localWork = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '本地作品',
+      photoDataUrl: '',
+      ingredientsText: '苏打水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const remoteAppData = {
+      ...cloudWorks.createEmptyCloudAppData(),
+      works: [{ ...localWork, id: 'remote-work', cocktailName: '云端作品' }],
+    }
+    vi.spyOn(cloudWorks, 'fetchCloudAppDataSnapshot').mockResolvedValue({
+      appData: remoteAppData,
+      snapshotId: 'snapshot-old',
+      backupCreatedAt: '2026-08-22T09:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(
+      cloudSummaryFixture({ snapshotId: 'snapshot-new' }),
+    )
+    const preview = await works.prepareCloudRestore()
+
+    await expect(works.restorePreparedCloudData(preview)).rejects.toThrow(
+      '云端备份在确认期间发生了变化，请重新检查后再恢复。',
+    )
+
+    expect(works.items).toEqual([localWork])
+    expect(works.hasRestoreCheckpoint).toBe(false)
+  })
+
   it('caches a newly selected original plus preview without starting a second cloud upload', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',

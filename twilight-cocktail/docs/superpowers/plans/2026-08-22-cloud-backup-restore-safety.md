@@ -153,31 +153,31 @@ Call `fetchCloudSnapshotSummary()` at the start of every upload. Allow empty clo
 - Produces: `restorePreparedCloudData(preview): Promise<number>`.
 - Produces: `undoLastCloudRestore(): Promise<number>` and `hasRestoreCheckpoint`.
 
-- [ ] **Step 1: Write failing restore-preview tests**
+- [x] **Step 1: Write failing restore-preview tests**
 
 Seed local pantry/favorites/academy with zero works, stage a remote snapshot, and assert `prepareCloudRestore` reports all local and cloud counts without mutating stores or localStorage.
 
-- [ ] **Step 2: Run store tests and verify RED**
+- [x] **Step 2: Run store tests and verify RED**
 
 Run: `npm test -- --run src/stores/works.test.ts`
 
 Expected: FAIL because restore preview is not staged separately.
 
-- [ ] **Step 3: Implement read-only restore preparation**
+- [x] **Step 3: Implement read-only restore preparation**
 
 Use `fetchCloudAppDataSnapshot()` and the shared summary derivation. Return the full preview object but do not call `applyAccountBackupData`.
 
-- [ ] **Step 4: Write failing checkpoint, version-race, and undo tests**
+- [x] **Step 4: Write failing checkpoint, version-race, and undo tests**
 
 Assert that confirmation rechecks `snapshotId`, rejects a changed version without replacing local data, stores a metadata-only checkpoint before a valid replacement, restores all account categories on undo, preserves IndexedDB photo cache, removes the checkpoint after success, and rejects a checkpoint belonging to another account.
 
-- [ ] **Step 5: Run store tests and verify RED**
+- [x] **Step 5: Run store tests and verify RED**
 
 Run: `npm test -- --run src/stores/works.test.ts`
 
 Expected: FAIL because checkpoint and undo behavior do not exist.
 
-- [ ] **Step 6: Implement checkpointed restore and verify GREEN**
+- [x] **Step 6: Implement checkpointed restore and verify GREEN**
 
 Store the checkpoint under an account-keyed localStorage key with `photoDataUrl` stripped from works. Recheck summary version before apply, create the checkpoint, apply the complete package, and rollback from the in-memory snapshot if persistence fails. Keep photo preview restoration retryable. Re-run the store suite and expect PASS.
 
