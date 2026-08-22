@@ -72,6 +72,35 @@ export type CloudAppData = {
   }
 }
 
+export type CloudAccountDataSummary = {
+  works: number
+  previewPhotos: number
+  originalPhotos: number
+  pantry: number
+  favorites: number
+  academy: number
+  dailyPick: number
+  customCocktails: number
+  customFlavorLiquors: number
+  customBeverages: number
+}
+
+export type CloudSnapshotSummary = {
+  status: 'matched' | 'account_not_found'
+  accountName: string
+  snapshotId: string
+  backupCreatedAt: string
+  dataLastBackupAt: string
+  recordCount: number
+  summary: CloudAccountDataSummary
+}
+
+export type CloudAppDataSnapshot = {
+  appData: CloudAppData
+  snapshotId: string
+  backupCreatedAt: string
+}
+
 export type CloudDeletedWork = {
   id: string
   deletedAt: string
@@ -138,6 +167,10 @@ type CloudWorksResponse = {
   error?: string
   message?: string
   accountName?: string
+  backupCreatedAt?: string
+  dataLastBackupAt?: string
+  metadataUpdatedAt?: string
+  snapshotId?: string
   recordCount?: number
   chunkCount?: number
   chunkIndex?: number
@@ -151,6 +184,7 @@ type CloudWorksResponse = {
   original?: unknown
   preview?: unknown
   downloads?: unknown
+  summary?: unknown
 }
 
 type CloudWorkDocument = {
@@ -232,6 +266,19 @@ export const createEmptyCloudAppData = (): CloudAppData => ({
     enabled: false,
     lastBackupAt: '',
   },
+})
+
+export const createEmptyCloudAccountDataSummary = (): CloudAccountDataSummary => ({
+  works: 0,
+  previewPhotos: 0,
+  originalPhotos: 0,
+  pantry: 0,
+  favorites: 0,
+  academy: 0,
+  dailyPick: 0,
+  customCocktails: 0,
+  customFlavorLiquors: 0,
+  customBeverages: 0,
 })
 
 const createAppDataPayload = (appData: CloudAppData): CloudAppData => normalizeCloudAppData(appData)
@@ -372,6 +419,49 @@ const postIdempotentCloudWorksAction = async (body: Record<string, unknown>) => 
   } catch (error) {
     if (!isRetryableCloudActionError(error)) throw error
     return postCloudWorksAction(body)
+  }
+}
+
+const normalizeCount = (value: unknown) =>
+  typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+
+const normalizeCloudAccountDataSummary = (value: unknown): CloudAccountDataSummary => {
+  const empty = createEmptyCloudAccountDataSummary()
+  if (!value || typeof value !== 'object') return empty
+  const candidate = value as Partial<Record<keyof CloudAccountDataSummary, unknown>>
+  return {
+    works: normalizeCount(candidate.works),
+    previewPhotos: normalizeCount(candidate.previewPhotos),
+    originalPhotos: normalizeCount(candidate.originalPhotos),
+    pantry: normalizeCount(candidate.pantry),
+    favorites: normalizeCount(candidate.favorites),
+    academy: normalizeCount(candidate.academy),
+    dailyPick: normalizeCount(candidate.dailyPick),
+    customCocktails: normalizeCount(candidate.customCocktails),
+    customFlavorLiquors: normalizeCount(candidate.customFlavorLiquors),
+    customBeverages: normalizeCount(candidate.customBeverages),
+  }
+}
+
+export const fetchCloudSnapshotSummary = async (): Promise<CloudSnapshotSummary> => {
+  const session = getRequiredCloudSession()
+  const result = await postIdempotentCloudWorksAction({
+    action: 'account-summary',
+    accountNameKey: session.accountNameKey,
+    passwordVerifier: session.passwordVerifier,
+  })
+  const summary = normalizeCloudAccountDataSummary(result.summary)
+  return {
+    status: result.status === 'account_not_found' ? 'account_not_found' : 'matched',
+    accountName: typeof result.accountName === 'string' ? result.accountName : session.accountName,
+    snapshotId: typeof result.snapshotId === 'string' ? result.snapshotId : '',
+    backupCreatedAt:
+      typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : '',
+    dataLastBackupAt:
+      typeof result.dataLastBackupAt === 'string' ? result.dataLastBackupAt : '',
+    recordCount:
+      typeof result.recordCount === 'number' ? normalizeCount(result.recordCount) : summary.works,
+    summary,
   }
 }
 
@@ -551,16 +641,36 @@ export const normalizeCloudAppData = (payload: unknown): CloudAppData => {
   }
 }
 
-const fetchLegacyCloudAppData = async (session: CloudWorksSession) => {
+const createCloudAppDataSnapshot = (
+  result: CloudWorksResponse,
+  appData: CloudAppData,
+): CloudAppDataSnapshot => {
+  const backupCreatedAt =
+    typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : ''
+  return {
+    appData,
+    snapshotId:
+      typeof result.snapshotId === 'string' && result.snapshotId
+        ? result.snapshotId
+        : backupCreatedAt,
+    backupCreatedAt,
+  }
+}
+
+const fetchLegacyCloudAppDataSnapshot = async (
+  session: CloudWorksSession,
+): Promise<CloudAppDataSnapshot> => {
   const result = await postCloudWorksAction({
     action: 'works-get',
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
   })
-  return normalizeCloudAppData(result.payload)
+  return createCloudAppDataSnapshot(result, normalizeCloudAppData(result.payload))
 }
 
-const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
+const fetchCloudAppDataSnapshotForSession = async (
+  session: CloudWorksSession,
+): Promise<CloudAppDataSnapshot> => {
   const startResult = await postCloudWorksAction({
     action: 'works-get-start',
     accountNameKey: session.accountNameKey,
@@ -568,7 +678,7 @@ const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
   })
 
   if (startResult.payload !== undefined) {
-    return normalizeCloudAppData(startResult.payload)
+    return createCloudAppDataSnapshot(startResult, normalizeCloudAppData(startResult.payload))
   }
 
   const chunkCount =
@@ -577,7 +687,7 @@ const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
       : 0
 
   if (!chunkCount) {
-    return fetchLegacyCloudAppData(session)
+    return fetchLegacyCloudAppDataSnapshot(session)
   }
 
   const textChunks: string[] = []
@@ -603,25 +713,37 @@ const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
 
   if (textChunks.length) {
     try {
-      return normalizeCloudAppData(JSON.parse(textChunks.join('')))
+      return createCloudAppDataSnapshot(
+        startResult,
+        normalizeCloudAppData(JSON.parse(textChunks.join(''))),
+      )
     } catch {
       throw new Error('云端备份分片内容损坏，请重新上传后再恢复。')
     }
   }
 
   if (legacyPayloads.length === 1) {
-    return normalizeCloudAppData(legacyPayloads[0])
+    return createCloudAppDataSnapshot(startResult, normalizeCloudAppData(legacyPayloads[0]))
   }
 
-  return normalizeCloudAppData({
-    version: 1,
-    app: 'twilight-mixbook',
-    type: 'work-records',
-    records: legacyPayloads.flatMap((payload) => normalizeCloudRecords(payload)),
-  })
+  return createCloudAppDataSnapshot(
+    startResult,
+    normalizeCloudAppData({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'work-records',
+      records: legacyPayloads.flatMap((payload) => normalizeCloudRecords(payload)),
+    }),
+  )
 }
 
-export const fetchCloudAppData = async () => fetchCloudAppDataForSession(getRequiredCloudSession())
+const fetchCloudAppDataForSession = async (session: CloudWorksSession) =>
+  (await fetchCloudAppDataSnapshotForSession(session)).appData
+
+export const fetchCloudAppDataSnapshot = async () =>
+  fetchCloudAppDataSnapshotForSession(getRequiredCloudSession())
+
+export const fetchCloudAppData = async () => (await fetchCloudAppDataSnapshot()).appData
 
 export const fetchCloudWorks = async () => {
   const appData = await fetchCloudAppData()
@@ -715,6 +837,11 @@ export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
 
   if (result.status !== 'metadata_saved') {
     throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
+  }
+  return {
+    snapshotId:
+      typeof result.metadataUpdatedAt === 'string' ? result.metadataUpdatedAt : '',
+    recordCount: normalizeCount(result.recordCount),
   }
 }
 

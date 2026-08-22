@@ -82,21 +82,21 @@ Expected: all tests pass.
 - Produces: `fetchCloudAppDataSnapshot(): Promise<CloudAppDataSnapshot>`.
 - Changes: `syncCloudMetadataPatch()` returns `{ snapshotId, recordCount }`.
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Mock complete `account-summary` and `works-get-start` responses. Assert that summary fields and `backupCreatedAt` are preserved, and that the staged app-data call returns both normalized `appData` and the exact `snapshotId`. Add a metadata-patch test asserting its returned snapshot ID.
 
-- [ ] **Step 2: Run service tests and verify RED**
+- [x] **Step 2: Run service tests and verify RED**
 
 Run: `npm test -- --run src/services/cloudWorks.test.ts`
 
 Expected: FAIL because the new types and functions do not exist and response timestamps are currently discarded.
 
-- [ ] **Step 3: Implement minimal typed service functions**
+- [x] **Step 3: Implement minimal typed service functions**
 
 Extend `CloudWorksResponse` with `backupCreatedAt`, `metadataUpdatedAt`, `dataLastBackupAt`, `snapshotId`, and `summary`. Extract the current chunk reader to return `{ appData, snapshotId, backupCreatedAt }`; keep `fetchCloudAppData()` as a compatibility wrapper returning `.appData`. Validate every summary number with finite non-negative integer normalization.
 
-- [ ] **Step 4: Run service tests and verify GREEN**
+- [x] **Step 4: Run service tests and verify GREEN**
 
 Run: `npm test -- --run src/services/cloudWorks.test.ts`
 

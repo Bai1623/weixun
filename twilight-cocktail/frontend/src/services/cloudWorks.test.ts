@@ -11,6 +11,8 @@ import {
   createCloudWorkDocument,
   createCloudWorkChunks,
   fetchCloudAppData,
+  fetchCloudAppDataSnapshot,
+  fetchCloudSnapshotSummary,
   fetchCloudWorks,
   getCloudWorksSession,
   loginCloudWorksAccount,
@@ -287,6 +289,108 @@ describe('cloud works service', () => {
     expect(restored).toEqual(appData)
   })
 
+  it('fetches a typed cloud snapshot summary with server backup timestamps', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          ok: true,
+          status: 'matched',
+          accountName: 'mix',
+          snapshotId: '2026-08-22T11:00:00.000Z',
+          backupCreatedAt: '2026-08-22T11:00:00.000Z',
+          dataLastBackupAt: '2026-08-22T10:59:59.000Z',
+          recordCount: 2,
+          summary: {
+            works: 2,
+            previewPhotos: 2,
+            originalPhotos: 1,
+            pantry: 3,
+            favorites: 1,
+            academy: 4,
+            dailyPick: 1,
+            customCocktails: 2,
+            customFlavorLiquors: 1,
+            customBeverages: 2,
+          },
+        }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const summary = await fetchCloudSnapshotSummary()
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      action: 'account-summary',
+      accountNameKey: 'account-key',
+    })
+    expect(summary).toEqual({
+      status: 'matched',
+      accountName: 'mix',
+      snapshotId: '2026-08-22T11:00:00.000Z',
+      backupCreatedAt: '2026-08-22T11:00:00.000Z',
+      dataLastBackupAt: '2026-08-22T10:59:59.000Z',
+      recordCount: 2,
+      summary: {
+        works: 2,
+        previewPhotos: 2,
+        originalPhotos: 1,
+        pantry: 3,
+        favorites: 1,
+        academy: 4,
+        dailyPick: 1,
+        customCocktails: 2,
+        customFlavorLiquors: 1,
+        customBeverages: 2,
+      },
+    })
+  })
+
+  it('stages full cloud app data with the exact snapshot version', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      }),
+    )
+    const appData = {
+      ...createEmptyCloudAppData(),
+      works: [record],
+      pantry: { ingredientSlugs: ['gin'] },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            status: 'matched',
+            snapshotId: '2026-08-22T11:00:00.000Z',
+            backupCreatedAt: '2026-08-22T11:00:00.000Z',
+            payload: appData,
+          }),
+      }),
+    )
+
+    await expect(fetchCloudAppDataSnapshot()).resolves.toEqual({
+      appData,
+      snapshotId: '2026-08-22T11:00:00.000Z',
+      backupCreatedAt: '2026-08-22T11:00:00.000Z',
+    })
+  })
+
   it('syncs a lightweight metadata patch without photo payloads', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
@@ -303,6 +407,7 @@ describe('cloud works service', () => {
         Promise.resolve({
           ok: true,
           status: 'metadata_saved',
+          metadataUpdatedAt: '2026-08-10T10:01:00.000Z',
           recordCount: 1,
           changedCount: 1,
           deletedCount: 0,
@@ -310,7 +415,7 @@ describe('cloud works service', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    await syncCloudMetadataPatch({
+    const syncResult = await syncCloudMetadataPatch({
       version: 1,
       app: 'twilight-mixbook',
       type: 'metadata-patch',
@@ -333,6 +438,10 @@ describe('cloud works service', () => {
       photoDataUrl: '',
     })
     expect(JSON.stringify(body)).not.toContain('data:image/jpeg;base64,abc')
+    expect(syncResult).toEqual({
+      snapshotId: '2026-08-10T10:01:00.000Z',
+      recordCount: 1,
+    })
   })
 
   it('retries an idempotent metadata patch once after a temporary connection failure', async () => {
