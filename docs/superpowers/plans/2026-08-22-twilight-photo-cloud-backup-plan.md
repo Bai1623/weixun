@@ -78,7 +78,7 @@ test("rejects non-images and originals above 50 MB", () => {
 
 - [ ] **Step 2: Run the new Node test and verify failure**
 
-Run: `node --test cloudbase/twilightWorks/ossPhotos.test.cjs`  
+Run: `node --test cloudbase/twilightWorks/ossPhotos.test.cjs`
 Expected: FAIL because `ossPhotos.js` does not exist.
 
 - [ ] **Step 3: Implement the focused OSS module**
@@ -118,7 +118,7 @@ Add `"ali-oss": "6.23.0"` beside `@cloudbase/node-sdk` in the cloud function pac
 
 - [ ] **Step 5: Run the module tests**
 
-Run: `node --test cloudbase/twilightWorks/ossPhotos.test.cjs`  
+Run: `node --test cloudbase/twilightWorks/ossPhotos.test.cjs`
 Expected: PASS for valid dual upload, preview-only upload, invalid type/size/identifier, account-prefix rejection, HEAD checks, and deletion.
 
 - [ ] **Step 6: Commit Task 1**
@@ -160,7 +160,7 @@ Add failing tests proving wrong passwords return `password_mismatch`, arbitrary 
 
 - [ ] **Step 2: Run focused cloud-function tests and verify failure**
 
-Run: `node --test cloudbase/twilightWorks/index.test.cjs --test-name-pattern='photo|metadata patch'`  
+Run: `node --test cloudbase/twilightWorks/index.test.cjs --test-name-pattern='photo|metadata patch'`
 Expected: FAIL because the new actions and fields do not exist.
 
 - [ ] **Step 3: Extend sanitized work metadata**
@@ -209,7 +209,7 @@ Before saving changed photo keys in `metadata-patch`, validate the account prefi
 
 - [ ] **Step 5: Run all cloud-function tests**
 
-Run: `node --test cloudbase/twilightWorks/*.test.cjs`  
+Run: `node --test cloudbase/twilightWorks/*.test.cjs`
 Expected: all existing and new tests PASS; no output contains credentials or signed URLs.
 
 - [ ] **Step 6: Commit Task 2**
@@ -266,7 +266,7 @@ it('lists only pending and failed records for retry', async () => {
 
 - [ ] **Step 2: Run the cache test and verify failure**
 
-Run: `npm test -- --run src/services/workPhotoCache.test.ts`  
+Run: `npm test -- --run src/services/workPhotoCache.test.ts`
 Expected: FAIL because the cache module does not exist.
 
 - [ ] **Step 3: Implement IndexedDB schema version 1**
@@ -287,7 +287,7 @@ export const putWorkPhoto = async (photo: CachedWorkPhoto) =>
 
 - [ ] **Step 4: Run cache tests**
 
-Run: `npm test -- --run src/services/workPhotoCache.test.ts`  
+Run: `npm test -- --run src/services/workPhotoCache.test.ts`
 Expected: PASS for write/read, replacement, deletion, pending filters, version checks, and quota/error propagation.
 
 - [ ] **Step 5: Commit Task 3**
@@ -326,7 +326,7 @@ Define strict response types and reject missing URL/key fields with a Chinese us
 
 - [ ] **Step 2: Run service tests and verify failure**
 
-Run: `npm test -- --run src/services/cloudWorks.test.ts src/services/workPhotos.test.ts`  
+Run: `npm test -- --run src/services/cloudWorks.test.ts src/services/workPhotos.test.ts`
 Expected: FAIL for missing photo APIs and transfer service.
 
 - [ ] **Step 3: Implement CloudBase photo API functions**
@@ -367,7 +367,7 @@ const uploadSignedBlob = async (target: CloudPhotoSignedTarget, blob: Blob) => {
 
 - [ ] **Step 5: Run service tests**
 
-Run: `npm test -- --run src/services/cloudWorks.test.ts src/services/workPhotos.test.ts`  
+Run: `npm test -- --run src/services/cloudWorks.test.ts src/services/workPhotos.test.ts`
 Expected: PASS for validation, JPEG preview creation, dual/preview-only upload, content-type matching, expired-signature retry, all-preview restoration, cache skipping, failure isolation, pause, and original download.
 
 - [ ] **Step 6: Commit Task 4**
@@ -411,7 +411,7 @@ it('restores all previews after cloud metadata on an empty device', async () => 
 
 - [ ] **Step 2: Run Store tests and verify failure**
 
-Run: `npm test -- --run src/stores/works.test.ts`  
+Run: `npm test -- --run src/stores/works.test.ts`
 Expected: FAIL for missing metadata and actions.
 
 - [ ] **Step 3: Add backward-compatible record normalization**
@@ -458,7 +458,7 @@ async loadFromCloud() {
 
 - [ ] **Step 6: Run Store tests**
 
-Run: `npm test -- --run src/stores/works.test.ts`  
+Run: `npm test -- --run src/stores/works.test.ts`
 Expected: PASS for old records, dual uploads, preview-only migration, partial failure, local text preservation, empty-device automatic restore, all-preview progress, pause/retry, deletion, and object URL cleanup.
 
 - [ ] **Step 7: Commit Task 5**
@@ -495,7 +495,7 @@ Also cover photo selection, 50 MB validation, save-while-offline, backup status 
 
 - [ ] **Step 2: Run page tests and verify failure**
 
-Run: `npm test -- --run src/pages/WorksPage.test.ts`  
+Run: `npm test -- --run src/pages/WorksPage.test.ts`
 Expected: FAIL because the UI does not expose these states.
 
 - [ ] **Step 3: Replace inline Base64 preparation with the photo service**
@@ -519,7 +519,7 @@ Use the existing card/button visual language. Change copy that currently says â€
 
 - [ ] **Step 5: Run page tests**
 
-Run: `npm test -- --run src/pages/WorksPage.test.ts`  
+Run: `npm test -- --run src/pages/WorksPage.test.ts`
 Expected: PASS for all new and existing Works page flows.
 
 - [ ] **Step 6: Commit Task 6**
@@ -555,22 +555,22 @@ Clearly state that the first two belong in the CloudBase function console, not f
 
 - [ ] **Step 2: Run CloudBase regression tests**
 
-Run: `node --test cloudbase/twilightWorks/*.test.cjs`  
+Run: `node --test cloudbase/twilightWorks/*.test.cjs`
 Expected: all tests PASS.
 
 - [ ] **Step 3: Run frontend unit tests**
 
-Run: `npm test -- --run`  
+Run: `npm test -- --run`
 Expected: all Vitest tests PASS.
 
 - [ ] **Step 4: Run lint and production builds**
 
-Run: `npm run lint && npm run build && npm run build:pages`  
+Run: `npm run lint && npm run build && npm run build:pages`
 Expected: exit 0; no TypeScript, ESLint, Vite, or Pages base-path errors.
 
 - [ ] **Step 5: Run the existing core browser flow**
 
-Run: `npm run test:e2e -- --project=chromium`  
+Run: `npm run test:e2e -- --project=chromium`
 Expected: existing core flows PASS with mocked/non-secret cloud dependencies.
 
 - [ ] **Step 6: Inspect secret and generated-artifact hygiene**
