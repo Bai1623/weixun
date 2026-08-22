@@ -14,6 +14,7 @@ vi.setConfig({ testTimeout: 15000 })
 
 describe('WorksPage', () => {
   beforeEach(() => {
+    vi.restoreAllMocks()
     window.localStorage.clear()
     setActivePinia(createPinia())
   })
@@ -357,6 +358,133 @@ describe('WorksPage', () => {
     expect(wrapper.text()).toContain('自动备份已开启')
   })
 
+  it('checks the cloud automatically and exposes a manual refresh with backup counts', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    works.cloudSnapshot = {
+      status: 'ready',
+      relation: 'same-base',
+      checkedAt: '2026-08-22T10:05:00.000Z',
+      message: '本机与云端备份版本一致。',
+      snapshot: {
+        status: 'matched',
+        accountName: 'mix',
+        snapshotId: 'snapshot-1',
+        backupCreatedAt: '2026-08-22T10:00:00.000Z',
+        dataLastBackupAt: '2026-08-22T09:59:00.000Z',
+        recordCount: 17,
+        summary: {
+          works: 17,
+          previewPhotos: 16,
+          originalPhotos: 15,
+          pantry: 8,
+          favorites: 6,
+          academy: 4,
+          dailyPick: 1,
+          customCocktails: 2,
+          customFlavorLiquors: 3,
+          customBeverages: 5,
+        },
+      },
+    }
+    const refresh = vi
+      .spyOn(works, 'refreshCloudSnapshot')
+      .mockResolvedValue(works.cloudSnapshot.snapshot)
+
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+    const summary = wrapper.get('[data-testid="cloud-summary-panel"]')
+    expect(summary.text()).toContain('17 个作品')
+    expect(summary.text()).toContain('16 张预览图')
+    expect(summary.text()).toContain('15 张原图')
+    expect(summary.text()).toContain('酒柜 8')
+    expect(summary.text()).toContain('收藏 6')
+
+    await wrapper.get('[data-testid="cloud-summary-refresh"]').trigger('click')
+    await flushPromises()
+
+    expect(refresh).toHaveBeenCalledTimes(2)
+  })
+
+  it('previews the complete replacement before restoring and supports undo', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    vi.spyOn(works, 'refreshCloudSnapshot').mockResolvedValue(null)
+    const preview = {
+      appData: cloudWorks.createEmptyCloudAppData(),
+      snapshotId: 'snapshot-restore',
+      backupCreatedAt: '2026-08-22T10:00:00.000Z',
+      dataLastBackupAt: '2026-08-22T09:59:00.000Z',
+      localSummary: {
+        works: 3,
+        previewPhotos: 2,
+        originalPhotos: 1,
+        pantry: 4,
+        favorites: 5,
+        academy: 6,
+        dailyPick: 1,
+        customCocktails: 2,
+        customFlavorLiquors: 3,
+        customBeverages: 4,
+      },
+      cloudSummary: {
+        works: 17,
+        previewPhotos: 16,
+        originalPhotos: 15,
+        pantry: 8,
+        favorites: 6,
+        academy: 4,
+        dailyPick: 1,
+        customCocktails: 3,
+        customFlavorLiquors: 2,
+        customBeverages: 1,
+      },
+    }
+    const prepare = vi.spyOn(works, 'prepareCloudRestore').mockResolvedValue(preview)
+    const restore = vi.spyOn(works, 'restorePreparedCloudData').mockResolvedValue(17)
+    const undo = vi.spyOn(works, 'undoLastCloudRestore').mockResolvedValue(3)
+    const nativeConfirm = vi.spyOn(window, 'confirm')
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="cloud-restore-start"]').trigger('click')
+    await flushPromises()
+
+    expect(prepare).toHaveBeenCalledOnce()
+    expect(nativeConfirm).not.toHaveBeenCalled()
+    const dialog = wrapper.get('[data-testid="cloud-restore-dialog"]')
+    expect(dialog.text()).toContain('恢复前确认')
+    expect(dialog.text()).toContain('本机 3')
+    expect(dialog.text()).toContain('云端 17')
+    expect(dialog.text()).toContain('酒柜')
+    expect(dialog.text()).toContain('课程进度')
+    expect(dialog.text()).toContain('将覆盖当前账号完整数据包')
+
+    await wrapper.get('[data-testid="cloud-restore-confirm"]').trigger('click')
+    await flushPromises()
+
+    expect(restore).toHaveBeenCalledWith(preview)
+    expect(wrapper.find('[data-testid="cloud-restore-dialog"]').exists()).toBe(false)
+
+    works.restoreCheckpointAvailable = true
+    await wrapper.vm.$nextTick()
+    await wrapper.get('[data-testid="cloud-restore-undo"]').trigger('click')
+    await flushPromises()
+    expect(undo).toHaveBeenCalledOnce()
+  })
+
   it('previews and confirms complete local replacement before switching cloud accounts', async () => {
     const works = useWorkStore()
     works.add({
@@ -450,7 +578,30 @@ describe('WorksPage', () => {
   it('prompts and uploads automatically when the last cloud backup is older than one day', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T10:00:00.000Z'))
-    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue(undefined)
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue({
+      status: 'matched',
+      accountName: 'mix',
+      snapshotId: 'snapshot-before-upload',
+      backupCreatedAt: '2026-08-06T10:00:00.000Z',
+      dataLastBackupAt: '2026-08-06T09:59:59.000Z',
+      recordCount: 1,
+      summary: {
+        works: 1,
+        previewPhotos: 0,
+        originalPhotos: 0,
+        pantry: 0,
+        favorites: 0,
+        academy: 0,
+        dailyPick: 0,
+        customCocktails: 0,
+        customFlavorLiquors: 0,
+        customBeverages: 0,
+      },
+    })
+    const push = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: 'snapshot-after-upload',
+      recordCount: 1,
+    })
     window.localStorage.setItem(
       'twilight_cloud_works_session',
       JSON.stringify({

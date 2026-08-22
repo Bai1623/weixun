@@ -115,11 +115,7 @@ export type WorkCloudSyncState = {
 }
 
 export type WorkCloudSnapshotStatus = 'idle' | 'checking' | 'ready' | 'error'
-export type WorkCloudSnapshotRelation =
-  | 'empty'
-  | 'same-base'
-  | 'cloud-changed'
-  | 'unknown-base'
+export type WorkCloudSnapshotRelation = 'empty' | 'same-base' | 'cloud-changed' | 'unknown-base'
 
 export type WorkCloudSnapshotState = {
   status: WorkCloudSnapshotStatus
@@ -548,9 +544,9 @@ export const summarizeAccountData = (appData: CloudAppData): CloudAccountDataSum
   dailyPick: Number(
     Boolean(
       appData.dailyPick.selectedSlug ||
-        appData.dailyPick.selectedDate ||
-        appData.dailyPick.reason ||
-        appData.dailyPick.rerollCount,
+      appData.dailyPick.selectedDate ||
+      appData.dailyPick.reason ||
+      appData.dailyPick.rerollCount,
     ),
   ),
   customCocktails: appData.customOptions.cocktails.length,
@@ -1064,18 +1060,13 @@ export const useWorkStore = defineStore('works', {
           snapshotId: remote.snapshotId,
           backupCreatedAt: remote.backupCreatedAt,
           dataLastBackupAt: remote.appData.autoBackup.lastBackupAt,
-          localSummary: summarizeAccountData(
-            createAccountBackupData(this.items, this.autoBackup),
-          ),
+          localSummary: summarizeAccountData(createAccountBackupData(this.items, this.autoBackup)),
           cloudSummary: summarizeAccountData(remote.appData),
         }
         this.setCloudSync('success', '已读取云端备份详情，等待确认恢复。')
         return preview
       } catch (error) {
-        this.setCloudSync(
-          'error',
-          getErrorMessage(error, '读取云端备份详情失败，请稍后重试。'),
-        )
+        this.setCloudSync('error', getErrorMessage(error, '读取云端备份详情失败，请稍后重试。'))
         throw error
       }
     },

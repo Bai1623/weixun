@@ -191,31 +191,31 @@ Store the checkpoint under an account-keyed localStorage key with `photoDataUrl`
 - Consumes: Tasks 3 and 4 store state/actions.
 - Produces: `data-testid="cloud-summary-refresh"`, `cloud-summary-panel`, `cloud-restore-dialog`, `cloud-restore-confirm`, and `cloud-restore-undo`.
 
-- [ ] **Step 1: Write failing page tests for automatic and manual checking**
+- [x] **Step 1: Write failing page tests for automatic and manual checking**
 
 Mount with an active account and assert `refreshCloudSnapshot` is called once. Render a ready snapshot and assert the page shows backup time, works, preview/original counts, and every account category. Click the manual refresh button and assert a second call.
 
-- [ ] **Step 2: Run page tests and verify RED**
+- [x] **Step 2: Run page tests and verify RED**
 
 Run: `npm test -- --run src/pages/WorksPage.test.ts`
 
 Expected: FAIL because the page only renders operation status and does not query the cloud on mount.
 
-- [ ] **Step 3: Implement the summary card**
+- [x] **Step 3: Implement the summary card**
 
 Call the store refresh on mount when logged in. Render checking, ready, stale-error, empty, changed, and unknown-base copy; show “重新检查” beside the check time. Keep `cloudSync` below it as “最近操作”, not “云端状态”.
 
-- [ ] **Step 4: Write failing restore-dialog tests**
+- [x] **Step 4: Write failing restore-dialog tests**
 
 Click restore with zero local works but non-empty pantry/favorites. Assert no native confirm is called, the dialog renders local/cloud summary rows and the complete replacement warning, cancel leaves data unchanged, and confirm invokes `restorePreparedCloudData`. Assert version-race errors keep the dialog open and allow refresh.
 
-- [ ] **Step 5: Run page tests and verify RED**
+- [x] **Step 5: Run page tests and verify RED**
 
 Run: `npm test -- --run src/pages/WorksPage.test.ts`
 
 Expected: FAIL because restore currently calls a generic native confirmation and immediately replaces data.
 
-- [ ] **Step 6: Implement the modal, conflict feedback, and undo entry**
+- [x] **Step 6: Implement the modal, conflict feedback, and undo entry**
 
 Add a project-styled dialog with separate Cancel and destructive Confirm buttons. Disable actions during checks, present cloud-change upload errors next to the summary, and show the undo button only for a same-account checkpoint. Re-run the complete WorksPage suite and expect PASS.
 

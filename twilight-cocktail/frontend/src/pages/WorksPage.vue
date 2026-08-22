@@ -155,6 +155,84 @@
       </div>
     </div>
 
+    <div
+      v-if="cloudRestorePreview"
+      class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-obsidian/80 px-4 py-8 backdrop-blur-sm"
+      role="presentation"
+      @click.self="cancelCloudRestore"
+    >
+      <div
+        data-testid="cloud-restore-dialog"
+        class="w-full max-w-xl rounded-lg border border-gold/20 bg-walnut p-5 shadow-2xl shadow-black/40"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cloud-restore-dialog-title"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.22em] text-gold">Cloud Restore</p>
+            <h3 id="cloud-restore-dialog-title" class="mt-2 font-display text-2xl text-cream">
+              恢复前确认
+            </h3>
+          </div>
+          <button
+            class="rounded-md border border-gold/20 p-2 text-gold transition hover:bg-gold/10"
+            type="button"
+            aria-label="取消云端恢复"
+            @click="cancelCloudRestore"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+        <p class="mt-3 text-sm leading-6 text-muted">
+          云端备份时间：{{
+            formatCloudDate(cloudRestorePreview.backupCreatedAt)
+          }}。确认后将覆盖当前账号完整数据包，并先创建一次可撤销的本地恢复点。
+        </p>
+        <div class="mt-4 overflow-hidden rounded-lg border border-gold/15">
+          <div class="grid grid-cols-[1fr_5rem_5rem] bg-obsidian/55 px-3 py-2 text-xs text-muted">
+            <span>数据范围</span>
+            <span class="text-right">本机</span>
+            <span class="text-right">云端</span>
+          </div>
+          <div
+            v-for="row in cloudRestoreRows"
+            :key="row.label"
+            class="grid grid-cols-[1fr_5rem_5rem] border-t border-gold/10 px-3 py-2 text-sm"
+          >
+            <span class="text-cream/85">{{ row.label }}</span>
+            <span class="text-right text-muted">本机 {{ row.local }}</span>
+            <span class="text-right text-gold">云端 {{ row.cloud }}</span>
+          </div>
+        </div>
+        <p
+          class="mt-4 rounded-md border border-wine/50 bg-wine/15 px-3 py-2 text-sm leading-6 text-cream"
+        >
+          将覆盖当前账号完整数据包：作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。
+        </p>
+        <div class="mt-5 grid gap-3 sm:grid-cols-2">
+          <button
+            class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
+            type="button"
+            :disabled="isSyncingCloud"
+            @click="cancelCloudRestore"
+          >
+            取消
+          </button>
+          <button
+            data-testid="cloud-restore-confirm"
+            class="inline-flex items-center justify-center gap-2 rounded-md bg-wine px-4 py-3 text-sm font-semibold text-cream transition hover:bg-wine/80 disabled:cursor-not-allowed disabled:opacity-50"
+            type="button"
+            :disabled="isSyncingCloud"
+            @click="confirmCloudRestore"
+          >
+            <Download class="h-4 w-4" />
+            {{ isSyncingCloud ? '恢复中' : '确认覆盖并恢复' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <section class="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <form
         ref="workFormEl"
@@ -507,6 +585,67 @@
             }}
           </p>
           <div
+            data-testid="cloud-summary-panel"
+            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4"
+          >
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p class="text-xs uppercase tracking-[0.2em] text-gold">CloudBase</p>
+                <p class="mt-1 text-sm font-semibold text-cream">云端备份</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-if="works.hasRestoreCheckpoint"
+                  data-testid="cloud-restore-undo"
+                  class="rounded-md border border-wine/70 px-3 py-2 text-sm text-cream transition hover:bg-wine/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="isSyncingCloud"
+                  @click="undoCloudRestore"
+                >
+                  撤销本次恢复
+                </button>
+                <button
+                  data-testid="cloud-summary-refresh"
+                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="!works.cloudAccount.accountName || isCheckingCloud || isSyncingCloud"
+                  @click="() => refreshCloudSummary()"
+                >
+                  {{ isCheckingCloud ? '查询中' : '查询云端' }}
+                </button>
+              </div>
+            </div>
+            <p class="mt-3 text-sm leading-6 text-cream/85">
+              {{
+                works.cloudAccount.accountName
+                  ? works.cloudSnapshot.message
+                  : '登录云端账号后，会自动查询备份时间和数据范围。'
+              }}
+            </p>
+            <template v-if="cloudSnapshotSummary">
+              <p class="mt-3 text-sm font-semibold text-cream">
+                {{ cloudSnapshotSummary.works }} 个作品 ·
+                {{ cloudSnapshotSummary.previewPhotos }} 张预览图 ·
+                {{ cloudSnapshotSummary.originalPhotos }} 张原图
+              </p>
+              <p class="mt-2 text-sm leading-6 text-muted">
+                酒柜 {{ cloudSnapshotSummary.pantry }} · 收藏 {{ cloudSnapshotSummary.favorites }} ·
+                课程 {{ cloudSnapshotSummary.academy }} · 每日推荐
+                {{ cloudSnapshotSummary.dailyPick }} · 自定义内容
+                {{
+                  cloudSnapshotSummary.customCocktails +
+                  cloudSnapshotSummary.customFlavorLiquors +
+                  cloudSnapshotSummary.customBeverages
+                }}
+              </p>
+              <p class="mt-2 text-xs leading-5 text-muted">
+                云端备份：{{
+                  formatCloudDate(works.cloudSnapshot.snapshot?.backupCreatedAt || '')
+                }}；最近检查：{{ formatCloudDate(works.cloudSnapshot.checkedAt) }}
+              </p>
+            </template>
+          </div>
+          <div
             v-if="works.photoRestore.status !== 'idle'"
             data-testid="work-photo-restore-panel"
             class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
@@ -712,6 +851,7 @@
                 {{ isSyncingCloud ? '同步中' : '上传到云端' }}
               </button>
               <button
+                data-testid="cloud-restore-start"
                 class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 :disabled="!works.cloudAccount.accountName || isSyncingCloud"
@@ -761,7 +901,7 @@
           <div class="mt-4 rounded-lg border px-4 py-3" :class="cloudSyncStatusClass" role="status">
             <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-gold">CloudBase</p>
+                <p class="text-xs uppercase tracking-[0.2em] text-gold">最近操作</p>
                 <p class="mt-1 text-sm font-semibold text-cream">{{ cloudSyncStatusLabel }}</p>
               </div>
               <p v-if="cloudSyncTimeText" class="text-xs text-muted">
@@ -1017,6 +1157,7 @@ import {
   exportWorkRecords,
   formatWorkIngredients,
   useWorkStore,
+  type CloudRestorePreview,
   type WorkIngredientGroups,
   type WorkRecord,
   type WorkRecordInput,
@@ -1079,6 +1220,7 @@ const isPreparingPhoto = ref(false)
 const pendingPhoto = ref<PreparedWorkPhoto | null>(null)
 const isPhotoRemoved = ref(false)
 const autoBackupPrompt = ref(false)
+const cloudRestorePreview = ref<CloudRestorePreview | null>(null)
 const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
@@ -1238,6 +1380,46 @@ const autoBackupStatusText = computed(() =>
     ? `自动备份已开启，${autoBackupLastBackupText.value}`
     : '自动备份已关闭，仍可手动上传到云端。',
 )
+const isCheckingCloud = computed(() => works.cloudSnapshot.status === 'checking')
+const cloudSnapshotSummary = computed(() => works.cloudSnapshot.snapshot?.summary ?? null)
+const formatCloudDate = (value: string) => {
+  if (!value) return '暂无记录'
+  return new Date(value).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+const cloudRestoreRows = computed(() => {
+  if (!cloudRestorePreview.value) return []
+  const { localSummary, cloudSummary } = cloudRestorePreview.value
+  return [
+    { label: '作品', local: localSummary.works, cloud: cloudSummary.works },
+    { label: '预览照片', local: localSummary.previewPhotos, cloud: cloudSummary.previewPhotos },
+    { label: '原图', local: localSummary.originalPhotos, cloud: cloudSummary.originalPhotos },
+    { label: '酒柜', local: localSummary.pantry, cloud: cloudSummary.pantry },
+    { label: '收藏', local: localSummary.favorites, cloud: cloudSummary.favorites },
+    { label: '课程进度', local: localSummary.academy, cloud: cloudSummary.academy },
+    { label: '每日推荐', local: localSummary.dailyPick, cloud: cloudSummary.dailyPick },
+    {
+      label: '自定义酒单',
+      local: localSummary.customCocktails,
+      cloud: cloudSummary.customCocktails,
+    },
+    {
+      label: '自定义风味酒',
+      local: localSummary.customFlavorLiquors,
+      cloud: cloudSummary.customFlavorLiquors,
+    },
+    {
+      label: '自定义饮料',
+      local: localSummary.customBeverages,
+      cloud: cloudSummary.customBeverages,
+    },
+  ]
+})
 const formatDrinkRequestIngredients = (groups: WorkIngredientGroups) =>
   [
     groups.baseLiquors.length ? `基酒：${groups.baseLiquors.join('、')}` : '',
@@ -1508,6 +1690,7 @@ const loginCloudAccount = async () => {
     cloudAccountName.value = works.cloudAccount.accountName
     cloudPassword.value = ''
     shareMessage.value = works.cloudSync.message
+    await refreshCloudSummary(false)
     await loadDrinkRequestPanel()
   } catch {
     shareMessage.value = works.cloudSync.message
@@ -1525,6 +1708,17 @@ const logoutCloudAccount = () => {
   drinkRequests.value = []
   newDrinkRequestPrompt.value = null
   drinkRequestMessage.value = ''
+  cloudRestorePreview.value = null
+}
+
+const refreshCloudSummary = async (announce = true) => {
+  if (!works.cloudAccount.accountName || isCheckingCloud.value) return
+  try {
+    await works.refreshCloudSnapshot()
+    if (announce) shareMessage.value = works.cloudSnapshot.message
+  } catch {
+    if (announce) shareMessage.value = works.cloudSnapshot.message
+  }
 }
 
 const pushWorksToCloud = async () => {
@@ -1677,19 +1871,43 @@ const loadWorksFromCloud = async () => {
     shareMessage.value = '请先登录云端账号。'
     return
   }
-  if (
-    works.totalCount &&
-    !window.confirm('从云端恢复会用云端账号数据覆盖当前本地数据，确定继续？')
-  ) {
-    return
-  }
-
   isSyncingCloud.value = true
   try {
-    await works.loadFromCloud()
+    cloudRestorePreview.value = await works.prepareCloudRestore()
+  } catch {
+    shareMessage.value = works.cloudSync.message
+  } finally {
+    isSyncingCloud.value = false
+  }
+}
+
+const cancelCloudRestore = () => {
+  cloudRestorePreview.value = null
+  shareMessage.value = '已取消恢复，本地账号数据未改变。'
+}
+
+const confirmCloudRestore = async () => {
+  const preview = cloudRestorePreview.value
+  if (!preview) return
+  isSyncingCloud.value = true
+  try {
+    await works.restorePreparedCloudData(preview)
+    cloudRestorePreview.value = null
     shareMessage.value = works.cloudSync.message
   } catch {
     shareMessage.value = works.cloudSync.message
+  } finally {
+    isSyncingCloud.value = false
+  }
+}
+
+const undoCloudRestore = async () => {
+  isSyncingCloud.value = true
+  try {
+    await works.undoLastCloudRestore()
+    shareMessage.value = works.cloudSync.message
+  } catch (error) {
+    shareMessage.value = error instanceof Error ? error.message : works.cloudSync.message
   } finally {
     isSyncingCloud.value = false
   }
@@ -1909,6 +2127,7 @@ const submit = async () => {
 
 onMounted(() => {
   checkAutoBackupPrompt()
+  if (works.cloudAccount.accountName) void refreshCloudSummary(false)
   void loadDrinkRequestPanel()
   if (works.cloudAccount.accountName && works.items.some((item) => item.photoPreviewObjectKey)) {
     void works.restorePhotoPreviews()

@@ -455,10 +455,8 @@ export const fetchCloudSnapshotSummary = async (): Promise<CloudSnapshotSummary>
     status: result.status === 'account_not_found' ? 'account_not_found' : 'matched',
     accountName: typeof result.accountName === 'string' ? result.accountName : session.accountName,
     snapshotId: typeof result.snapshotId === 'string' ? result.snapshotId : '',
-    backupCreatedAt:
-      typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : '',
-    dataLastBackupAt:
-      typeof result.dataLastBackupAt === 'string' ? result.dataLastBackupAt : '',
+    backupCreatedAt: typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : '',
+    dataLastBackupAt: typeof result.dataLastBackupAt === 'string' ? result.dataLastBackupAt : '',
     recordCount:
       typeof result.recordCount === 'number' ? normalizeCount(result.recordCount) : summary.works,
     summary,
@@ -645,8 +643,7 @@ const createCloudAppDataSnapshot = (
   result: CloudWorksResponse,
   appData: CloudAppData,
 ): CloudAppDataSnapshot => {
-  const backupCreatedAt =
-    typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : ''
+  const backupCreatedAt = typeof result.backupCreatedAt === 'string' ? result.backupCreatedAt : ''
   return {
     appData,
     snapshotId:
@@ -839,8 +836,7 @@ export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
     throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
   }
   return {
-    snapshotId:
-      typeof result.metadataUpdatedAt === 'string' ? result.metadataUpdatedAt : '',
+    snapshotId: typeof result.metadataUpdatedAt === 'string' ? result.metadataUpdatedAt : '',
     recordCount: normalizeCount(result.recordCount),
   }
 }
