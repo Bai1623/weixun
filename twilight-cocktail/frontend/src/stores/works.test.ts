@@ -619,6 +619,10 @@ describe('work store', () => {
       photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
       photoBackupMode: 'original-and-preview',
     })
+    expect(JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')[0]).toMatchObject({
+      photoDataUrl: '',
+      photoRevision: 'r-new',
+    })
   })
 
   it('pushes lightweight metadata changes to cloud without photos', async () => {

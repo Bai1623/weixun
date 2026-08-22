@@ -253,7 +253,11 @@ export const uploadCachedWorkPhoto = async (
 
 const fetchSignedPhoto = async (download: CloudPhotoDownload) => {
   const response = await fetch(download.url)
-  if (!response.ok) throw new Error(`照片下载失败（HTTP ${response.status}）。`)
+  if (!response.ok) {
+    const error = new Error(`照片下载失败（HTTP ${response.status}）。`)
+    Object.assign(error, { status: response.status })
+    throw error
+  }
   return response.blob()
 }
 
@@ -320,7 +324,15 @@ export const restoreAllWorkPreviews = async (
       try {
         const download = downloadsByWorkId.get(record.id)
         if (!download) throw new Error('云端未返回照片下载地址。')
-        const blob = await fetchSignedPhoto(download)
+        let blob: Blob
+        try {
+          blob = await fetchSignedPhoto(download)
+        } catch (error) {
+          if (!isExpiredSignatureError(error)) throw error
+          const [refreshed] = await prepareCloudPhotoDownloads([record.id], 'preview')
+          if (!refreshed) throw error
+          blob = await fetchSignedPhoto(refreshed)
+        }
         await putWorkPhoto({
           workId: record.id,
           revision: record.photoRevision,
@@ -351,5 +363,12 @@ export const restoreAllWorkPreviews = async (
 export const downloadWorkOriginal = async (workId: string) => {
   const [download] = await prepareCloudPhotoDownloads([workId], 'original')
   if (!download) throw new Error('云端没有这张照片的原图。')
-  return fetchSignedPhoto(download)
+  try {
+    return await fetchSignedPhoto(download)
+  } catch (error) {
+    if (!isExpiredSignatureError(error)) throw error
+    const [refreshed] = await prepareCloudPhotoDownloads([workId], 'original')
+    if (!refreshed) throw error
+    return fetchSignedPhoto(refreshed)
+  }
 }

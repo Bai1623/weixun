@@ -343,7 +343,14 @@ export const importWorkRecords = (
 }
 
 const writeRecords = (records: WorkRecord[]) => {
-  window.localStorage.setItem(storageKey, JSON.stringify(records))
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify(
+      records.map((record) =>
+        record.photoRevision ? { ...record, photoDataUrl: '' } : record,
+      ),
+    ),
+  )
 }
 
 const readDeletedRecords = (): CloudDeletedWork[] => {
@@ -662,6 +669,25 @@ export const useWorkStore = defineStore('works', {
       if (getCloudWorksSession()) await this.syncWorkPhoto(id)
       return this.items.find((item) => item.id === id) as WorkRecord
     },
+    async removeWorkPhoto(id: string) {
+      const existing = this.items.find((item) => item.id === id)
+      if (!existing) return
+      const updated: WorkRecord = {
+        ...existing,
+        photoDataUrl: '',
+        photoOriginalObjectKey: '',
+        photoPreviewObjectKey: '',
+        photoOriginalName: '',
+        photoOriginalMime: '',
+        photoOriginalSize: 0,
+        photoRevision: '',
+        photoBackupMode: 'none',
+        updatedAt: new Date().toISOString(),
+      }
+      this.items = this.items.map((item) => (item.id === id ? updated : item))
+      writeRecords(this.items)
+      await deleteWorkPhotos(id)
+    },
     async syncWorkPhoto(id: string) {
       const existing = this.items.find((item) => item.id === id)
       if (!existing?.photoRevision) throw new Error('这条作品没有待上传的照片。')
@@ -715,6 +741,7 @@ export const useWorkStore = defineStore('works', {
     async restorePhotoPreviews() {
       photoRestoreController?.abort()
       photoRestoreController = new AbortController()
+      const controller = photoRestoreController
       this.photoRestore = {
         status: 'restoring',
         completed: 0,
@@ -724,16 +751,16 @@ export const useWorkStore = defineStore('works', {
       }
       try {
         const result = await restoreAllWorkPreviews(this.items, {
-          signal: photoRestoreController.signal,
+          signal: controller.signal,
           onProgress: (progress) => {
             this.photoRestore = {
               ...progress,
-              status: photoRestoreController?.signal.aborted ? 'paused' : 'restoring',
+              status: controller.signal.aborted ? 'paused' : 'restoring',
               message: `正在恢复全部作品预览图（${progress.completed}/${progress.total}）...`,
             }
           },
         })
-        if (photoRestoreController.signal.aborted) return result
+        if (controller.signal.aborted) return result
 
         const dataUrls = await Promise.all(
           this.items.map((item) =>

@@ -6,6 +6,7 @@ import WorksPage from './WorksPage.vue'
 import { useWorkStore } from '@/stores/works'
 import * as cloudWorks from '@/services/cloudWorks'
 import * as cloudDrinkRequests from '@/services/cloudDrinkRequests'
+import * as workPhotos from '@/services/workPhotos'
 import { addCustomWorkCocktailOption } from '@/utils/workFormOptions'
 
 enableAutoUnmount(afterEach)
@@ -55,6 +56,35 @@ describe('WorksPage', () => {
         'textarea[placeholder="自由记录，例如：冰块、柠檬片、薄荷叶，或补充具体用量。"]',
       ).element.value,
     ).toBe('')
+  })
+
+  it('caches and uploads the selected original and preview after saving a work', async () => {
+    const original = new File(['original'], 'night.png', { type: 'image/png' })
+    const preview = new Blob(['preview'], { type: 'image/jpeg' })
+    vi.spyOn(workPhotos, 'prepareWorkPhoto').mockResolvedValue({
+      revision: 'photo-r1',
+      original,
+      preview,
+      previewDataUrl: 'data:image/jpeg;base64,preview',
+    })
+    const wrapper = mount(WorksPage)
+    const works = useWorkStore()
+    const attach = vi.spyOn(works, 'attachPreparedPhoto').mockResolvedValue({} as never)
+
+    const photoInput = wrapper.get<HTMLInputElement>('[data-testid="work-photo-input"]')
+    Object.defineProperty(photoInput.element, 'files', { value: [original], configurable: true })
+    await photoInput.trigger('change')
+    await flushPromises()
+    await wrapper
+      .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
+      .setValue('照片作品')
+    await wrapper.get('[data-testid="work-save-button"]').trigger('click')
+    await flushPromises()
+
+    expect(attach).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ revision: 'photo-r1', original, preview }),
+    )
   })
 
   it('shows a consistent error dialog when saving fails validation', async () => {
@@ -276,6 +306,39 @@ describe('WorksPage', () => {
     expect(wrapper.text()).toContain('自动备份已开启')
   })
 
+  it('shows full preview restore progress with pause and retry controls', async () => {
+    const works = useWorkStore()
+    works.photoRestore = {
+      status: 'restoring',
+      completed: 2,
+      total: 5,
+      failedWorkIds: [],
+      message: '正在恢复全部作品预览图（2/5）...',
+    }
+    const pause = vi.spyOn(works, 'pausePhotoRestore')
+    const wrapper = mount(WorksPage)
+
+    expect(wrapper.get('[data-testid="work-photo-restore-panel"]').text()).toContain('2/5')
+    await wrapper.get('[data-testid="work-photo-restore-pause"]').trigger('click')
+    expect(pause).toHaveBeenCalled()
+
+    works.photoRestore = {
+      status: 'error',
+      completed: 5,
+      total: 5,
+      failedWorkIds: ['work-1'],
+      message: '1 张失败，可重试。',
+    }
+    await wrapper.vm.$nextTick()
+    const retry = vi.spyOn(works, 'restorePhotoPreviews').mockResolvedValue({
+      completed: 1,
+      total: 1,
+      failedWorkIds: [],
+    })
+    await wrapper.get('[data-testid="work-photo-restore-retry"]').trigger('click')
+    expect(retry).toHaveBeenCalled()
+  })
+
   it('prompts and uploads automatically when the last cloud backup is older than one day', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-07T10:00:00.000Z'))
@@ -327,7 +390,7 @@ describe('WorksPage', () => {
       expect(push).toHaveBeenCalledWith(expect.objectContaining({ worksChanged: works.items }))
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T10:00:00.000Z')
       expect(wrapper.text()).toContain(
-        '已轻量同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，不含照片）。',
+        '已同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
       )
     } finally {
       vi.useRealTimers()

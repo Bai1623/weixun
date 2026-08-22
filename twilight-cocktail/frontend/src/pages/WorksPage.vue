@@ -413,17 +413,27 @@
               class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
             >
               <Camera class="h-4 w-4" />
-              选择照片
-              <input class="sr-only" type="file" accept="image/*" @change="readPhoto" />
+              {{ isPreparingPhoto ? '正在处理照片' : '选择照片' }}
+              <input
+                data-testid="work-photo-input"
+                class="sr-only"
+                type="file"
+                accept="image/*"
+                :disabled="isPreparingPhoto"
+                @change="readPhoto"
+              />
             </label>
             <button
               v-if="form.photoDataUrl"
               class="rounded-md border border-wine/70 px-4 py-3 text-sm text-cream"
               type="button"
-              @click="form.photoDataUrl = ''"
+              @click="removeSelectedPhoto"
             >
               移除照片
             </button>
+            <p class="text-xs leading-5 text-muted">
+              会保存手机原图，并生成一张 1280px 预览图；单张原图最大 50 MB。
+            </p>
           </div>
         </div>
 
@@ -493,6 +503,47 @@
                 : '还未登录云端账号。账号不存在时会自动创建。'
             }}
           </p>
+          <div
+            v-if="works.photoRestore.status !== 'idle'"
+            data-testid="work-photo-restore-panel"
+            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p class="text-sm font-semibold text-cream">照片预览恢复</p>
+                <p class="mt-1 text-sm text-muted">{{ works.photoRestore.message }}</p>
+              </div>
+              <div class="flex gap-2">
+                <button
+                  v-if="works.photoRestore.status === 'restoring'"
+                  data-testid="work-photo-restore-pause"
+                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold"
+                  type="button"
+                  @click="works.pausePhotoRestore"
+                >
+                  暂停
+                </button>
+                <button
+                  v-if="works.photoRestore.status === 'paused' || works.photoRestore.status === 'error'"
+                  data-testid="work-photo-restore-retry"
+                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold"
+                  type="button"
+                  @click="retryPhotoRestore"
+                >
+                  继续/重试
+                </button>
+              </div>
+            </div>
+            <div class="mt-3 h-2 overflow-hidden rounded-full bg-cream/10">
+              <div
+                class="h-full rounded-full bg-gold transition-all"
+                :style="{ width: photoRestorePercent }"
+              />
+            </div>
+            <p class="mt-2 text-xs text-muted">
+              {{ works.photoRestore.completed }}/{{ works.photoRestore.total }}
+            </p>
+          </div>
           <div
             class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
             data-testid="auto-cloud-backup-panel"
@@ -619,7 +670,7 @@
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">
-              上传会优先轻量同步账号数据：作品文字、酒柜、收藏、学院进度、每日酒单和自定义选项；照片暂不包含在轻量同步里。
+              账号数据保存在 CloudBase，作品原图与预览图保存在私有 OSS。新电脑首次登录会自动恢复全部预览图，原图按需下载。
             </div>
             <div class="flex flex-wrap gap-3">
               <button
@@ -836,6 +887,16 @@
                 </div>
                 <div class="flex shrink-0 gap-2">
                   <button
+                    v-if="item.photoBackupMode === 'original-and-preview'"
+                    data-testid="work-original-download"
+                    class="rounded-md border border-gold/30 p-2 text-gold transition hover:bg-gold/10"
+                    type="button"
+                    :aria-label="`下载原图 ${item.cocktailName}`"
+                    @click="downloadOriginalPhoto(item)"
+                  >
+                    <Download class="h-4 w-4" />
+                  </button>
+                  <button
                     class="rounded-md border border-gold/30 p-2 text-gold transition hover:bg-gold/10"
                     type="button"
                     :aria-label="`编辑 ${item.cocktailName}`"
@@ -942,6 +1003,11 @@ import {
 } from '@/services/cloudDrinkRequests'
 import { getCloudWorksSession } from '@/services/cloudWorks'
 import {
+  downloadWorkOriginal,
+  prepareWorkPhoto,
+  type PreparedWorkPhoto,
+} from '@/services/workPhotos'
+import {
   CUSTOM_OPTION_VALUE,
   addCustomMaterialOption,
   addCustomWorkCocktailOption,
@@ -980,6 +1046,9 @@ const cloudPassword = ref('')
 const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
 const isSyncingCloud = ref(false)
+const isPreparingPhoto = ref(false)
+const pendingPhoto = ref<PreparedWorkPhoto | null>(null)
+const isPhotoRemoved = ref(false)
 const autoBackupPrompt = ref(false)
 const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
@@ -1022,6 +1091,10 @@ const form = reactive<WorkForm>({
   mood: '',
   selfReview: '',
   notes: '',
+})
+const photoRestorePercent = computed(() => {
+  if (!works.photoRestore.total) return '0%'
+  return `${Math.min(100, Math.round((works.photoRestore.completed / works.photoRestore.total) * 100))}%`
 })
 const workFilters = reactive<WorkFilterState>({
   startDate: '',
@@ -1306,47 +1379,28 @@ const applyCocktail = () => {
   form.ingredientsText = formatWorkIngredients({ ingredientsText: '', ingredientGroups: groups })
 }
 
-const loadImage = (dataUrl: string) =>
-  new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new Image()
-    image.addEventListener('load', () => resolve(image))
-    image.addEventListener('error', () => reject(new Error('image load failed')))
-    image.src = dataUrl
-  })
-
-const compressPhotoDataUrl = async (dataUrl: string) => {
-  const image = await loadImage(dataUrl)
-  const maxSize = 1280
-  const scale = Math.min(1, maxSize / Math.max(image.naturalWidth, image.naturalHeight))
-  const width = Math.max(1, Math.round(image.naturalWidth * scale))
-  const height = Math.max(1, Math.round(image.naturalHeight * scale))
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const context = canvas.getContext('2d')
-  if (!context) return dataUrl
-
-  context.drawImage(image, 0, 0, width, height)
-  return canvas.toDataURL('image/jpeg', 0.82)
-}
-
-const readPhoto = (event: Event) => {
+const readPhoto = async (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   if (!file) return
+  formError.value = ''
+  isPreparingPhoto.value = true
+  try {
+    pendingPhoto.value = await prepareWorkPhoto(file)
+    form.photoDataUrl = pendingPhoto.value.previewDataUrl
+    isPhotoRemoved.value = false
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '照片处理失败，请重新选择。'
+  } finally {
+    isPreparingPhoto.value = false
+    input.value = ''
+  }
+}
 
-  const reader = new FileReader()
-  reader.addEventListener('load', async () => {
-    const dataUrl = typeof reader.result === 'string' ? reader.result : ''
-    if (!dataUrl) return
-    try {
-      form.photoDataUrl = await compressPhotoDataUrl(dataUrl)
-    } catch {
-      form.photoDataUrl = dataUrl
-    }
-  })
-  reader.readAsDataURL(file)
-  input.value = ''
+const removeSelectedPhoto = () => {
+  pendingPhoto.value = null
+  form.photoDataUrl = ''
+  isPhotoRemoved.value = true
 }
 
 const exportWorks = () => {
@@ -1588,6 +1642,30 @@ const loadWorksFromCloud = async () => {
   }
 }
 
+const retryPhotoRestore = async () => {
+  try {
+    await works.restorePhotoPreviews()
+  } catch {
+    shareMessage.value = works.photoRestore.message
+  }
+}
+
+const downloadOriginalPhoto = async (item: WorkRecord) => {
+  try {
+    const blob = await downloadWorkOriginal(item.id)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = item.photoOriginalName || `${item.cocktailName}-原图`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    shareMessage.value = error instanceof Error ? error.message : '原图下载失败，请稍后重试。'
+  }
+}
+
 const importWorks = (event: Event) => {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -1622,6 +1700,8 @@ const resetForm = () => {
   isAddingFlavorLiquor.value = false
   isAddingBeverage.value = false
   formError.value = ''
+  pendingPhoto.value = null
+  isPhotoRemoved.value = false
   Object.assign(form, {
     madeAt: getToday(),
     cocktailSlug: '',
@@ -1649,6 +1729,8 @@ const editWork = (item: WorkRecord) => {
   isAddingFlavorLiquor.value = false
   isAddingBeverage.value = false
   formError.value = ''
+  pendingPhoto.value = null
+  isPhotoRemoved.value = false
   Object.assign(form, {
     madeAt: item.madeAt,
     cocktailSlug: item.cocktailSlug,
@@ -1692,7 +1774,7 @@ const getSaveErrorMessage = (error: unknown) => {
   return '保存时出现异常，作品没有写入本地数据。请稍后重试。'
 }
 
-const submit = () => {
+const submit = async () => {
   formError.value = ''
   closeSaveDialog()
   if (!form.cocktailName.trim()) {
@@ -1715,6 +1797,7 @@ const submit = () => {
 
   const payload: WorkRecordInput = {
     ...form,
+    photoDataUrl: pendingPhoto.value ? '' : form.photoDataUrl,
     cocktailName,
     ingredientsText,
     mood: form.mood.trim(),
@@ -1722,6 +1805,7 @@ const submit = () => {
     notes: form.notes.trim(),
   }
 
+  let savedRecord: WorkRecord | undefined
   try {
     if (editingWorkId.value) {
       const updated = works.update(editingWorkId.value, payload)
@@ -1730,12 +1814,28 @@ const submit = () => {
         showSaveDialog('error', formError.value)
         return
       }
+      savedRecord = updated
     } else {
-      works.add(payload)
+      savedRecord = works.add(payload)
     }
   } catch (error) {
     formError.value = getSaveErrorMessage(error)
     showSaveDialog('error', formError.value)
+    return
+  }
+
+  try {
+    if (savedRecord && isPhotoRemoved.value && !pendingPhoto.value) {
+      await works.removeWorkPhoto(savedRecord.id)
+    }
+    if (savedRecord && pendingPhoto.value) {
+      await works.attachPreparedPhoto(savedRecord.id, pendingPhoto.value)
+      if (works.cloudAccount.accountName) await works.pushAllToCloud()
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '照片云备份失败，请稍后重试。'
+    resetForm()
+    showSaveDialog('error', `作品已保存在本机，但照片云备份失败：${message}`)
     return
   }
 
@@ -1755,5 +1855,8 @@ const submit = () => {
 onMounted(() => {
   checkAutoBackupPrompt()
   void loadDrinkRequestPanel()
+  if (works.cloudAccount.accountName && works.items.some((item) => item.photoPreviewObjectKey)) {
+    void works.restorePhotoPreviews()
+  }
 })
 </script>
