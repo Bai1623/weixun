@@ -780,7 +780,7 @@ describe('work store', () => {
     })
   })
 
-  it('caches and uploads a newly selected original plus preview', async () => {
+  it('caches a newly selected original plus preview without starting a second cloud upload', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
       JSON.stringify({
@@ -805,7 +805,7 @@ describe('work store', () => {
     const original = new File(['original'], 'night.png', { type: 'image/png' })
     const preview = new Blob(['preview'], { type: 'image/jpeg' })
     const cache = vi.spyOn(workPhotos, 'cachePreparedWorkPhoto').mockResolvedValue(undefined)
-    vi.spyOn(workPhotos, 'uploadCachedWorkPhoto').mockResolvedValue({
+    const upload = vi.spyOn(workPhotos, 'uploadCachedWorkPhoto').mockResolvedValue({
       photoOriginalObjectKey: `photos/a/${record.id}/r-new/original.png`,
       photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
       photoOriginalName: 'night.png',
@@ -826,10 +826,11 @@ describe('work store', () => {
     expect(works.items[0]).toMatchObject({
       photoDataUrl: 'data:image/jpeg;base64,preview',
       photoRevision: 'r-new',
-      photoOriginalObjectKey: `photos/a/${record.id}/r-new/original.png`,
-      photoPreviewObjectKey: `photos/a/${record.id}/r-new/preview.jpg`,
-      photoBackupMode: 'original-and-preview',
+      photoOriginalObjectKey: '',
+      photoPreviewObjectKey: '',
+      photoBackupMode: 'none',
     })
+    expect(upload).not.toHaveBeenCalled()
     expect(
       JSON.parse(window.localStorage.getItem('cocktail_work_records') ?? '[]')[0],
     ).toMatchObject({

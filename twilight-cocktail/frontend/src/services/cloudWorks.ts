@@ -345,12 +345,31 @@ const postCloudWorksAction = async (body: Record<string, unknown>): Promise<Clou
   }
   const data = (await response.json().catch(() => ({}))) as CloudWorksResponse
   if (!response.ok || data.error) {
-    throw new Error(data.message || data.error || '云函数请求失败。')
+    const error = new Error(data.message || data.error || '云函数请求失败。')
+    Object.assign(error, { status: response.status })
+    throw error
   }
   if (data.status === 'password_mismatch') {
     throw new Error('云端账号密码不匹配。')
   }
   return data
+}
+
+const isRetryableCloudActionError = (error: unknown) => {
+  const status = (error as { status?: unknown })?.status
+  if (typeof status === 'number') {
+    return status === 408 || status === 425 || status === 429 || status >= 500
+  }
+  return error instanceof Error && /无法连接云函数|network|timeout|timed out|temporary/i.test(error.message)
+}
+
+const postIdempotentCloudWorksAction = async (body: Record<string, unknown>) => {
+  try {
+    return await postCloudWorksAction(body)
+  } catch (error) {
+    if (!isRetryableCloudActionError(error)) throw error
+    return postCloudWorksAction(body)
+  }
 }
 
 export const previewCloudWorksAccount = async (
@@ -684,7 +703,7 @@ export const syncCloudAppData = async (appData: CloudAppData) => {
 
 export const syncCloudMetadataPatch = async (patch: CloudMetadataPatch) => {
   const session = getRequiredCloudSession()
-  const result = await postCloudWorksAction({
+  const result = await postIdempotentCloudWorksAction({
     action: 'metadata-patch',
     accountName: session.accountName,
     accountNameKey: session.accountNameKey,
@@ -725,7 +744,7 @@ export const prepareCloudPhotoUpload = async (
   input: CloudPhotoUploadInput,
 ): Promise<CloudPhotoUploadPreparation> => {
   const session = getRequiredCloudSession()
-  const result = await postCloudWorksAction({
+  const result = await postIdempotentCloudWorksAction({
     action: 'photo-upload-prepare',
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,
@@ -754,7 +773,7 @@ export const prepareCloudPhotoDownloads = async (
   kind: 'preview' | 'original',
 ): Promise<CloudPhotoDownload[]> => {
   const session = getRequiredCloudSession()
-  const result = await postCloudWorksAction({
+  const result = await postIdempotentCloudWorksAction({
     action: 'photo-download-prepare',
     accountNameKey: session.accountNameKey,
     passwordVerifier: session.passwordVerifier,

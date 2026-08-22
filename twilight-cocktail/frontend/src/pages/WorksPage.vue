@@ -1880,6 +1880,7 @@ const submit = async () => {
     return
   }
 
+  let photoBackupWarning = ''
   try {
     if (savedRecord && isPhotoRemoved.value && !pendingPhoto.value) {
       await works.removeWorkPhoto(savedRecord.id)
@@ -1890,9 +1891,7 @@ const submit = async () => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : '照片云备份失败，请稍后重试。'
-    resetForm()
-    showSaveDialog('error', `作品已保存在本机，但照片云备份失败：${message}`)
-    return
+    photoBackupWarning = `作品已保存在本机，照片云备份暂未完成：${message}。稍后可点击“上传到云端”重试。`
   }
 
   if (!isKnownCocktailName(cocktailName)) {
@@ -1905,7 +1904,10 @@ const submit = async () => {
   }
 
   resetForm()
-  showSaveDialog('success', wasEditing ? '作品修改已保存。' : '作品已保存到我的作品。')
+  showSaveDialog(
+    'success',
+    photoBackupWarning || (wasEditing ? '作品修改已保存。' : '作品已保存到我的作品。'),
+  )
 }
 
 onMounted(() => {

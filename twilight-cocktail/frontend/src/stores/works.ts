@@ -678,7 +678,6 @@ export const useWorkStore = defineStore('works', {
       }
       this.items = this.items.map((item) => (item.id === id ? pendingRecord : item))
       writeRecords(this.items)
-      if (getCloudWorksSession()) await this.syncWorkPhoto(id)
       return this.items.find((item) => item.id === id) as WorkRecord
     },
     async removeWorkPhoto(id: string) {

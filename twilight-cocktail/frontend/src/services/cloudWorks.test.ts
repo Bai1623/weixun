@@ -335,6 +335,43 @@ describe('cloud works service', () => {
     expect(JSON.stringify(body)).not.toContain('data:image/jpeg;base64,abc')
   })
 
+  it('retries an idempotent metadata patch once after a temporary connection failure', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-22T06:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('temporary network failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ ok: true, status: 'metadata_saved' }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await syncCloudMetadataPatch({
+      version: 1,
+      app: 'twilight-mixbook',
+      type: 'metadata-patch',
+      changedAt: '2026-08-22T06:00:00.000Z',
+      worksChanged: [],
+      worksDeleted: [],
+      pantry: { ingredientSlugs: [] },
+      favorites: { cocktailSlugs: [] },
+      academy: { completedSlugs: [] },
+      dailyPick: { selectedSlug: '', selectedDate: '', reason: '', rerollCount: 0 },
+      customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+      autoBackup: { enabled: false, lastBackupAt: '' },
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it('requests validated upload and download targets through the active cloud session', async () => {
     window.localStorage.setItem(
       'twilight_cloud_works_session',
@@ -412,6 +449,49 @@ describe('cloud works service', () => {
       kind: 'preview',
       workIds: ['work-1'],
     })
+  })
+
+  it('retries an idempotent photo preparation once after a temporary connection failure', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'a'.repeat(64),
+        passwordVerifier: 'b'.repeat(64),
+        updatedAt: '2026-08-22T06:00:00.000Z',
+      }),
+    )
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('temporary network failure'))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            ok: true,
+            mode: 'preview-only',
+            photoRevision: 'rev-retry',
+            expiresAt: '2026-08-22T06:15:00.000Z',
+            preview: {
+              objectKey: 'photos/account/work-retry/rev-retry/preview.jpg',
+              url: 'https://signed.example/preview-retry',
+              method: 'PUT',
+              contentType: 'image/jpeg',
+              expiresAt: '2026-08-22T06:15:00.000Z',
+            },
+          }),
+      })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await prepareCloudPhotoUpload({
+      workId: 'work-retry',
+      photoRevision: 'rev-retry',
+      mode: 'preview-only',
+      preview: { type: 'image/jpeg', size: 400 },
+    })
+
+    expect(result.preview.objectKey).toContain('work-retry')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('fetches full account app data through bounded download chunks', async () => {

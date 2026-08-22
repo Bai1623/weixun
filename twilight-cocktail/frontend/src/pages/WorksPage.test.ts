@@ -85,6 +85,59 @@ describe('WorksPage', () => {
     )
   })
 
+  it('keeps a photo pending locally and reports save success when cloud sync is unavailable', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const original = new File(['original'], 'night.png', { type: 'image/png' })
+    const preview = new Blob(['preview'], { type: 'image/jpeg' })
+    vi.spyOn(workPhotos, 'prepareWorkPhoto').mockResolvedValue({
+      revision: 'pending-r1',
+      original,
+      preview,
+      previewDataUrl: 'data:image/jpeg;base64,pending',
+    })
+    const upload = vi.spyOn(workPhotos, 'uploadCachedWorkPhoto').mockResolvedValue({
+      photoOriginalObjectKey: 'photos/a/work/pending-r1/original.png',
+      photoPreviewObjectKey: 'photos/a/work/pending-r1/preview.jpg',
+      photoOriginalName: 'night.png',
+      photoOriginalMime: 'image/png',
+      photoOriginalSize: original.size,
+      photoRevision: 'pending-r1',
+      photoBackupMode: 'original-and-preview',
+    })
+    const wrapper = mount(WorksPage)
+    const works = useWorkStore()
+    const push = vi.spyOn(works, 'pushAllToCloud').mockRejectedValue(new Error('网络暂不可用'))
+    expect(works.cloudAccount.accountName).toBe('mix')
+
+    const photoInput = wrapper.get<HTMLInputElement>('[data-testid="work-photo-input"]')
+    Object.defineProperty(photoInput.element, 'files', { value: [original], configurable: true })
+    await photoInput.trigger('change')
+    await flushPromises()
+    await wrapper
+      .get('input[placeholder="例如 想见你 / 白桃乌龙 / 自由特调"]')
+      .setValue('离线照片作品')
+    await wrapper.get('[data-testid="work-save-button"]').trigger('click')
+    await flushPromises()
+
+    await vi.waitFor(() => {
+      expect(works.items[0]).toMatchObject({
+        cocktailName: '离线照片作品',
+        photoRevision: 'pending-r1',
+        photoBackupMode: 'none',
+      })
+      expect(push).toHaveBeenCalledOnce()
+    })
+    expect(wrapper.get('[role="dialog"]').text()).toContain('保存成功')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('已保存在本机')
+    expect(wrapper.get('[role="dialog"]').text()).toContain('稍后')
+    expect(upload).not.toHaveBeenCalled()
+  })
+
   it('shows a consistent error dialog when saving fails validation', async () => {
     const wrapper = mount(WorksPage)
     const works = useWorkStore()
