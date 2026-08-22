@@ -842,18 +842,18 @@ exports.main = async (event = {}) => {
 
           const currentSnapshotId = account.doc?.metadataUpdatedAt || account.doc?.backupCreatedAt || "";
           const hasExpectedSnapshot = typeof expectedSnapshotId === "string";
+          if (operationId && account.doc?.lastMetadataOperationId === operationId) {
+            transactionResult = {
+              idempotent: true,
+              metadataUpdatedAt: currentSnapshotId,
+              recordCount: accountRecordCount(account.doc),
+              changedCount: Number(account.doc?.lastMetadataChangedCount || 0),
+              deletedCount: Number(account.doc?.lastMetadataDeletedCount || 0),
+              pendingCleanupKeys: [],
+            };
+            return;
+          }
           if (hasExpectedSnapshot && currentSnapshotId !== expectedSnapshotId) {
-            if (operationId && account.doc?.lastMetadataOperationId === operationId) {
-              transactionResult = {
-                idempotent: true,
-                metadataUpdatedAt: currentSnapshotId,
-                recordCount: accountRecordCount(account.doc),
-                changedCount: Number(account.doc?.lastMetadataChangedCount || 0),
-                deletedCount: Number(account.doc?.lastMetadataDeletedCount || 0),
-                pendingCleanupKeys: [],
-              };
-              return;
-            }
             const error = new Error("snapshot_conflict");
             error.code = "snapshot_conflict";
             error.snapshotId = currentSnapshotId;

@@ -660,6 +660,45 @@
             </template>
           </div>
           <div
+            v-if="showPhotoBackupPanel"
+            data-testid="work-photo-backup-panel"
+            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
+          >
+            <p class="text-sm font-semibold text-cream">照片备份队列</p>
+            <p class="mt-1 text-sm text-muted">{{ works.photoBackup.message }}</p>
+            <div v-if="works.photoBackup.issues.length" class="mt-3 space-y-2">
+              <div
+                v-for="issue in works.photoBackup.issues"
+                :key="`${issue.workId}:${issue.revision}`"
+                class="flex flex-col gap-3 rounded-md border border-gold/10 bg-obsidian/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-semibold text-cream">{{ issue.workName }}</p>
+                  <p class="mt-1 text-xs text-muted">
+                    {{ photoBackupKindLabel(issue.kinds) }} ·
+                    {{ issue.status === 'failed' ? '上传失败' : '等待上传' }}
+                  </p>
+                  <p v-if="issue.errorMessage" class="mt-1 text-xs leading-5 text-cream/75">
+                    {{ issue.errorMessage }}
+                  </p>
+                </div>
+                <button
+                  data-testid="work-photo-backup-item-retry"
+                  class="shrink-0 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="
+                    !works.cloudAccount.accountName ||
+                    works.photoBackup.status === 'retrying' ||
+                    isSyncingCloud
+                  "
+                  @click="retryPhotoBackupIssue(issue.workId)"
+                >
+                  {{ issue.status === 'failed' ? '重试此张' : '立即上传' }}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
             v-if="works.photoRestore.status !== 'idle'"
             data-testid="work-photo-restore-panel"
             class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
@@ -701,6 +740,33 @@
             <p class="mt-2 text-xs text-muted">
               {{ works.photoRestore.completed }}/{{ works.photoRestore.total }}
             </p>
+            <div
+              v-if="works.photoRestore.failures.length"
+              data-testid="work-photo-restore-failures"
+              class="mt-3 space-y-2"
+            >
+              <div
+                v-for="failure in works.photoRestore.failures"
+                :key="failure.workId"
+                class="flex flex-col gap-3 rounded-md border border-gold/10 bg-obsidian/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div class="min-w-0">
+                  <p class="truncate text-sm font-semibold text-cream">
+                    {{ workNameById(failure.workId) }}
+                  </p>
+                  <p class="mt-1 text-xs leading-5 text-cream/75">{{ failure.errorMessage }}</p>
+                </div>
+                <button
+                  data-testid="work-photo-restore-item-retry"
+                  class="shrink-0 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold disabled:cursor-not-allowed disabled:opacity-50"
+                  type="button"
+                  :disabled="works.photoRestore.status === 'restoring'"
+                  @click="retryPhotoRestoreIssue(failure.workId)"
+                >
+                  重试此张
+                </button>
+              </div>
+            </div>
           </div>
           <div
             class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
@@ -1397,6 +1463,19 @@ const autoBackupStatusText = computed(() =>
 )
 const isCheckingCloud = computed(() => works.cloudSnapshot.status === 'checking')
 const cloudSnapshotSummary = computed(() => works.cloudSnapshot.snapshot?.summary ?? null)
+const showPhotoBackupPanel = computed(
+  () =>
+    works.photoBackup.issues.length > 0 ||
+    works.photoBackup.status === 'retrying' ||
+    works.photoBackup.status === 'error',
+)
+const photoBackupKindLabel = (kinds: Array<'original' | 'preview'>) => {
+  if (kinds.includes('original') && kinds.includes('preview')) return '原图与预览图'
+  if (kinds.includes('original')) return '原图'
+  return '预览图'
+}
+const workNameById = (workId: string) =>
+  works.items.find((item) => item.id === workId)?.cocktailName || '未命名作品'
 const formatCloudDate = (value: string) => {
   if (!value) return '暂无记录'
   return new Date(value).toLocaleString('zh-CN', {
@@ -1940,6 +2019,30 @@ const retryPhotoRestore = async () => {
   }
 }
 
+const retryPhotoBackupIssue = async (workId: string) => {
+  if (!works.cloudAccount.accountName) {
+    shareMessage.value = '请先登录云端账号，再重试照片备份。'
+    return
+  }
+  isSyncingCloud.value = true
+  try {
+    await works.retryPhotoBackup(workId)
+    shareMessage.value = works.cloudSync.message
+  } catch {
+    shareMessage.value = works.photoBackup.message
+  } finally {
+    isSyncingCloud.value = false
+  }
+}
+
+const retryPhotoRestoreIssue = async (workId: string) => {
+  try {
+    await works.retryPhotoRestore(workId)
+  } catch {
+    shareMessage.value = works.photoRestore.message
+  }
+}
+
 const downloadOriginalPhoto = async (item: WorkRecord) => {
   try {
     const blob = await downloadWorkOriginal(item.id)
@@ -2146,6 +2249,7 @@ const submit = async () => {
 
 onMounted(() => {
   checkAutoBackupPrompt()
+  void works.refreshPhotoBackupIssues().catch(() => undefined)
   if (works.cloudAccount.accountName) void refreshCloudSummary(false)
   void loadDrinkRequestPanel()
   if (works.cloudAccount.accountName && works.items.some((item) => item.photoPreviewObjectKey)) {

@@ -40,10 +40,16 @@ export type WorkPhotoRestoreRecord = {
   photoPreviewObjectKey?: string
 }
 
+export type WorkPhotoRestoreFailure = {
+  workId: string
+  errorMessage: string
+}
+
 export type WorkPhotoRestoreProgress = {
   completed: number
   total: number
   failedWorkIds: string[]
+  failures: WorkPhotoRestoreFailure[]
 }
 
 type RestoreOptions = {
@@ -306,6 +312,7 @@ export const restoreAllWorkPreviews = async (
     completed: 0,
     total: missing.length,
     failedWorkIds: [],
+    failures: [],
   }
   if (!missing.length) {
     options.onProgress?.({ ...progress })
@@ -315,10 +322,27 @@ export const restoreAllWorkPreviews = async (
   const recordById = new Map(missing.map((record) => [record.id, record]))
   for (const batch of chunksOf(missing, restoreBatchSize)) {
     if (options.signal?.aborted) break
-    const downloads = await prepareCloudPhotoDownloads(
-      batch.map((record) => record.id),
-      'preview',
-    )
+    let downloads: CloudPhotoDownload[]
+    try {
+      downloads = await prepareCloudPhotoDownloads(
+        batch.map((record) => record.id),
+        'preview',
+      )
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '照片恢复失败。'
+      batch.forEach((record) => {
+        progress.failedWorkIds.push(record.id)
+        progress.failures.push({ workId: record.id, errorMessage })
+        progress.completed += 1
+        options.onProgress?.({
+          completed: progress.completed,
+          total: progress.total,
+          failedWorkIds: [...progress.failedWorkIds],
+          failures: [...progress.failures],
+        })
+      })
+      continue
+    }
     const downloadsByWorkId = new Map(downloads.map((download) => [download.workId, download]))
     await runWithConcurrency(batch, restoreConcurrency, async (record) => {
       if (options.signal?.aborted) return
@@ -346,14 +370,19 @@ export const restoreAllWorkPreviews = async (
           errorMessage: '',
           updatedAt: new Date().toISOString(),
         })
-      } catch {
+      } catch (error) {
         progress.failedWorkIds.push(record.id)
+        progress.failures.push({
+          workId: record.id,
+          errorMessage: error instanceof Error ? error.message : '照片恢复失败。',
+        })
       } finally {
         if (recordById.has(record.id)) progress.completed += 1
         options.onProgress?.({
           completed: progress.completed,
           total: progress.total,
           failedWorkIds: [...progress.failedWorkIds],
+          failures: [...progress.failures],
         })
       }
     })

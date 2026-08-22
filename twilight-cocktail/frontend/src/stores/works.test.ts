@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
@@ -57,11 +57,16 @@ const emptyCloudSummaryFixture = (): cloudWorks.CloudSnapshotSummary =>
   })
 
 describe('work store', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     window.localStorage.clear()
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
+    await workPhotoCache.clearAllWorkPhotos()
     setActivePinia(createPinia())
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('persists daily cocktail work records locally', () => {
@@ -447,6 +452,21 @@ describe('work store', () => {
       message: '旧账号摘要',
       snapshot: cloudSummaryFixture({ accountName: 'current' }),
     }
+    works.photoBackup = {
+      status: 'ready',
+      issues: [
+        {
+          workId: 'old-photo-work',
+          workName: '旧账号失败照片',
+          revision: 'old-r1',
+          status: 'failed',
+          kinds: ['preview'],
+          errorMessage: '旧账号错误',
+          updatedAt: '2026-08-22T09:30:00.000Z',
+        },
+      ],
+      message: '旧账号照片状态',
+    }
     works.add({
       madeAt: '2026-08-21',
       cocktailSlug: '',
@@ -527,7 +547,7 @@ describe('work store', () => {
     const clearPhotos = vi.spyOn(workPhotoCache, 'clearAllWorkPhotos').mockResolvedValue()
     const restorePhotos = vi
       .spyOn(workPhotos, 'restoreAllWorkPreviews')
-      .mockResolvedValue({ completed: 1, total: 1, failedWorkIds: [] })
+      .mockResolvedValue({ completed: 1, total: 1, failedWorkIds: [], failures: [] })
     vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
       'data:image/jpeg;base64,target',
     )
@@ -560,6 +580,7 @@ describe('work store', () => {
       snapshot: null,
       message: '尚未检查云端。',
     })
+    expect(works.photoBackup).toMatchObject({ status: 'ready', issues: [] })
     expect(cloudWorks.getCloudWorksSession()).toEqual(preview.session)
     expect(window.localStorage.getItem('cocktail_work_deleted_records')).toBe('[]')
     expect(clearPhotos).toHaveBeenCalledOnce()
@@ -600,6 +621,7 @@ describe('work store', () => {
       completed: 0,
       total: 0,
       failedWorkIds: [],
+      failures: [],
     })
 
     await works.activateCloudAccount(preview)
@@ -814,8 +836,8 @@ describe('work store', () => {
     const restore = vi
       .spyOn(workPhotos, 'restoreAllWorkPreviews')
       .mockImplementation(async (_records, options) => {
-        options?.onProgress?.({ completed: 1, total: 1, failedWorkIds: [] })
-        return { completed: 1, total: 1, failedWorkIds: [] }
+        options?.onProgress?.({ completed: 1, total: 1, failedWorkIds: [], failures: [] })
+        return { completed: 1, total: 1, failedWorkIds: [], failures: [] }
       })
     vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
       'data:image/jpeg;base64,restored',
@@ -837,6 +859,71 @@ describe('work store', () => {
       completed: 1,
       total: 1,
       failedWorkIds: [],
+      failures: [],
+    })
+  })
+
+  it('keeps other restore failures visible after retrying one preview successfully', async () => {
+    const works = useWorkStore()
+    const first = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '第一张失败照片',
+      photoDataUrl: '',
+      photoRevision: 'first-r1',
+      photoPreviewObjectKey: 'photos/account/first/preview.jpg',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const second = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '第二张失败照片',
+      photoDataUrl: '',
+      photoRevision: 'second-r1',
+      photoPreviewObjectKey: 'photos/account/second/preview.jpg',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    works.photoRestore = {
+      status: 'error',
+      completed: 2,
+      total: 2,
+      failedWorkIds: [first.id, second.id],
+      failures: [
+        { workId: first.id, errorMessage: '第一张下载失败' },
+        { workId: second.id, errorMessage: '第二张下载失败' },
+      ],
+      message: '2 张失败，可重试。',
+    }
+    const restore = vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockResolvedValue({
+      completed: 1,
+      total: 1,
+      failedWorkIds: [],
+      failures: [],
+    })
+    vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
+      'data:image/jpeg;base64,restored',
+    )
+
+    await works.retryPhotoRestore(first.id)
+
+    expect(restore).toHaveBeenCalledWith(
+      [expect.objectContaining({ id: first.id })],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(works.photoRestore).toMatchObject({
+      status: 'error',
+      completed: 2,
+      total: 2,
+      failedWorkIds: [second.id],
+      failures: [{ workId: second.id, errorMessage: '第二张下载失败' }],
     })
   })
 
@@ -995,6 +1082,21 @@ describe('work store', () => {
       selfReview: '',
       notes: '',
     })
+    works.photoBackup = {
+      status: 'ready',
+      issues: [
+        {
+          workId: changed.id,
+          workName: changed.cocktailName,
+          revision: 'old-r1',
+          status: 'failed',
+          kinds: ['preview'],
+          errorMessage: '旧照片上传失败',
+          updatedAt: '2026-08-22T09:00:00.000Z',
+        },
+      ],
+      message: '旧照片上传失败',
+    }
     const remoteAppData: cloudWorks.CloudAppData = {
       ...cloudWorks.createEmptyCloudAppData(),
       works: [
@@ -1029,6 +1131,7 @@ describe('work store', () => {
       completed: 1,
       total: 1,
       failedWorkIds: [changed.id],
+      failures: [{ workId: changed.id, errorMessage: '下载失败' }],
     })
     vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(undefined)
 
@@ -1044,6 +1147,7 @@ describe('work store', () => {
       photoPreviewObjectKey: '',
       photoDataUrl: '',
     })
+    expect(works.photoBackup.issues).toEqual([])
   })
 
   it('creates a same-account restore point and can undo the complete cloud replacement', async () => {
@@ -1054,6 +1158,7 @@ describe('work store', () => {
       updatedAt: '2026-08-22T10:00:00.000Z',
     })
     const works = useWorkStore()
+    const refreshPhotoBackupIssues = vi.spyOn(works, 'refreshPhotoBackupIssues')
     const localWork = works.add({
       madeAt: '2026-08-21',
       cocktailSlug: '',
@@ -1108,6 +1213,7 @@ describe('work store', () => {
       completed: 0,
       total: 0,
       failedWorkIds: [],
+      failures: [],
     })
     const clearPhotos = vi.spyOn(workPhotoCache, 'clearAllWorkPhotos')
     const preview = await works.prepareCloudRestore()
@@ -1139,6 +1245,7 @@ describe('work store', () => {
     expect(usePantryStore().ingredientSlugs).toEqual(['local-rum'])
     expect(useFavoriteStore().slugs).toEqual(['local-favorite'])
     expect(useAcademyStore().completedSlugs).toEqual(['local-course'])
+    expect(refreshPhotoBackupIssues).toHaveBeenCalledTimes(2)
     expect(works.hasRestoreCheckpoint).toBe(false)
     expect(window.localStorage.getItem('twilight_cloud_restore_checkpoint:account-key')).toBeNull()
   })
@@ -1241,6 +1348,229 @@ describe('work store', () => {
       photoDataUrl: '',
       photoRevision: 'r-new',
     })
+  })
+
+  it('groups persisted pending and failed photo uploads into actionable work details', async () => {
+    const works = useWorkStore()
+    const failedWork = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '暮色失败作品',
+      photoDataUrl: '',
+      photoRevision: 'failed-r1',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const pendingWork = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '等待上传作品',
+      photoDataUrl: '',
+      photoRevision: 'pending-r1',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    await workPhotoCache.putWorkPhoto({
+      workId: failedWork.id,
+      revision: 'failed-r1',
+      kind: 'original',
+      blob: new Blob(['original'], { type: 'image/png' }),
+      name: 'night.png',
+      mime: 'image/png',
+      size: 8,
+      syncState: 'failed',
+      errorMessage: 'OSS 网络中断',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    await workPhotoCache.putWorkPhoto({
+      workId: failedWork.id,
+      revision: 'failed-r1',
+      kind: 'preview',
+      blob: new Blob(['preview'], { type: 'image/jpeg' }),
+      name: 'preview.jpg',
+      mime: 'image/jpeg',
+      size: 7,
+      syncState: 'failed',
+      errorMessage: 'OSS 网络中断',
+      updatedAt: '2026-08-22T10:00:01.000Z',
+    })
+    await workPhotoCache.putWorkPhoto({
+      workId: pendingWork.id,
+      revision: 'pending-r1',
+      kind: 'preview',
+      blob: new Blob(['preview'], { type: 'image/jpeg' }),
+      name: 'preview.jpg',
+      mime: 'image/jpeg',
+      size: 7,
+      syncState: 'pending',
+      errorMessage: '',
+      updatedAt: '2026-08-22T10:00:02.000Z',
+    })
+
+    await works.refreshPhotoBackupIssues()
+
+    expect(works.photoBackup.status).toBe('ready')
+    expect(works.photoBackup.issues).toEqual([
+      {
+        workId: failedWork.id,
+        workName: '暮色失败作品',
+        revision: 'failed-r1',
+        status: 'failed',
+        kinds: ['original', 'preview'],
+        errorMessage: 'OSS 网络中断',
+        updatedAt: '2026-08-22T10:00:01.000Z',
+      },
+      {
+        workId: pendingWork.id,
+        workName: '等待上传作品',
+        revision: 'pending-r1',
+        status: 'pending',
+        kinds: ['preview'],
+        errorMessage: '',
+        updatedAt: '2026-08-22T10:00:02.000Z',
+      },
+    ])
+  })
+
+  it('retries only the selected failed photo and persists its metadata safely', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
+    const metadataPatch = vi.spyOn(cloudWorks, 'syncCloudMetadataPatch').mockResolvedValue({
+      snapshotId: '2026-08-22T10:01:00.000Z',
+      recordCount: 2,
+    })
+    const works = useWorkStore()
+    const selected = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '需要单独重试',
+      photoDataUrl: '',
+      photoRevision: 'selected-r1',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const untouched = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '暂不重试',
+      photoDataUrl: '',
+      photoRevision: 'untouched-r1',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    for (const [workId, revision] of [
+      [selected.id, 'selected-r1'],
+      [untouched.id, 'untouched-r1'],
+    ]) {
+      await workPhotoCache.putWorkPhoto({
+        workId,
+        revision,
+        kind: 'preview',
+        blob: new Blob(['preview'], { type: 'image/jpeg' }),
+        name: 'preview.jpg',
+        mime: 'image/jpeg',
+        size: 7,
+        syncState: 'failed',
+        errorMessage: '网络中断',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      })
+    }
+    const upload = vi
+      .spyOn(workPhotos, 'uploadCachedWorkPhoto')
+      .mockImplementation(async (workId) => {
+        await workPhotoCache.setWorkPhotoSyncState(workId, 'selected-r1', 'synced')
+        return {
+          photoOriginalObjectKey: '',
+          photoPreviewObjectKey: `photos/account/${workId}/selected-r1/preview.jpg`,
+          photoOriginalName: '',
+          photoOriginalMime: '',
+          photoOriginalSize: 0,
+          photoRevision: 'selected-r1',
+          photoBackupMode: 'preview-only',
+        }
+      })
+
+    await works.refreshPhotoBackupIssues()
+    await works.retryPhotoBackup(selected.id)
+
+    expect(upload).toHaveBeenCalledOnce()
+    expect(upload).toHaveBeenCalledWith(selected.id, 'selected-r1')
+    expect(metadataPatch).toHaveBeenCalledOnce()
+    expect(works.items.find((item) => item.id === selected.id)?.photoPreviewObjectKey).toContain(
+      selected.id,
+    )
+    expect(works.photoBackup.issues.map((issue) => issue.workId)).toEqual([untouched.id])
+  })
+
+  it('refreshes persisted photo failure details after a cloud backup attempt fails', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    vi.spyOn(cloudWorks, 'fetchCloudSnapshotSummary').mockResolvedValue(emptyCloudSummaryFixture())
+    const works = useWorkStore()
+    const record = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '上传中断作品',
+      photoDataUrl: '',
+      photoRevision: 'broken-r1',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    await workPhotoCache.putWorkPhoto({
+      workId: record.id,
+      revision: 'broken-r1',
+      kind: 'preview',
+      blob: new Blob(['preview'], { type: 'image/jpeg' }),
+      name: 'preview.jpg',
+      mime: 'image/jpeg',
+      size: 7,
+      syncState: 'pending',
+      errorMessage: '',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    vi.spyOn(workPhotos, 'uploadCachedWorkPhoto').mockImplementation(async () => {
+      await workPhotoCache.setWorkPhotoSyncState(
+        record.id,
+        'broken-r1',
+        'failed',
+        'OSS 上传连接中断',
+      )
+      throw new Error('OSS 上传连接中断')
+    })
+
+    await expect(works.pushAllToCloud()).rejects.toThrow('OSS 上传连接中断')
+
+    expect(works.photoBackup.issues).toEqual([
+      expect.objectContaining({
+        workId: record.id,
+        status: 'failed',
+        errorMessage: 'OSS 上传连接中断',
+      }),
+    ])
   })
 
   it('pushes lightweight metadata changes to cloud without photos', async () => {
@@ -1469,6 +1799,8 @@ describe('work store', () => {
   })
 
   it('only sends changed and deleted work metadata after the first lightweight sync', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-22T10:00:00.000Z'))
     window.localStorage.setItem(
       'twilight_cloud_works_session',
       JSON.stringify({
@@ -1509,6 +1841,7 @@ describe('work store', () => {
 
     await works.pushAllToCloud()
     push.mockClear()
+    vi.setSystemTime(new Date('2026-08-22T10:00:01.000Z'))
     works.update(second.id, {
       ...second,
       cocktailName: '第二杯改良',

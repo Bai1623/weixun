@@ -153,8 +153,37 @@ describe('workPhotos', () => {
       syncState: 'synced',
       mime: 'image/jpeg',
     })
-    expect(result).toEqual({ completed: 2, total: 2, failedWorkIds: ['restore-2'] })
+    expect(result).toEqual({
+      completed: 2,
+      total: 2,
+      failedWorkIds: ['restore-2'],
+      failures: [
+        {
+          workId: 'restore-2',
+          errorMessage: '照片下载失败（HTTP 500）。',
+        },
+      ],
+    })
     expect(progress).toHaveBeenLastCalledWith(result)
+  })
+
+  it('reports every affected work when a preview download batch cannot be prepared', async () => {
+    prepareCloudPhotoDownloads.mockRejectedValue(new Error('照片签名服务暂不可用'))
+
+    const result = await restoreAllWorkPreviews([
+      { id: 'restore-a', photoRevision: 'revision-a', photoPreviewObjectKey: 'remote-a' },
+      { id: 'restore-b', photoRevision: 'revision-b', photoPreviewObjectKey: 'remote-b' },
+    ])
+
+    expect(result).toEqual({
+      completed: 2,
+      total: 2,
+      failedWorkIds: ['restore-a', 'restore-b'],
+      failures: [
+        { workId: 'restore-a', errorMessage: '照片签名服务暂不可用' },
+        { workId: 'restore-b', errorMessage: '照片签名服务暂不可用' },
+      ],
+    })
   })
 
   it('stores prepared original and preview blobs in IndexedDB', async () => {

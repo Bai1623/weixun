@@ -58,15 +58,16 @@ describe('work photo cache', () => {
     expect(window.localStorage.length).toBe(0)
   })
 
-  it('lists only pending and failed work photos for retry', async () => {
+  it('lists every unfinished work photo for retry after a reload', async () => {
     await putWorkPhoto(photoRecord('cache-work-pending', 'preview', 'pending'))
     await putWorkPhoto(photoRecord('cache-work-failed', 'preview', 'failed'))
+    await putWorkPhoto(photoRecord('cache-work-uploading', 'preview', 'uploading'))
     await putWorkPhoto(photoRecord('cache-work-synced', 'preview', 'synced'))
 
     const pending = await listPendingWorkPhotos()
 
     expect(pending.map((item) => item.workId)).toEqual(
-      expect.arrayContaining(['cache-work-pending', 'cache-work-failed']),
+      expect.arrayContaining(['cache-work-pending', 'cache-work-failed', 'cache-work-uploading']),
     )
     expect(pending.map((item) => item.workId)).not.toContain('cache-work-synced')
   })

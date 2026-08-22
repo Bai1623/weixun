@@ -26,9 +26,17 @@ import {
   restoreAllWorkPreviews,
   uploadCachedWorkPhoto,
   type PreparedWorkPhoto,
+  type WorkPhotoRestoreFailure,
   type WorkPhotoRestoreProgress,
 } from '@/services/workPhotos'
-import { clearAllWorkPhotos, deleteWorkPhotos, getWorkPhoto } from '@/services/workPhotoCache'
+import {
+  clearAllWorkPhotos,
+  deleteWorkPhotos,
+  getWorkPhoto,
+  listPendingWorkPhotos,
+  type CachedWorkPhoto,
+  type WorkPhotoKind,
+} from '@/services/workPhotoCache'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -140,6 +148,22 @@ export type WorkPhotoRestoreState = WorkPhotoRestoreProgress & {
   message: string
 }
 
+export type WorkPhotoBackupIssue = {
+  workId: string
+  workName: string
+  revision: string
+  status: 'pending' | 'failed'
+  kinds: WorkPhotoKind[]
+  errorMessage: string
+  updatedAt: string
+}
+
+export type WorkPhotoBackupState = {
+  status: 'idle' | 'checking' | 'ready' | 'retrying' | 'error'
+  issues: WorkPhotoBackupIssue[]
+  message: string
+}
+
 export type CloudRestorePreview = {
   appData: CloudAppData
   snapshotId: string
@@ -177,7 +201,14 @@ const createPhotoRestoreState = (): WorkPhotoRestoreState => ({
   completed: 0,
   total: 0,
   failedWorkIds: [],
+  failures: [],
   message: '尚未恢复云端照片。',
+})
+
+const createPhotoBackupState = (): WorkPhotoBackupState => ({
+  status: 'idle',
+  issues: [],
+  message: '尚未检查本地照片上传状态。',
 })
 
 let photoRestoreController: AbortController | undefined
@@ -216,6 +247,55 @@ const createAutoBackupState = (): WorkAutoBackupState => {
 
 const getErrorMessage = (error: unknown, fallback: string) =>
   error instanceof Error && error.message ? error.message : fallback
+
+const photoKindOrder: WorkPhotoKind[] = ['original', 'preview']
+
+const createPhotoBackupIssues = (
+  photos: CachedWorkPhoto[],
+  works: readonly WorkRecord[],
+): WorkPhotoBackupIssue[] => {
+  const workById = new Map(works.map((record) => [record.id, record]))
+  const grouped = new Map<string, CachedWorkPhoto[]>()
+  photos.forEach((photo) => {
+    const work = workById.get(photo.workId)
+    if (!work || work.photoRevision !== photo.revision || Boolean(work.photoPreviewObjectKey)) {
+      return
+    }
+    const key = `${photo.workId}:${photo.revision}`
+    grouped.set(key, [...(grouped.get(key) ?? []), photo])
+  })
+
+  return Array.from(grouped.values())
+    .map((records) => {
+      const latest = [...records].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+      const failed = records.find((record) => record.syncState === 'failed')
+      const work = workById.get(records[0]?.workId || '')
+      return {
+        workId: records[0]?.workId || '',
+        workName: work?.cocktailName || '未命名作品',
+        revision: records[0]?.revision || '',
+        status: failed ? 'failed' : 'pending',
+        kinds: photoKindOrder.filter((kind) => records.some((record) => record.kind === kind)),
+        errorMessage: failed?.errorMessage || '',
+        updatedAt: latest?.updatedAt || '',
+      } satisfies WorkPhotoBackupIssue
+    })
+    .sort((a, b) => {
+      if (a.status !== b.status) return a.status === 'failed' ? -1 : 1
+      return a.workName.localeCompare(b.workName, 'zh-CN')
+    })
+}
+
+const photoBackupMessage = (issues: readonly WorkPhotoBackupIssue[]) => {
+  const failedCount = issues.filter((issue) => issue.status === 'failed').length
+  const pendingCount = issues.length - failedCount
+  if (!issues.length) return '本机没有待上传或上传失败的照片。'
+  if (failedCount && pendingCount) {
+    return `${failedCount} 个作品照片上传失败，${pendingCount} 个作品等待上传。`
+  }
+  if (failedCount) return `${failedCount} 个作品照片上传失败，可查看原因后重试。`
+  return `${pendingCount} 个作品照片等待上传。`
+}
 
 export class CloudBackupConflictError extends Error {
   override name = 'CloudBackupConflictError'
@@ -722,6 +802,7 @@ export const useWorkStore = defineStore('works', {
     cloudSnapshot: createCloudSnapshotState(),
     cloudAccount: createCloudAccountState(),
     autoBackup: createAutoBackupState(),
+    photoBackup: createPhotoBackupState(),
     photoRestore: createPhotoRestoreState(),
     restoreCheckpointAvailable: Boolean(readRestoreCheckpoint()),
   }),
@@ -889,6 +970,7 @@ export const useWorkStore = defineStore('works', {
       }
       this.items = this.items.map((item) => (item.id === id ? pendingRecord : item))
       writeRecords(this.items)
+      await this.refreshPhotoBackupIssues()
       return this.items.find((item) => item.id === id) as WorkRecord
     },
     async removeWorkPhoto(id: string) {
@@ -909,6 +991,7 @@ export const useWorkStore = defineStore('works', {
       this.items = this.items.map((item) => (item.id === id ? updated : item))
       writeRecords(this.items)
       await deleteWorkPhotos(id)
+      await this.refreshPhotoBackupIssues()
     },
     async syncWorkPhoto(id: string) {
       const existing = this.items.find((item) => item.id === id)
@@ -948,6 +1031,54 @@ export const useWorkStore = defineStore('works', {
       const pending = this.items.filter((item) => item.photoRevision && !item.photoPreviewObjectKey)
       for (const record of pending) await this.syncWorkPhoto(record.id)
     },
+    async refreshPhotoBackupIssues() {
+      this.photoBackup = {
+        ...this.photoBackup,
+        status: 'checking',
+        message: '正在检查本地照片上传状态...',
+      }
+      try {
+        const issues = createPhotoBackupIssues(await listPendingWorkPhotos(), this.items)
+        this.photoBackup = {
+          status: 'ready',
+          issues,
+          message: photoBackupMessage(issues),
+        }
+        return issues
+      } catch (error) {
+        this.photoBackup = {
+          ...this.photoBackup,
+          status: 'error',
+          message: getErrorMessage(error, '读取照片上传状态失败，请稍后重试。'),
+        }
+        throw error
+      }
+    },
+    async retryPhotoBackup(workId: string) {
+      const issue = this.photoBackup.issues.find((item) => item.workId === workId)
+      if (!issue) throw new Error('没有找到这张照片的待上传记录。')
+      this.photoBackup = {
+        ...this.photoBackup,
+        status: 'retrying',
+        message: `正在重试「${issue.workName}」的照片备份...`,
+      }
+      try {
+        await this.pushAllToCloud([workId])
+        return await this.refreshPhotoBackupIssues()
+      } catch (error) {
+        try {
+          await this.refreshPhotoBackupIssues()
+        } catch {
+          // Keep the upload error visible when IndexedDB status refresh also fails.
+        }
+        this.photoBackup = {
+          ...this.photoBackup,
+          status: 'error',
+          message: getErrorMessage(error, '照片备份重试失败，请稍后再试。'),
+        }
+        throw error
+      }
+    },
     pausePhotoRestore() {
       photoRestoreController?.abort()
       if (this.photoRestore.status === 'restoring') {
@@ -958,7 +1089,7 @@ export const useWorkStore = defineStore('works', {
         }
       }
     },
-    async restorePhotoPreviews() {
+    async restorePhotoPreviews(workIds: string[] = []) {
       photoRestoreController?.abort()
       photoRestoreController = new AbortController()
       const controller = photoRestoreController
@@ -967,10 +1098,15 @@ export const useWorkStore = defineStore('works', {
         completed: 0,
         total: 0,
         failedWorkIds: [],
+        failures: [],
         message: '正在恢复全部作品预览图...',
       }
       try {
-        const result = await restoreAllWorkPreviews(this.items, {
+        const selectedWorkIds = new Set(workIds)
+        const targetItems = selectedWorkIds.size
+          ? this.items.filter((item) => selectedWorkIds.has(item.id))
+          : this.items
+        const result = await restoreAllWorkPreviews(targetItems, {
           signal: controller.signal,
           onProgress: (progress) => {
             this.photoRestore = {
@@ -1009,6 +1145,29 @@ export const useWorkStore = defineStore('works', {
         }
         throw error
       }
+    },
+    async retryPhotoRestore(workId: string) {
+      const previous = { ...this.photoRestore, failures: [...this.photoRestore.failures] }
+      const failure = previous.failures.find((item) => item.workId === workId)
+      if (!failure) throw new Error('没有找到这张照片的恢复失败记录。')
+      const result = await this.restorePhotoPreviews([workId])
+      const failures: WorkPhotoRestoreFailure[] = [
+        ...previous.failures.filter((item) => item.workId !== workId),
+        ...result.failures,
+      ]
+      const completed = Math.max(previous.completed, result.completed)
+      const total = Math.max(previous.total, result.total)
+      this.photoRestore = {
+        status: failures.length ? 'error' : 'success',
+        completed,
+        total,
+        failedWorkIds: failures.map((item) => item.workId),
+        failures,
+        message: failures.length
+          ? `已恢复 ${completed - failures.length}/${total} 张预览图，${failures.length} 张失败，可继续重试。`
+          : `已恢复全部 ${total} 张作品预览图。`,
+      }
+      return result
     },
     async previewCloudAccount(accountName: string, password: string) {
       this.setCloudSync('syncing', '正在检查 CloudBase 云端账号数据...')
@@ -1069,6 +1228,7 @@ export const useWorkStore = defineStore('works', {
 
       try {
         await clearAllWorkPhotos()
+        await this.refreshPhotoBackupIssues()
         await this.restorePhotoPreviews()
         this.setCloudSync(
           'success',
@@ -1166,6 +1326,11 @@ export const useWorkStore = defineStore('works', {
           snapshot: currentSnapshot,
         }
         try {
+          await this.refreshPhotoBackupIssues()
+        } catch {
+          // Account data is already restored; photo status can be checked again later.
+        }
+        try {
           await this.restorePhotoPreviews()
           this.setCloudSync(
             'success',
@@ -1226,6 +1391,11 @@ export const useWorkStore = defineStore('works', {
         }
       }
       try {
+        await this.refreshPhotoBackupIssues()
+      } catch {
+        // Account data is already restored; photo status can be checked again later.
+      }
+      try {
         await this.restorePhotoPreviews()
       } catch {
         // Account metadata is already restored; the existing photo retry panel remains available.
@@ -1260,7 +1430,7 @@ export const useWorkStore = defineStore('works', {
         throw error
       }
     },
-    async pushAllToCloud(): Promise<number> {
+    async pushAllToCloud(photoWorkIds: string[] = []): Promise<number> {
       this.setCloudSync('syncing', '正在轻量同步账号数据到 CloudBase 云端...')
       try {
         await this.refreshCloudSnapshot()
@@ -1272,8 +1442,17 @@ export const useWorkStore = defineStore('works', {
             '检测到云端已有较新备份，请先检查并恢复云端数据，避免覆盖其他设备的更新。',
           )
         }
-        await this.migrateLegacyPhotoBackups()
-        await this.syncPendingWorkPhotos()
+        if (photoWorkIds.length) {
+          for (const workId of Array.from(new Set(photoWorkIds))) {
+            const record = this.items.find((item) => item.id === workId)
+            if (record?.photoRevision && !record.photoPreviewObjectKey) {
+              await this.syncWorkPhoto(workId)
+            }
+          }
+        } else {
+          await this.migrateLegacyPhotoBackups()
+          await this.syncPendingWorkPhotos()
+        }
         const backupAt = new Date().toISOString()
         const patch = createAccountMetadataPatch(
           this.items,
@@ -1310,12 +1489,32 @@ export const useWorkStore = defineStore('works', {
           'success',
           `已同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，照片使用 OSS 备份）。`,
         )
+        if (
+          this.photoBackup.issues.length ||
+          this.items.some((item) => item.photoRevision && !item.photoPreviewObjectKey)
+        ) {
+          try {
+            await this.refreshPhotoBackupIssues()
+          } catch {
+            // The cloud backup succeeded; keep its result if IndexedDB status cannot refresh.
+          }
+        }
         return this.items.length
       } catch (error) {
         this.setCloudSync(
           'error',
           getErrorMessage(error, '上传云端失败，请确认 CloudBase 已开启身份认证和数据库。'),
         )
+        if (
+          this.photoBackup.issues.length ||
+          this.items.some((item) => item.photoRevision && !item.photoPreviewObjectKey)
+        ) {
+          try {
+            await this.refreshPhotoBackupIssues()
+          } catch {
+            // Keep the original cloud error visible when IndexedDB status refresh also fails.
+          }
+        }
         throw error
       }
     },

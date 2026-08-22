@@ -451,10 +451,10 @@ test("metadata patch atomically rejects a stale snapshot and accepts an idempote
     accountNameKey: validKey,
     passwordVerifier: validPassword,
     accountName: "mix",
-    expectedSnapshotId: first.body.metadataUpdatedAt,
+    expectedSnapshotId: second.body.metadataUpdatedAt,
     operationId: "operation-second",
     patch: metadataPatch({
-      worksChanged: [work("second", "第二杯")],
+      worksChanged: [work("replayed-operation", "不应重复写入")],
     }),
   });
   assert.equal(retry.body.status, "metadata_saved");
@@ -465,7 +465,7 @@ test("metadata patch atomically rejects a stale snapshot and accepts an idempote
     accountNameKey: validKey,
     passwordVerifier: validPassword,
     accountName: "mix",
-    expectedSnapshotId: first.body.metadataUpdatedAt,
+    expectedSnapshotId: "stale-snapshot",
     operationId: "operation-stale",
     patch: metadataPatch({
       worksChanged: [work("stale", "过期设备作品")],

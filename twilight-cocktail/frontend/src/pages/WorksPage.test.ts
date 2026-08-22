@@ -604,6 +604,7 @@ describe('WorksPage', () => {
       completed: 2,
       total: 5,
       failedWorkIds: [],
+      failures: [],
       message: '正在恢复全部作品预览图（2/5）...',
     }
     const pause = vi.spyOn(works, 'pausePhotoRestore')
@@ -618,6 +619,7 @@ describe('WorksPage', () => {
       completed: 5,
       total: 5,
       failedWorkIds: ['work-1'],
+      failures: [{ workId: 'work-1', errorMessage: '下载超时' }],
       message: '1 张失败，可重试。',
     }
     await wrapper.vm.$nextTick()
@@ -625,9 +627,91 @@ describe('WorksPage', () => {
       completed: 1,
       total: 1,
       failedWorkIds: [],
+      failures: [],
     })
     await wrapper.get('[data-testid="work-photo-restore-retry"]').trigger('click')
     expect(retry).toHaveBeenCalled()
+  })
+
+  it('shows photo upload and restore failure details with per-work retry actions', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'mix',
+      accountNameKey: 'account-key',
+      passwordVerifier: 'password-verifier',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+    })
+    const works = useWorkStore()
+    const uploadWork = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '待上传暮色',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const restoreWork = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '待恢复星光',
+      photoDataUrl: '',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 0,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    works.photoBackup = {
+      status: 'ready',
+      issues: [
+        {
+          workId: uploadWork.id,
+          workName: uploadWork.cocktailName,
+          revision: 'upload-r1',
+          status: 'failed',
+          kinds: ['original', 'preview'],
+          errorMessage: 'OSS 上传超时',
+          updatedAt: '2026-08-22T10:00:00.000Z',
+        },
+      ],
+      message: '1 个作品照片上传失败，可查看原因后重试。',
+    }
+    works.photoRestore = {
+      status: 'error',
+      completed: 1,
+      total: 1,
+      failedWorkIds: [restoreWork.id],
+      failures: [{ workId: restoreWork.id, errorMessage: '预览图下载超时' }],
+      message: '1 张失败，可重试。',
+    }
+    vi.spyOn(works, 'refreshPhotoBackupIssues').mockResolvedValue(works.photoBackup.issues)
+    const retryBackup = vi.spyOn(works, 'retryPhotoBackup').mockResolvedValue([])
+    const retryRestore = vi.spyOn(works, 'retryPhotoRestore').mockResolvedValue({
+      completed: 1,
+      total: 1,
+      failedWorkIds: [],
+      failures: [],
+    })
+
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="work-photo-backup-panel"]').text()).toContain('待上传暮色')
+    expect(wrapper.get('[data-testid="work-photo-backup-panel"]').text()).toContain('OSS 上传超时')
+    expect(wrapper.get('[data-testid="work-photo-restore-failures"]').text()).toContain(
+      '待恢复星光',
+    )
+    expect(wrapper.get('[data-testid="work-photo-restore-failures"]').text()).toContain(
+      '预览图下载超时',
+    )
+
+    await wrapper.get('[data-testid="work-photo-backup-item-retry"]').trigger('click')
+    await wrapper.get('[data-testid="work-photo-restore-item-retry"]').trigger('click')
+
+    expect(retryBackup).toHaveBeenCalledWith(uploadWork.id)
+    expect(retryRestore).toHaveBeenCalledWith(restoreWork.id)
   })
 
   it('prompts and uploads automatically when the last cloud backup is older than one day', async () => {

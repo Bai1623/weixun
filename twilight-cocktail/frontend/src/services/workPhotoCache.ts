@@ -117,7 +117,7 @@ export const listPendingWorkPhotos = async () => {
     transaction.objectStore(photoStoreName).getAll(),
   )
   return records
-    .filter((record) => record.syncState === 'pending' || record.syncState === 'failed')
+    .filter((record) => record.syncState !== 'synced')
     .map((record) => withoutStorageKey(record) as CachedWorkPhoto)
 }
 
