@@ -10,6 +10,7 @@ const MAX_DRINK_TEXT = {
   note: 160,
 };
 let cachedCollection = null;
+let cachedPhotoService = null;
 const crypto = require("crypto");
 
 function getCollection() {
@@ -20,6 +21,13 @@ function getCollection() {
   });
   cachedCollection = app.database().collection("bai");
   return cachedCollection;
+}
+
+function getPhotoService() {
+  if (cachedPhotoService) return cachedPhotoService;
+  const { createOssPhotoService } = require("./ossPhotos");
+  cachedPhotoService = createOssPhotoService();
+  return cachedPhotoService;
 }
 
 function headers() {
@@ -240,6 +248,15 @@ function safeMetadataRecord(record) {
     cocktailSlug: safeString(source.cocktailSlug, 120),
     cocktailName: safeString(source.cocktailName, 120),
     photoDataUrl: "",
+    photoOriginalObjectKey: safeString(source.photoOriginalObjectKey, 500),
+    photoPreviewObjectKey: safeString(source.photoPreviewObjectKey, 500),
+    photoOriginalName: safeString(source.photoOriginalName, 255),
+    photoOriginalMime: safeString(source.photoOriginalMime, 120),
+    photoOriginalSize: Math.max(0, Math.floor(safeNumber(source.photoOriginalSize))),
+    photoRevision: safeString(source.photoRevision, 100),
+    photoBackupMode: ["none", "preview-only", "original-and-preview"].includes(source.photoBackupMode)
+      ? source.photoBackupMode
+      : "none",
     ingredientsText: safeString(source.ingredientsText, 1200),
     ingredientGroups: source.ingredientGroups ? safeIngredientGroups(source.ingredientGroups) : undefined,
     rating: Math.max(0, Math.min(5, safeNumber(source.rating, 0))),
@@ -302,6 +319,66 @@ function buildMetadataPayloadFromPatch(existingPayload, patch) {
     customOptions: sourcePatch.customOptions,
     autoBackup: sourcePatch.autoBackup,
   });
+}
+
+function photoKeys(record) {
+  return [record?.photoOriginalObjectKey, record?.photoPreviewObjectKey].filter(Boolean);
+}
+
+function photoCleanupKeysFromPatch(existingPayload, patch) {
+  const existingById = new Map(safeMetadataChangedRecords(safeRecords(existingPayload)).map((record) => [record.id, record]));
+  const cleanup = [];
+  for (const deleted of safeMetadataDeletedRecords(patch?.worksDeleted)) {
+    cleanup.push(...photoKeys(existingById.get(deleted.id)));
+  }
+  for (const changed of safeMetadataChangedRecords(patch?.worksChanged)) {
+    const nextKeys = new Set(photoKeys(changed));
+    for (const oldKey of photoKeys(existingById.get(changed.id))) {
+      if (!nextKeys.has(oldKey)) cleanup.push(oldKey);
+    }
+  }
+  return Array.from(new Set(cleanup));
+}
+
+async function validateChangedPhotoMetadata(accountNameKey, records) {
+  const withPhotos = safeMetadataChangedRecords(records).filter(
+    (record) => record.photoBackupMode !== "none" || photoKeys(record).length,
+  );
+  if (!withPhotos.length) return;
+  const service = getPhotoService();
+  for (const record of withPhotos) {
+    const keys = photoKeys(record);
+    if (record.photoBackupMode === "original-and-preview" && keys.length !== 2) {
+      const error = new Error("incomplete_photo_backup");
+      error.code = "incomplete_photo_backup";
+      throw error;
+    }
+    if (record.photoBackupMode === "preview-only" && !record.photoPreviewObjectKey) {
+      const error = new Error("incomplete_photo_backup");
+      error.code = "incomplete_photo_backup";
+      throw error;
+    }
+    await service.assertObjectsExist(accountNameKey, keys);
+  }
+}
+
+async function deletePhotoKeys(accountNameKey, keys) {
+  const remaining = [];
+  for (const key of Array.from(new Set(keys)).filter(Boolean)) {
+    try {
+      await getPhotoService().deleteObjects(accountNameKey, [key]);
+    } catch {
+      remaining.push(key);
+    }
+  }
+  return remaining;
+}
+
+async function retryPhotoCleanup(accountNameKey, doc) {
+  const queued = Array.isArray(doc?.photoCleanupKeys) ? doc.photoCleanupKeys.filter(Boolean).slice(0, 100) : [];
+  if (!queued.length) return;
+  const remaining = await deletePhotoKeys(accountNameKey, queued);
+  await saveDoc(accountDocId(accountNameKey), { photoCleanupKeys: remaining });
 }
 
 function buildAccountPayload(payload, payloadType = "") {
@@ -460,6 +537,8 @@ exports.main = async (event = {}) => {
         return response({ ok: false, status: "password_mismatch" });
       }
 
+      await retryPhotoCleanup(accountNameKey, doc).catch(() => undefined);
+
       return response({
         ok: true,
         status: "matched",
@@ -467,6 +546,33 @@ exports.main = async (event = {}) => {
         recordCount: accountRecordCount(doc),
         backupCreatedAt: doc.backupCreatedAt || "",
       });
+    }
+
+    if (method === "POST" && action === "photo-upload-prepare") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+      const prepared = await getPhotoService().prepareUpload(body);
+      return response({ ok: true, ...prepared });
+    }
+
+    if (method === "POST" && action === "photo-download-prepare") {
+      const { accountNameKey, passwordVerifier } = body;
+      if (!validCloudKey(accountNameKey)) return response({ error: "invalid_account_name_key" }, 400);
+      if (!validCloudKey(passwordVerifier)) return response({ error: "invalid_password_verifier" }, 400);
+      const account = await assertAccountPassword(accountNameKey, passwordVerifier);
+      if (!account.ok) return response({ ok: false, status: "password_mismatch" });
+      const requestedIds = new Set(safeStringArray(body.workIds, MAX_RECORDS, 128));
+      const payload =
+        account.doc?.metadataUpdatedAt && account.doc?.metadataPayload
+          ? account.doc.metadataPayload
+          : account.doc?.payload || buildAppDataPayload({});
+      const records = safeRecords(payload).filter((record) => requestedIds.has(record.id));
+      const kind = body.kind === "original" ? "original" : "preview";
+      const downloads = await getPhotoService().prepareDownloads(accountNameKey, records, kind);
+      return response({ ok: true, downloads });
     }
 
     if (method === "POST" && action === "account-create") {
@@ -641,6 +747,14 @@ exports.main = async (event = {}) => {
         account.doc?.metadataUpdatedAt && account.doc?.metadataPayload
           ? account.doc.metadataPayload
           : account.doc?.payload || buildAppDataPayload({});
+      await validateChangedPhotoMetadata(accountNameKey, patch?.worksChanged);
+      const cleanupKeys = photoCleanupKeysFromPatch(existingPayload, patch);
+      const pendingCleanupKeys = Array.from(
+        new Set([
+          ...(Array.isArray(account.doc?.photoCleanupKeys) ? account.doc.photoCleanupKeys : []),
+          ...cleanupKeys,
+        ]),
+      ).filter(Boolean);
       const metadataPayload = buildMetadataPayloadFromPatch(existingPayload, patch);
       const changedCount = safeMetadataChangedRecords(patch?.worksChanged).length;
       const deletedCount = safeMetadataDeletedRecords(patch?.worksDeleted).length;
@@ -656,7 +770,12 @@ exports.main = async (event = {}) => {
         metadataUpdatedAt: now,
         metadataRecordCount: metadataPayload.works.length,
         backupCreatedAt: now,
+        photoCleanupKeys: pendingCleanupKeys,
       });
+      if (pendingCleanupKeys.length) {
+        const remainingCleanupKeys = await deletePhotoKeys(accountNameKey, pendingCleanupKeys);
+        await saveDoc(accountDocId(accountNameKey), { photoCleanupKeys: remainingCleanupKeys });
+      }
       return response({
         ok: true,
         status: "metadata_saved",
@@ -914,6 +1033,24 @@ exports.main = async (event = {}) => {
 
     return response({ name: "twilight-works-api", status: "ok" });
   } catch (error) {
+    const clientErrorCodes = new Set([
+      "incomplete_photo_backup",
+      "invalid_account_name_key",
+      "invalid_oss_prefix",
+      "invalid_photo_download_kind",
+      "invalid_photo_mode",
+      "invalid_photo_object_key",
+      "invalid_photo_revision",
+      "invalid_photo_type",
+      "invalid_preview_type",
+      "invalid_work_id",
+      "photo_too_large",
+      "preview_too_large",
+    ]);
+    if (clientErrorCodes.has(error?.code || error?.message)) {
+      const code = error.code || error.message;
+      return response({ error: code, message: code }, code.includes("too_large") ? 413 : 400);
+    }
     return response({ error: "server_error", message: error.message }, 500);
   }
 };

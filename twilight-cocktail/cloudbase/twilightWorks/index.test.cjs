@@ -39,7 +39,36 @@ function createFakeCollection() {
   };
 }
 
-function loadFunction(collection) {
+function createFakeOssState() {
+  return {
+    signed: [],
+    headKeys: [],
+    deletedKeys: [],
+    failDeleteKeys: new Set(),
+  };
+}
+
+function createFakeOssModule(state) {
+  return class FakeOssClient {
+    async signatureUrlV4(method, expires, options, objectKey) {
+      state.signed.push({ method, expires, options, objectKey });
+      return `https://signed.example/${encodeURIComponent(objectKey)}?method=${method}`;
+    }
+
+    async head(objectKey) {
+      state.headKeys.push(objectKey);
+      return { res: { status: 200 } };
+    }
+
+    async delete(objectKey) {
+      state.deletedKeys.push(objectKey);
+      if (state.failDeleteKeys.has(objectKey)) throw new Error("delete_failed");
+      return { res: { status: 204 } };
+    }
+  };
+}
+
+function loadFunction(collection, ossState = createFakeOssState()) {
   const originalLoad = Module._load;
   const patchedLoad = function patchedLoad(request, parent, isMain) {
     if (request === "@cloudbase/node-sdk") {
@@ -52,19 +81,42 @@ function loadFunction(collection) {
         }),
       };
     }
+    if (request === "ali-oss") return createFakeOssModule(ossState);
     return originalLoad(request, parent, isMain);
   };
   Module._load = patchedLoad;
   delete require.cache[require.resolve("./index.js")];
+  if (require.cache[require.resolve("./ossPhotos.js")]) {
+    delete require.cache[require.resolve("./ossPhotos.js")];
+  }
   const api = require("./index.js");
   Module._load = originalLoad;
   return {
+    ossState,
     main: async (event) => {
       Module._load = patchedLoad;
+      const previousEnv = {
+        ALIBABA_CLOUD_ACCESS_KEY_ID: process.env.ALIBABA_CLOUD_ACCESS_KEY_ID,
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET: process.env.ALIBABA_CLOUD_ACCESS_KEY_SECRET,
+        ALIYUN_OSS_REGION: process.env.ALIYUN_OSS_REGION,
+        ALIYUN_OSS_BUCKET: process.env.ALIYUN_OSS_BUCKET,
+        ALIYUN_OSS_PREFIX: process.env.ALIYUN_OSS_PREFIX,
+      };
+      Object.assign(process.env, {
+        ALIBABA_CLOUD_ACCESS_KEY_ID: "test-id",
+        ALIBABA_CLOUD_ACCESS_KEY_SECRET: "test-secret",
+        ALIYUN_OSS_REGION: "oss-cn-hangzhou",
+        ALIYUN_OSS_BUCKET: "twilight-cocktail-bai",
+        ALIYUN_OSS_PREFIX: "photos",
+      });
       try {
         return await api.main(event);
       } finally {
         Module._load = originalLoad;
+        for (const [key, value] of Object.entries(previousEnv)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
       }
     },
   };
@@ -94,6 +146,24 @@ async function createAccountAndShare(api) {
     passwordVerifier: validPassword,
     shareToken,
   });
+}
+
+function metadataPatch(overrides = {}) {
+  return {
+    version: 1,
+    app: "twilight-mixbook",
+    type: "metadata-patch",
+    changedAt: "2026-08-22T06:30:00.000Z",
+    worksChanged: [],
+    worksDeleted: [],
+    pantry: { ingredientSlugs: [] },
+    favorites: { cocktailSlugs: [] },
+    academy: { completedSlugs: [] },
+    dailyPick: { selectedSlug: "", selectedDate: "", reason: "", rerollCount: 0 },
+    customOptions: { cocktails: [], flavorLiquors: [], beverages: [] },
+    autoBackup: { enabled: false, lastBackupAt: "" },
+    ...overrides,
+  };
 }
 
 test("account backup stores and returns full app data payloads", async () => {
@@ -576,4 +646,180 @@ test("drink request share link rejects photo payloads and disabled links", async
   });
   assert.equal(closedSubmit.statusCode, 403);
   assert.equal(closedSubmit.body.status, "share_disabled");
+});
+
+test("photo upload preparation requires the account password and returns scoped signed URLs", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const photo = {
+    workId: "work-photo-1",
+    photoRevision: "rev-1",
+    mode: "original-and-preview",
+    original: { name: "IMG_1.JPG", type: "image/jpeg", size: 4_000_000 },
+    preview: { type: "image/jpeg", size: 200_000 },
+  };
+
+  const denied = await post(api, {
+    action: "photo-upload-prepare",
+    accountNameKey: validKey,
+    passwordVerifier: "c".repeat(64),
+    ...photo,
+  });
+  assert.equal(denied.body.status, "password_mismatch");
+
+  const prepared = await post(api, {
+    action: "photo-upload-prepare",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    ...photo,
+  });
+  assert.equal(prepared.statusCode, 200);
+  assert.equal(prepared.body.original.objectKey, `photos/${validKey}/work-photo-1/rev-1/original.jpg`);
+  assert.equal(prepared.body.preview.objectKey, `photos/${validKey}/work-photo-1/rev-1/preview.jpg`);
+  assert.equal(prepared.body.original.method, "PUT");
+});
+
+test("photo metadata is verified before save and only stored records can be downloaded", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const originalKey = `photos/${validKey}/work-photo-1/rev-1/original.jpg`;
+  const previewKey = `photos/${validKey}/work-photo-1/rev-1/preview.jpg`;
+  const photoWork = {
+    id: "work-photo-1",
+    madeAt: "2026-08-22",
+    cocktailSlug: "",
+    cocktailName: "照片作品",
+    photoDataUrl: "data:image/jpeg;base64,never-store",
+    photoOriginalObjectKey: originalKey,
+    photoPreviewObjectKey: previewKey,
+    photoOriginalName: "IMG_1.JPG",
+    photoOriginalMime: "image/jpeg",
+    photoOriginalSize: 4_000_000,
+    photoRevision: "rev-1",
+    photoBackupMode: "original-and-preview",
+    ingredientsText: "金酒、汤力水",
+    rating: 4,
+    mood: "",
+    selfReview: "",
+    notes: "",
+    createdAt: "2026-08-22T06:00:00.000Z",
+    updatedAt: "2026-08-22T06:30:00.000Z",
+  };
+
+  const saved = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    patch: metadataPatch({ worksChanged: [photoWork] }),
+  });
+  assert.equal(saved.statusCode, 200);
+  assert.deepEqual(api.ossState.headKeys, [originalKey, previewKey]);
+
+  const restored = await post(api, {
+    action: "works-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  assert.equal(restored.body.payload.works[0].photoDataUrl, "");
+  assert.equal(restored.body.payload.works[0].photoOriginalObjectKey, originalKey);
+  assert.equal(restored.body.payload.works[0].photoPreviewObjectKey, previewKey);
+
+  const downloads = await post(api, {
+    action: "photo-download-prepare",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    workIds: ["work-photo-1", "not-owned"],
+    kind: "preview",
+  });
+  assert.equal(downloads.statusCode, 200);
+  assert.equal(downloads.body.downloads.length, 1);
+  assert.equal(downloads.body.downloads[0].objectKey, previewKey);
+
+  const unsafe = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    patch: metadataPatch({
+      worksChanged: [
+        {
+          ...photoWork,
+          photoPreviewObjectKey: `photos/${"d".repeat(64)}/work-photo-1/rev-1/preview.jpg`,
+          updatedAt: "2026-08-22T07:00:00.000Z",
+        },
+      ],
+    }),
+  });
+  assert.equal(unsafe.statusCode, 400);
+  assert.equal(unsafe.body.error, "invalid_photo_object_key");
+});
+
+test("photo deletion saves metadata first and retries failed OSS cleanup", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await post(api, {
+    action: "account-create",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    accountName: "mix",
+  });
+  const previewKey = `photos/${validKey}/legacy-work/rev-1/preview.jpg`;
+  await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    patch: metadataPatch({
+      worksChanged: [
+        {
+          id: "legacy-work",
+          madeAt: "2026-08-22",
+          cocktailName: "旧照片",
+          photoPreviewObjectKey: previewKey,
+          photoRevision: "rev-1",
+          photoBackupMode: "preview-only",
+          ingredientsText: "朗姆酒",
+          createdAt: "2026-08-22T06:00:00.000Z",
+          updatedAt: "2026-08-22T06:30:00.000Z",
+        },
+      ],
+    }),
+  });
+
+  api.ossState.failDeleteKeys.add(previewKey);
+  const removed = await post(api, {
+    action: "metadata-patch",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+    patch: metadataPatch({
+      changedAt: "2026-08-22T07:00:00.000Z",
+      worksDeleted: [{ id: "legacy-work", deletedAt: "2026-08-22T07:00:00.000Z" }],
+    }),
+  });
+  assert.equal(removed.statusCode, 200);
+  const accountDoc = collection.docs.find((doc) => doc.lookupKey === `twilight_account_${validKey}`);
+  assert.deepEqual(accountDoc.metadataPayload.works, []);
+  assert.deepEqual(accountDoc.photoCleanupKeys, [previewKey]);
+
+  api.ossState.failDeleteKeys.clear();
+  await post(api, {
+    action: "account-login",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  const refreshedAccountDoc = collection.docs.find(
+    (doc) => doc.lookupKey === `twilight_account_${validKey}`,
+  );
+  assert.deepEqual(refreshedAccountDoc.photoCleanupKeys, []);
+  assert.equal(api.ossState.deletedKeys.filter((key) => key === previewKey).length, 2);
 });
