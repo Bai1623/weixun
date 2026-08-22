@@ -1,13 +1,20 @@
 import { defineStore } from 'pinia'
 
 import {
+  activateCloudWorksAccount,
   clearCloudWorksSession,
   fetchCloudAppData,
   getCloudWorksSession,
-  loginCloudWorksAccount,
+  previewCloudWorksAccount,
+  replaceCloudWorksSession,
   syncCloudMetadataPatch,
 } from '@/services/cloudWorks'
-import type { CloudAppData, CloudDeletedWork, CloudMetadataPatch } from '@/services/cloudWorks'
+import type {
+  CloudAccountPreview,
+  CloudAppData,
+  CloudDeletedWork,
+  CloudMetadataPatch,
+} from '@/services/cloudWorks'
 import {
   cacheLegacyWorkPreview,
   cachePreparedWorkPhoto,
@@ -17,7 +24,7 @@ import {
   type PreparedWorkPhoto,
   type WorkPhotoRestoreProgress,
 } from '@/services/workPhotos'
-import { deleteWorkPhotos } from '@/services/workPhotoCache'
+import { clearAllWorkPhotos, deleteWorkPhotos } from '@/services/workPhotoCache'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
 import { useFavoriteStore } from '@/stores/favorites'
@@ -498,12 +505,17 @@ const hasLocalBackupSourceData = (
   )
 }
 
-const applyAccountBackupData = (appData: CloudAppData) => {
+const applyAccountBackupData = (
+  appData: CloudAppData,
+  options: { preserveLocalPhotos?: boolean } = { preserveLocalPhotos: true },
+) => {
   const pantry = usePantryStore()
   const favorites = useFavoriteStore()
   const academy = useAcademyStore()
   const daily = useDailyPickStore()
-  const localPhotosById = new Map(readRecords().map((record) => [record.id, record.photoDataUrl]))
+  const localPhotosById = options.preserveLocalPhotos
+    ? new Map(readRecords().map((record) => [record.id, record.photoDataUrl]))
+    : new Map<string, string>()
   const restoredWorks = appData.works.map((record) =>
     normalizeRecord({
       ...record,
@@ -788,21 +800,17 @@ export const useWorkStore = defineStore('works', {
         throw error
       }
     },
-    async loginCloudAccount(accountName: string, password: string) {
-      this.setCloudSync('syncing', '正在登录 CloudBase 云端账号...')
+    async previewCloudAccount(accountName: string, password: string) {
+      this.setCloudSync('syncing', '正在检查 CloudBase 云端账号数据...')
       try {
-        const session = await loginCloudWorksAccount(accountName, password)
-        this.cloudAccount = {
-          accountName: session.accountName,
-          updatedAt: session.updatedAt,
-        }
-        if (!this.items.length) {
-          await this.loadFromCloud()
-        } else {
-          await this.restorePhotoPreviews()
-          this.setCloudSync('success', `已登录云端账号「${session.accountName}」。`)
-        }
-        return session
+        const preview = await previewCloudWorksAccount(accountName, password)
+        this.setCloudSync(
+          'success',
+          preview.status === 'new'
+            ? `云端账号「${preview.session.accountName}」尚无数据，确认后将清空当前本地账号数据。`
+            : `已检查云端账号「${preview.session.accountName}」（作品 ${preview.recordCount} 条），等待确认覆盖本地。`,
+        )
+        return preview
       } catch (error) {
         this.setCloudSync(
           'error',
@@ -810,6 +818,65 @@ export const useWorkStore = defineStore('works', {
         )
         throw error
       }
+    },
+    async activateCloudAccount(preview: CloudAccountPreview): Promise<number> {
+      const previousSession = getCloudWorksSession()
+      const previousAppData = createAccountBackupData(this.items, this.autoBackup)
+      const previousDeletedRecords = readDeletedRecords()
+      this.setCloudSync('syncing', `正在切换到云端账号「${preview.session.accountName}」...`)
+
+      try {
+        const session = await activateCloudWorksAccount(preview)
+        applyAccountBackupData(preview.appData, { preserveLocalPhotos: false })
+        this.items = readRecords()
+        this.autoBackup = { ...preview.appData.autoBackup }
+        writeAutoBackupState(this.autoBackup)
+        writeDeletedRecords([])
+        this.cloudAccount = {
+          accountName: session.accountName,
+          updatedAt: session.updatedAt,
+        }
+      } catch (error) {
+        try {
+          applyAccountBackupData(previousAppData, { preserveLocalPhotos: false })
+          this.items = readRecords()
+          this.autoBackup = { ...previousAppData.autoBackup }
+          writeAutoBackupState(this.autoBackup)
+          writeDeletedRecords(previousDeletedRecords)
+          replaceCloudWorksSession(previousSession)
+          this.cloudAccount = {
+            accountName: previousSession?.accountName ?? '',
+            updatedAt: previousSession?.updatedAt ?? '',
+          }
+        } catch {
+          // Keep the original switching error visible if local rollback also fails.
+        }
+        this.setCloudSync(
+          'error',
+          getErrorMessage(error, '切换云端账号失败，本地数据未被替换。'),
+        )
+        throw error
+      }
+
+      try {
+        await clearAllWorkPhotos()
+        await this.restorePhotoPreviews()
+        this.setCloudSync(
+          'success',
+          `已切换到云端账号「${preview.session.accountName}」，并覆盖本地账号数据（作品 ${this.items.length} 条）。`,
+        )
+      } catch (error) {
+        this.setCloudSync(
+          'error',
+          `已切换到云端账号「${preview.session.accountName}」，但照片恢复失败，可稍后重试：${getErrorMessage(error, '未知错误')}`,
+        )
+      }
+      return this.items.length
+    },
+    async loginCloudAccount(accountName: string, password: string) {
+      const preview = await this.previewCloudAccount(accountName, password)
+      await this.activateCloudAccount(preview)
+      return preview.session
     },
     logoutCloudAccount() {
       clearCloudWorksSession()

@@ -102,6 +102,14 @@ export const deleteWorkPhotos = async (workId: string) => {
   await done
 }
 
+export const clearAllWorkPhotos = async () => {
+  const database = await openDatabase()
+  const transaction = database.transaction(photoStoreName, 'readwrite')
+  const done = transactionDone(transaction)
+  transaction.objectStore(photoStoreName).clear()
+  await done
+}
+
 export const listPendingWorkPhotos = async () => {
   const database = await openDatabase()
   const transaction = database.transaction(photoStoreName, 'readonly')

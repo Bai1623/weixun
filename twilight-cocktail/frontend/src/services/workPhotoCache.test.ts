@@ -3,6 +3,7 @@ import { Blob as NodeBlob } from 'node:buffer'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import {
+  clearAllWorkPhotos,
   deleteWorkPhotos,
   getWorkPhoto,
   hasCachedPreview,
@@ -84,5 +85,15 @@ describe('work photo cache', () => {
 
     await deleteWorkPhotos('cache-work-state')
     expect(await getWorkPhoto('cache-work-state', 'rev-1', 'preview')).toBeUndefined()
+  })
+
+  it('clears every cached work photo when the active cloud account changes', async () => {
+    await putWorkPhoto(photoRecord('cache-work-first', 'preview'))
+    await putWorkPhoto(photoRecord('cache-work-second', 'original'))
+
+    await clearAllWorkPhotos()
+
+    expect(await getWorkPhoto('cache-work-first', 'rev-1', 'preview')).toBeUndefined()
+    expect(await getWorkPhoto('cache-work-second', 'rev-1', 'original')).toBeUndefined()
   })
 })

@@ -464,6 +464,7 @@
               <span>云端账号</span>
               <input
                 v-model.trim="cloudAccountName"
+                data-testid="cloud-account-name"
                 class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
                 placeholder="例如 baibai"
               />
@@ -472,6 +473,7 @@
               <span>云端密码</span>
               <input
                 v-model="cloudPassword"
+                data-testid="cloud-account-password"
                 class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
                 placeholder="输入账号密码"
                 type="password"
@@ -479,6 +481,7 @@
               />
             </label>
             <button
+              data-testid="cloud-account-login"
               class="mt-auto inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
               type="button"
               :disabled="isSyncingCloud"
@@ -1491,7 +1494,20 @@ const loginCloudAccount = async () => {
   shareMessage.value = ''
   isSyncingCloud.value = true
   try {
-    await works.loginCloudAccount(cloudAccountName.value, cloudPassword.value)
+    const preview = await works.previewCloudAccount(cloudAccountName.value, cloudPassword.value)
+    const sourceText =
+      preview.status === 'new'
+        ? `云端账号「${preview.session.accountName}」尚无数据，确认后会创建新账号。`
+        : `云端账号「${preview.session.accountName}」现有 ${preview.recordCount} 个作品。`
+    const confirmed = window.confirm(
+      `${sourceText}\n\n切换后将以云端账号数据为准，覆盖本机当前账号的作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。是否继续？`,
+    )
+    if (!confirmed) {
+      shareMessage.value = '已取消切换，本地账号数据未改变。'
+      return
+    }
+
+    await works.activateCloudAccount(preview)
     cloudAccountName.value = works.cloudAccount.accountName
     cloudPassword.value = ''
     shareMessage.value = works.cloudSync.message

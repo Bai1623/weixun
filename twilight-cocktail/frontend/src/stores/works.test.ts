@@ -3,6 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { exportWorkRecords, formatWorkIngredients, importWorkRecords, useWorkStore } from './works'
 import * as cloudWorks from '@/services/cloudWorks'
+import * as workPhotoCache from '@/services/workPhotoCache'
 import * as workPhotos from '@/services/workPhotos'
 import { useAcademyStore } from '@/stores/academy'
 import { useDailyPickStore } from '@/stores/daily'
@@ -340,6 +341,213 @@ describe('work store', () => {
     expect(works.items[0].cocktailName).toBe('朋友作品')
 
     expect(importWorkRecords('{bad json')).toEqual({ records: [], skippedCount: 0 })
+  })
+
+  it('previews another cloud account without changing the active local account', async () => {
+    const currentSession = {
+      accountName: 'current',
+      accountNameKey: 'current-key',
+      passwordVerifier: 'current-password',
+      updatedAt: '2026-08-22T09:00:00.000Z',
+    }
+    cloudWorks.replaceCloudWorksSession(currentSession)
+    const works = useWorkStore()
+    const localRecord = works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '当前账号作品',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const preview = {
+      session: {
+        accountName: 'target',
+        accountNameKey: 'target-key',
+        passwordVerifier: 'target-password',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      },
+      status: 'new' as const,
+      appData: cloudWorks.createEmptyCloudAppData(),
+      recordCount: 0,
+    }
+    vi.spyOn(cloudWorks, 'previewCloudWorksAccount').mockResolvedValue(preview)
+
+    const result = await works.previewCloudAccount('target', 'secret')
+
+    expect(result).toEqual(preview)
+    expect(works.items).toEqual([localRecord])
+    expect(works.cloudAccount.accountName).toBe('current')
+    expect(cloudWorks.getCloudWorksSession()).toEqual(currentSession)
+  })
+
+  it('activates a cloud account by replacing the complete local account package', async () => {
+    cloudWorks.replaceCloudWorksSession({
+      accountName: 'current',
+      accountNameKey: 'current-key',
+      passwordVerifier: 'current-password',
+      updatedAt: '2026-08-22T09:00:00.000Z',
+    })
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-21',
+      cocktailSlug: '',
+      cocktailName: '旧作品',
+      photoDataUrl: 'data:image/jpeg;base64,old',
+      ingredientsText: '朗姆酒、可乐',
+      rating: 3,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    usePantryStore().ingredientSlugs = ['rum']
+    useFavoriteStore().slugs = ['old-favorite']
+    useAcademyStore().completedSlugs = ['old-course']
+    useDailyPickStore().selectedSlug = 'old-pick'
+    window.localStorage.setItem('custom_work_flavor_liquors', JSON.stringify(['旧材料']))
+    window.localStorage.setItem(
+      'cocktail_work_deleted_records',
+      JSON.stringify([{ id: 'deleted-old', deletedAt: '2026-08-22T08:00:00.000Z' }]),
+    )
+
+    const targetRecord = {
+      id: 'target-work',
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '目标账号作品',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 5,
+      mood: '',
+      selfReview: '',
+      notes: '',
+      createdAt: '2026-08-22T10:00:00.000Z',
+      updatedAt: '2026-08-22T10:00:00.000Z',
+      photoOriginalObjectKey: 'photos/target/original.jpg',
+      photoPreviewObjectKey: 'photos/target/preview.jpg',
+      photoOriginalName: 'target.jpg',
+      photoOriginalMime: 'image/jpeg',
+      photoOriginalSize: 123,
+      photoRevision: 'target-r1',
+      photoBackupMode: 'original-and-preview' as const,
+    }
+    const preview = {
+      session: {
+        accountName: 'target',
+        accountNameKey: 'target-key',
+        passwordVerifier: 'target-password',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      },
+      status: 'matched' as const,
+      appData: {
+        version: 1 as const,
+        app: 'twilight-mixbook' as const,
+        type: 'app-data' as const,
+        works: [targetRecord],
+        pantry: { ingredientSlugs: ['gin'] },
+        favorites: { cocktailSlugs: ['target-favorite'] },
+        academy: { completedSlugs: ['target-course'] },
+        dailyPick: {
+          selectedSlug: 'target-pick',
+          selectedDate: '2026-08-22',
+          reason: '目标推荐',
+          rerollCount: 1,
+        },
+        customOptions: {
+          cocktails: [],
+          flavorLiquors: ['目标材料'],
+          beverages: ['目标饮料'],
+        },
+        autoBackup: { enabled: true, lastBackupAt: '2026-08-22T10:00:00.000Z' },
+      },
+      recordCount: 1,
+    }
+    vi.spyOn(cloudWorks, 'activateCloudWorksAccount').mockImplementation(async (candidate) => {
+      cloudWorks.replaceCloudWorksSession(candidate.session)
+      return candidate.session
+    })
+    const clearPhotos = vi.spyOn(workPhotoCache, 'clearAllWorkPhotos').mockResolvedValue()
+    const restorePhotos = vi
+      .spyOn(workPhotos, 'restoreAllWorkPreviews')
+      .mockResolvedValue({ completed: 1, total: 1, failedWorkIds: [] })
+    vi.spyOn(workPhotos, 'getCachedWorkPreviewDataUrl').mockResolvedValue(
+      'data:image/jpeg;base64,target',
+    )
+
+    const count = await works.activateCloudAccount(preview)
+
+    expect(count).toBe(1)
+    expect(works.items).toEqual([
+      expect.objectContaining({
+        id: 'target-work',
+        cocktailName: '目标账号作品',
+        photoDataUrl: 'data:image/jpeg;base64,target',
+      }),
+    ])
+    expect(usePantryStore().ingredientSlugs).toEqual(['gin'])
+    expect(useFavoriteStore().slugs).toEqual(['target-favorite'])
+    expect(useAcademyStore().completedSlugs).toEqual(['target-course'])
+    expect(useDailyPickStore()).toMatchObject({
+      selectedSlug: 'target-pick',
+      reason: '目标推荐',
+      rerollCount: 1,
+    })
+    expect(JSON.parse(window.localStorage.getItem('custom_work_flavor_liquors') ?? '[]')).toEqual([
+      '目标材料',
+    ])
+    expect(works.autoBackup).toEqual(preview.appData.autoBackup)
+    expect(works.cloudAccount.accountName).toBe('target')
+    expect(cloudWorks.getCloudWorksSession()).toEqual(preview.session)
+    expect(window.localStorage.getItem('cocktail_work_deleted_records')).toBe('[]')
+    expect(clearPhotos).toHaveBeenCalledOnce()
+    expect(restorePhotos).toHaveBeenCalledOnce()
+  })
+
+  it('clears all local account data after activating a new empty account', async () => {
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '旧账号作品',
+      photoDataUrl: '',
+      ingredientsText: '伏特加、苏打水',
+      rating: 3,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    usePantryStore().ingredientSlugs = ['vodka']
+    const preview = {
+      session: {
+        accountName: 'brand-new',
+        accountNameKey: 'brand-new-key',
+        passwordVerifier: 'brand-new-password',
+        updatedAt: '2026-08-22T11:00:00.000Z',
+      },
+      status: 'new' as const,
+      appData: cloudWorks.createEmptyCloudAppData(),
+      recordCount: 0,
+    }
+    vi.spyOn(cloudWorks, 'activateCloudWorksAccount').mockImplementation(async (candidate) => {
+      cloudWorks.replaceCloudWorksSession(candidate.session)
+      return candidate.session
+    })
+    vi.spyOn(workPhotoCache, 'clearAllWorkPhotos').mockResolvedValue()
+    vi.spyOn(workPhotos, 'restoreAllWorkPreviews').mockResolvedValue({
+      completed: 0,
+      total: 0,
+      failedWorkIds: [],
+    })
+
+    await works.activateCloudAccount(preview)
+
+    expect(works.items).toEqual([])
+    expect(usePantryStore().ingredientSlugs).toEqual([])
+    expect(works.autoBackup).toEqual({ enabled: false, lastBackupAt: '' })
+    expect(works.cloudAccount.accountName).toBe('brand-new')
   })
 
   it('loads full cloud account data into local cache', async () => {

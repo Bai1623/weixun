@@ -304,6 +304,63 @@ describe('WorksPage', () => {
     expect(wrapper.text()).toContain('自动备份已开启')
   })
 
+  it('previews and confirms complete local replacement before switching cloud accounts', async () => {
+    const works = useWorkStore()
+    works.add({
+      madeAt: '2026-08-22',
+      cocktailSlug: '',
+      cocktailName: '当前本地作品',
+      photoDataUrl: '',
+      ingredientsText: '金酒、汤力水',
+      rating: 4,
+      mood: '',
+      selfReview: '',
+      notes: '',
+    })
+    const preview = {
+      session: {
+        accountName: 'target',
+        accountNameKey: 'target-key',
+        passwordVerifier: 'target-password',
+        updatedAt: '2026-08-22T10:00:00.000Z',
+      },
+      status: 'matched' as const,
+      appData: {
+        ...cloudWorks.createEmptyCloudAppData(),
+        works: [
+          {
+            ...works.items[0],
+            id: 'target-work',
+            cocktailName: '云端目标作品',
+            photoDataUrl: '',
+          },
+        ],
+      },
+      recordCount: 1,
+    }
+    const previewAccount = vi.spyOn(works, 'previewCloudAccount').mockResolvedValue(preview)
+    const activateAccount = vi.spyOn(works, 'activateCloudAccount').mockResolvedValue(1)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    const wrapper = mount(WorksPage)
+
+    await wrapper.get('[data-testid="cloud-account-name"]').setValue('target')
+    await wrapper.get('[data-testid="cloud-account-password"]').setValue('secret')
+    await wrapper.get('[data-testid="cloud-account-login"]').trigger('click')
+    await flushPromises()
+
+    expect(previewAccount).toHaveBeenCalledWith('target', 'secret')
+    expect(confirm.mock.calls[0]?.[0]).toContain(
+      '作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置',
+    )
+    expect(activateAccount).not.toHaveBeenCalled()
+    expect(works.items[0].cocktailName).toBe('当前本地作品')
+
+    await wrapper.get('[data-testid="cloud-account-login"]').trigger('click')
+    await flushPromises()
+
+    expect(activateAccount).toHaveBeenCalledWith(preview)
+  })
+
   it('shows full preview restore progress with pause and retry controls', async () => {
     const works = useWorkStore()
     works.photoRestore = {
