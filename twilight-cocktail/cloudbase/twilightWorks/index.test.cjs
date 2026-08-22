@@ -166,6 +166,20 @@ function metadataPatch(overrides = {}) {
   };
 }
 
+function validDrinkRequest(cocktailName) {
+  return {
+    guestName: "朋友",
+    cocktailName,
+    ingredientGroups: {
+      baseLiquors: ["金酒"],
+      flavorLiquors: [],
+      beverages: ["汤力水"],
+      other: "",
+    },
+    note: "少甜",
+  };
+}
+
 test("account backup stores and returns full app data payloads", async () => {
   const collection = createFakeCollection();
   const api = loadFunction(collection);
@@ -602,6 +616,42 @@ test("owner can delete one drink request after reviewing it", async () => {
   assert.equal(deleted.statusCode, 200);
   assert.equal(deleted.body.requestCount, 0);
   assert.equal(afterDelete.body.requests.length, 0);
+});
+
+test("disabling a drink request share deletes all requests and rejects the old link", async () => {
+  const collection = createFakeCollection();
+  const api = loadFunction(collection);
+  await createAccountAndShare(api);
+  await post(api, {
+    action: "drink-request-submit",
+    shareToken,
+    request: validDrinkRequest("第一杯"),
+  });
+  await post(api, {
+    action: "drink-request-submit",
+    shareToken,
+    request: validDrinkRequest("第二杯"),
+  });
+
+  const disabled = await post(api, {
+    action: "request-share-disable",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  const list = await post(api, {
+    action: "drink-requests-get",
+    accountNameKey: validKey,
+    passwordVerifier: validPassword,
+  });
+  const resubmit = await post(api, {
+    action: "drink-request-submit",
+    shareToken,
+    request: validDrinkRequest("第三杯"),
+  });
+
+  assert.equal(disabled.body.requestCount, 0);
+  assert.deepEqual(list.body.requests, []);
+  assert.equal(resubmit.body.status, "share_disabled");
 });
 
 test("drink request share link rejects photo payloads and disabled links", async () => {

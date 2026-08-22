@@ -951,12 +951,15 @@ exports.main = async (event = {}) => {
       const account = await assertAccountPassword(accountNameKey, passwordVerifier);
       if (!account.ok) return response({ ok: false, status: "password_mismatch" });
 
-      await disableShareDoc(account.doc?.requestShareKey || "");
+      const now = new Date().toISOString();
       await saveDoc(accountDocId(accountNameKey), {
         requestShareEnabled: false,
-        requestShareUpdatedAt: new Date().toISOString(),
+        requestShareUpdatedAt: now,
+        drinkRequests: [],
+        drinkRequestCount: 0,
       });
-      return response({ ok: true, enabled: false });
+      await disableShareDoc(account.doc?.requestShareKey || "");
+      return response({ ok: true, enabled: false, requestCount: 0 });
     }
 
     if (method === "POST" && action === "drink-request-submit") {
