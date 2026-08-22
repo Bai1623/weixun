@@ -441,10 +441,18 @@ describe('WorksPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('朋友想喝')
-    expect(wrapper.text()).toContain('冰岛')
+    expect(wrapper.get('[data-testid="drink-request-summary"]').text()).toContain(
+      '当前有 1 条朋友点单',
+    )
+    expect(wrapper.find('[data-testid="drink-request-list"]').exists()).toBe(false)
     expect(wrapper.get('[role="dialog"]').text()).toContain('朋友想喝提醒')
     await wrapper.get('[data-testid="drink-request-view-new"]').trigger('click')
     await flushPromises()
+
+    expect(wrapper.get('[data-testid="drink-request-list"]').text()).toContain('冰岛')
+    await wrapper.get('[data-testid="drink-request-summary"]').trigger('click')
+    expect(wrapper.find('[data-testid="drink-request-list"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="drink-request-summary"]').trigger('click')
 
     await wrapper.get('[data-testid="drink-request-delete"]').trigger('click')
     await flushPromises()
@@ -454,10 +462,66 @@ describe('WorksPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('https://example.com/#/want/share-token')
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
     await flushPromises()
 
     expect(cloudDrinkRequests.disableDrinkRequestShare).toHaveBeenCalled()
     expect(wrapper.text()).toContain('分享链接已关闭')
+  })
+
+  it('keeps the friend share active when closing all requests is not confirmed', async () => {
+    window.localStorage.setItem(
+      'twilight_cloud_works_session',
+      JSON.stringify({
+        accountName: 'mix',
+        accountNameKey: 'account-key',
+        passwordVerifier: 'password-verifier',
+        updatedAt: '2026-08-07T00:00:00.000Z',
+      }),
+    )
+    vi.spyOn(cloudDrinkRequests, 'getDrinkRequestShare').mockResolvedValue({
+      enabled: true,
+      token: 'share-token',
+      url: 'https://example.com/#/want/share-token',
+      requestCount: 1,
+      updatedAt: '2026-08-07T12:00:00.000Z',
+    })
+    vi.spyOn(cloudDrinkRequests, 'fetchDrinkRequests').mockResolvedValue([
+      {
+        id: 'req-1',
+        guestName: '朋友',
+        cocktailName: '冰岛',
+        ingredientGroups: {
+          baseLiquors: ['伏特加'],
+          flavorLiquors: [],
+          beverages: ['葡萄味气泡水'],
+          other: '',
+        },
+        note: '少甜',
+        createdAt: '2026-08-07T12:00:00.000Z',
+      },
+    ])
+    const disable = vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const wrapper = mount(WorksPage)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
+
+    expect(confirm).toHaveBeenCalledWith(
+      '关闭后当前链接立即失效，并永久删除该链接下全部 1 条点单，是否继续？',
+    )
+    expect(disable).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('https://example.com/#/want/share-token')
+
+    confirm.mockReturnValue(true)
+    await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
+    await flushPromises()
+
+    expect(disable).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="drink-request-summary"]').text()).toContain(
+      '当前有 0 条朋友点单',
+    )
   })
 })

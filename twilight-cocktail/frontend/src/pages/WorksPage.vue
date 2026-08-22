@@ -630,7 +630,27 @@
             >
               {{ drinkRequestMessage }}
             </p>
-            <div v-if="drinkRequests.length" class="mt-4 space-y-3">
+            <button
+              data-testid="drink-request-summary"
+              class="mt-4 flex w-full items-center justify-between gap-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3 text-left transition hover:border-gold/30"
+              type="button"
+              :aria-expanded="isDrinkRequestListExpanded"
+              @click="isDrinkRequestListExpanded = !isDrinkRequestListExpanded"
+            >
+              <span class="text-sm font-semibold text-cream">
+                当前有 {{ drinkRequests.length }} 条朋友点单
+              </span>
+              <ChevronUp
+                v-if="isDrinkRequestListExpanded"
+                class="h-5 w-5 shrink-0 text-gold"
+              />
+              <ChevronDown v-else class="h-5 w-5 shrink-0 text-gold" />
+            </button>
+            <div
+              v-if="isDrinkRequestListExpanded && drinkRequests.length"
+              data-testid="drink-request-list"
+              class="mt-4 space-y-3"
+            >
               <article
                 v-for="request in drinkRequests"
                 :key="request.id"
@@ -669,6 +689,12 @@
                 </p>
               </article>
             </div>
+            <p
+              v-else-if="isDrinkRequestListExpanded"
+              class="mt-4 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-muted"
+            >
+              当前还没有朋友点单。
+            </p>
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">
@@ -1057,6 +1083,7 @@ const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
 const newDrinkRequestPrompt = ref<{ count: number } | null>(null)
+const isDrinkRequestListExpanded = ref(false)
 const expandedWorkIds = ref<string[]>([])
 const isWorkListExpanded = ref(false)
 const drinkShare = ref<DrinkRequestShareState>({
@@ -1539,6 +1566,7 @@ const dismissDrinkRequestPrompt = () => {
 
 const viewNewDrinkRequests = () => {
   newDrinkRequestPrompt.value = null
+  isDrinkRequestListExpanded.value = true
   drinkRequestPanelEl.value?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
 }
 
@@ -1586,10 +1614,19 @@ const resetDrinkShareLink = async () => {
 
 const disableDrinkShareLink = async () => {
   drinkRequestMessage.value = ''
+  if (
+    !window.confirm(
+      `关闭后当前链接立即失效，并永久删除该链接下全部 ${drinkRequests.value.length} 条点单，是否继续？`,
+    )
+  ) {
+    return
+  }
   isDrinkRequestSyncing.value = true
   try {
     await disableDrinkRequestShare()
     drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
+    drinkRequests.value = []
+    isDrinkRequestListExpanded.value = false
     newDrinkRequestPrompt.value = null
     writeDrinkRequestSeenCount(0)
     drinkRequestMessage.value = '分享链接已关闭。'
