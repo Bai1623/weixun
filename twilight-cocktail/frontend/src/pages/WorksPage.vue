@@ -643,10 +643,7 @@
               <span class="text-sm font-semibold text-cream">
                 当前有 {{ drinkRequests.length }} 条朋友点单
               </span>
-              <ChevronUp
-                v-if="isDrinkRequestListExpanded"
-                class="h-5 w-5 shrink-0 text-gold"
-              />
+              <ChevronUp v-if="isDrinkRequestListExpanded" class="h-5 w-5 shrink-0 text-gold" />
               <ChevronDown v-else class="h-5 w-5 shrink-0 text-gold" />
             </button>
             <div

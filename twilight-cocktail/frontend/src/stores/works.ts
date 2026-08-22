@@ -850,10 +850,7 @@ export const useWorkStore = defineStore('works', {
         } catch {
           // Keep the original switching error visible if local rollback also fails.
         }
-        this.setCloudSync(
-          'error',
-          getErrorMessage(error, '切换云端账号失败，本地数据未被替换。'),
-        )
+        this.setCloudSync('error', getErrorMessage(error, '切换云端账号失败，本地数据未被替换。'))
         throw error
       }
 

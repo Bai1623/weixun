@@ -360,7 +360,10 @@ const isRetryableCloudActionError = (error: unknown) => {
   if (typeof status === 'number') {
     return status === 408 || status === 425 || status === 429 || status >= 500
   }
-  return error instanceof Error && /无法连接云函数|network|timeout|timed out|temporary/i.test(error.message)
+  return (
+    error instanceof Error &&
+    /无法连接云函数|network|timeout|timed out|temporary/i.test(error.message)
+  )
 }
 
 const postIdempotentCloudWorksAction = async (body: Record<string, unknown>) => {
@@ -618,8 +621,7 @@ const fetchCloudAppDataForSession = async (session: CloudWorksSession) => {
   })
 }
 
-export const fetchCloudAppData = async () =>
-  fetchCloudAppDataForSession(getRequiredCloudSession())
+export const fetchCloudAppData = async () => fetchCloudAppDataForSession(getRequiredCloudSession())
 
 export const fetchCloudWorks = async () => {
   const appData = await fetchCloudAppData()
