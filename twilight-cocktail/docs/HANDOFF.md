@@ -12,13 +12,14 @@
 
 ## 当前版本
 
-- 当前代码仓库：`git@github.com:Bai1623/weixun.git`
-- 当前开发分支：`codex/twilight-photo-backup`（完成验收后并入 `codex/twilight-cocktail-prototype`）
+- 当前代码仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`（旧 `weixun.git` 会跳转到此仓库）
+- 当前开发分支：`codex/twilight-cocktail-prototype`
+- 最近确认的源码 commit：`b806223`
 - 当前 Pages 仓库：`git@github.com:Bai1623/weixun-Twilight-Mixbook.git`
 - 当前 Pages 分支：`gh-pages`
-- 最近确认的 Pages 分支 commit：`283fd6b`
+- 最近确认的 Pages 分支 commit：`b19ec7c`
 - 线上地址：[https://bai1623.github.io/weixun-Twilight-Mixbook/](https://bai1623.github.io/weixun-Twilight-Mixbook/)
-- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=ff28711#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=ff28711#/works)
+- 带缓存刷新参数的作品页：[https://bai1623.github.io/weixun-Twilight-Mixbook/?v=b806223#/works](https://bai1623.github.io/weixun-Twilight-Mixbook/?v=b806223#/works)
 
 ## 目录说明
 
@@ -45,25 +46,27 @@ twilight-cocktail/
 - 调酒学院：本地记录课程进度。
 - 我的作品：记录日期、酒单、照片、基酒/调味酒/饮料/其他、评分、心情、自我评价、备注。
 - 我的作品分享：支持 JSON 导入导出、长图导出、筛选导出。
-- 朋友想喝：生成分享链接后，朋友可提交一条无照片点单；你在“我的作品”里查看、删除。
+- 朋友想喝：生成分享链接后，朋友可提交一条无照片点单；列表默认折叠，可展开、删除；关闭链接会在确认后清空该链接下全部点单。
 - 跨设备同步：账号级轻量增量元数据保存在 CloudBase；作品手机原图和 1280px 预览图保存在私有阿里云 OSS。
 
 ## 云端同步现状
 
 CloudBase 环境：
 
-- 环境 ID：`weixun-d8g9xwqak83952747`
-- 云函数名：`twilightWorks`
-- HTTP 云函数地址：`https://weixun-d8g9xwqak83952747-1462034992.ap-shanghai.app.tcloudbase.com/twilightWorks`
-- 文档型数据库集合：`works`
+- 环境 ID：`bai-d0g23uiiz96a4f50d`
+- `/share` 当前路由函数：`scfnodejshelloworld11`
+- HTTP 云函数地址：`https://bai-d0g23uiiz96a4f50d-1428838698.ap-shanghai.app.tcloudbase.com/share`
+- 文档型数据库集合：`bai`
 
 当前同步逻辑：
 
 - 前端不再直接使用 CloudBase 匿名登录。
 - 用户在“我的作品”里输入云端账号和密码，这是一套应用自己的轻量账号逻辑，不是腾讯云账号。
-- 登录/创建账号、上传、恢复、朋友点单都通过 `twilightWorks` HTTP 云函数。
+- 登录/创建账号、上传、恢复、朋友点单都通过 `/share` HTTP 云函数路由。
+- 登录或切换账号会先读取目标账号摘要并请求确认；确认后以云端为准，整包替换本机的作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。取消时本机数据不变。
 - 最新版本上传使用 `metadata-patch`：第一次同步全部轻量元数据，之后只同步新增/编辑/删除过的作品元数据。
 - 照片二进制不会进入轻量同步包。数据库只保存 OSS 对象键；浏览器使用云函数签发的短期 PUT/GET URL 直传 OSS。
+- 新增照片先写入本机 IndexedDB，再由一次统一云同步上传；照片签名和轻量元数据遇到临时网络错误会重试一次。云端仍失败时作品保留在本机并提示稍后手动上传。
 - 同一台电脑从云端恢复时，如果云端记录没有照片，本地已有照片会被保留。
 - 新电脑无本地作品时，登录后会自动恢复账号数据，并默认下载全部作品预览图；支持进度、暂停、继续和失败重试。
 - 手机原图不会批量自动下载，在作品卡片上按需下载。
@@ -90,8 +93,8 @@ CloudBase 环境：
 拉代码：
 
 ```bash
-git clone git@github.com:Bai1623/weixun.git
-cd weixun
+git clone git@github.com:Bai1623/weixun-Twilight-Mixbook.git
+cd weixun-Twilight-Mixbook
 git checkout codex/twilight-cocktail-prototype
 git pull origin codex/twilight-cocktail-prototype
 ```
@@ -170,18 +173,25 @@ python3.12 -m venv .venv
 控制台手动部署时：
 
 1. 打开腾讯云 CloudBase 控制台。
-2. 进入环境 `weixun-d8g9xwqak83952747`。
-3. 进入云函数/托管，找到 `twilightWorks`。
+2. 进入环境 `bai-d0g23uiiz96a4f50d`。
+3. 进入云函数/托管，找到 `/share` 路由对应的 `scfnodejshelloworld11`。
 4. 上传整个 `twilight-cocktail/cloudbase/twilightWorks`，至少包含 `index.js`、`ossPhotos.js` 和 `package.json`，不能只覆盖 `index.js`。
 5. 安装 `package.json` 中的 `@cloudbase/node-sdk` 和 `ali-oss` 依赖。
 6. 在云函数环境变量中配置 `ALIBABA_CLOUD_ACCESS_KEY_ID`、`ALIBABA_CLOUD_ACCESS_KEY_SECRET`、`ALIYUN_OSS_REGION=oss-cn-hangzhou`、`ALIYUN_OSS_BUCKET=twilight-cocktail-bai`、`ALIYUN_OSS_PREFIX=photos`。真实密钥不得进入 Git 或前端。
 7. 部署后打开“我的作品”，登录云端账号，新增带照片作品并测试上传、跨浏览器自动恢复预览和按需下载原图。
 
+已登录 CloudBase CLI 时也可在 `twilight-cocktail` 目录执行：
+
+```bash
+tcb -e bai-d0g23uiiz96a4f50d fn deploy scfnodejshelloworld11 \
+  --dir cloudbase/twilightWorks --force --install-dependency true
+```
+
 如果前端提示“云函数不支持轻量同步”或“无法连接云函数”，优先检查：
 
-- `twilightWorks` 是否部署的是最新代码。
+- `scfnodejshelloworld11` 是否部署的是最新代码。
 - HTTP 网关/默认域名是否能访问。
-- 数据库集合 `works` 是否存在。
+- 数据库集合 `bai` 是否存在。
 - 云函数是否能读写当前环境数据库。
 - 云函数是否已安装 `ali-oss`，以及五个 OSS 环境变量是否完整。
 - RAM 用户是否仍有 `twilight-cocktail-bai/photos/*` 权限。
