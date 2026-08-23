@@ -389,7 +389,7 @@ const postCloudWorksAction = async (body: Record<string, unknown>): Promise<Clou
   } catch (error) {
     if (error instanceof TypeError) {
       throw new Error(
-        '无法连接云函数。若登录正常但同步失败，请重新部署新版 twilightWorks 云函数后再试。',
+        '无法连接云函数。若登录正常但备份失败，请重新部署新版 twilightWorks 云函数后再试。',
       )
     }
     throw error
@@ -858,7 +858,7 @@ export const syncCloudMetadataPatch = async (
     )
   }
   if (result.status !== 'metadata_saved') {
-    throw new Error('云函数不支持轻量同步，请重新部署新版 twilightWorks 云函数后再试。')
+    throw new Error('云函数不支持增量备份，请重新部署新版 twilightWorks 云函数后再试。')
   }
   return {
     snapshotId: typeof result.metadataUpdatedAt === 'string' ? result.metadataUpdatedAt : '',

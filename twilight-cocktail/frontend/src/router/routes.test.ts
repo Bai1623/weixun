@@ -20,6 +20,7 @@ describe('application routes', () => {
         '/works',
         '/want/:shareToken?',
         '/profile',
+        '/profile/data',
         '/:pathMatch(.*)*',
       ]),
     )

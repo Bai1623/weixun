@@ -1638,7 +1638,7 @@ describe('work store', () => {
     expect(count).toBe(1)
     expect(works.cloudSync).toMatchObject({
       status: 'success',
-      message: '已同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
+      message: '已将账号数据备份到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
     })
     expect(push).toHaveBeenCalledWith(
       expect.objectContaining({

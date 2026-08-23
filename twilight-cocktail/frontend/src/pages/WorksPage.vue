@@ -6,6 +6,23 @@
       description="记录每天调过的酒、照片、原料和复盘。"
     />
 
+    <ConfirmDialog
+      v-if="confirmDialog"
+      title-id="works-confirm-dialog-title"
+      :eyebrow="confirmDialog.eyebrow"
+      :title="confirmDialog.title"
+      :message="confirmDialog.message"
+      :confirm-label="confirmDialog.confirmLabel"
+      :cancel-label="confirmDialog.cancelLabel"
+      :alternative-label="confirmDialog.alternativeLabel"
+      :pending="isConfirming"
+      :pending-label="confirmDialog.pendingLabel"
+      :tone="confirmDialog.tone"
+      @alternative="runConfirmAlternative"
+      @cancel="cancelConfirmDialog"
+      @confirm="runConfirmAction"
+    />
+
     <div
       v-if="saveDialog"
       class="fixed inset-0 z-50 flex items-center justify-center bg-obsidian/75 px-4 backdrop-blur-sm"
@@ -76,7 +93,7 @@
           </button>
         </div>
         <p class="mt-3 text-sm leading-6 text-muted">
-          距离上次云端备份已超过 1 天。是否现在轻量同步当前账号数据到云端？
+          距离上次云端备份已超过 1 天。是否现在备份当前账号数据到云端？
         </p>
         <div class="mt-5 grid gap-3 sm:grid-cols-2">
           <button
@@ -94,7 +111,7 @@
             @click="confirmAutoBackup"
           >
             <Upload class="h-4 w-4" />
-            现在上传
+            现在备份
           </button>
         </div>
       </div>
@@ -150,100 +167,6 @@
             @click="viewNewDrinkRequests"
           >
             查看
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div
-      v-if="cloudRestorePreview"
-      class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-obsidian/80 px-4 py-8 backdrop-blur-sm"
-      role="presentation"
-      @click.self="cancelCloudRestore"
-    >
-      <div
-        data-testid="cloud-restore-dialog"
-        class="w-full max-w-xl rounded-lg border border-gold/20 bg-walnut p-5 shadow-2xl shadow-black/40"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="cloud-restore-dialog-title"
-      >
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <p class="text-xs uppercase tracking-[0.22em] text-gold">Cloud Restore</p>
-            <h3 id="cloud-restore-dialog-title" class="mt-2 font-display text-2xl text-cream">
-              恢复前确认
-            </h3>
-          </div>
-          <button
-            class="rounded-md border border-gold/20 p-2 text-gold transition hover:bg-gold/10"
-            type="button"
-            aria-label="取消云端恢复"
-            @click="cancelCloudRestore"
-          >
-            <X class="h-4 w-4" />
-          </button>
-        </div>
-        <p class="mt-3 text-sm leading-6 text-muted">
-          云端备份时间：{{
-            formatCloudDate(cloudRestorePreview.backupCreatedAt)
-          }}。确认后将覆盖当前账号完整数据包，并先创建一次可撤销的本地恢复点。
-        </p>
-        <div class="mt-4 overflow-hidden rounded-lg border border-gold/15">
-          <div class="grid grid-cols-[1fr_5rem_5rem] bg-obsidian/55 px-3 py-2 text-xs text-muted">
-            <span>数据范围</span>
-            <span class="text-right">本机</span>
-            <span class="text-right">云端</span>
-          </div>
-          <div
-            v-for="row in cloudRestoreRows"
-            :key="row.label"
-            class="grid grid-cols-[1fr_5rem_5rem] border-t border-gold/10 px-3 py-2 text-sm"
-          >
-            <span class="text-cream/85">{{ row.label }}</span>
-            <span class="text-right text-muted">本机 {{ row.local }}</span>
-            <span class="text-right text-gold">云端 {{ row.cloud }}</span>
-          </div>
-        </div>
-        <p
-          class="mt-4 rounded-md border border-wine/50 bg-wine/15 px-3 py-2 text-sm leading-6 text-cream"
-        >
-          将覆盖当前账号完整数据包：作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。
-        </p>
-        <div
-          v-if="cloudRestoreError"
-          class="mt-3 rounded-md border border-wine/60 bg-wine/20 px-3 py-3 text-sm leading-6 text-cream"
-          role="alert"
-        >
-          <p>{{ cloudRestoreError }}</p>
-          <button
-            data-testid="cloud-restore-refresh"
-            class="mt-3 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-            type="button"
-            :disabled="isSyncingCloud"
-            @click="loadWorksFromCloud"
-          >
-            {{ isSyncingCloud ? '重新读取中' : '重新读取云端备份' }}
-          </button>
-        </div>
-        <div class="mt-5 grid gap-3 sm:grid-cols-2">
-          <button
-            class="inline-flex items-center justify-center rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10"
-            type="button"
-            :disabled="isSyncingCloud"
-            @click="cancelCloudRestore"
-          >
-            取消
-          </button>
-          <button
-            data-testid="cloud-restore-confirm"
-            class="inline-flex items-center justify-center gap-2 rounded-md bg-wine px-4 py-3 text-sm font-semibold text-cream transition hover:bg-wine/80 disabled:cursor-not-allowed disabled:opacity-50"
-            type="button"
-            :disabled="isSyncingCloud"
-            @click="confirmCloudRestore"
-          >
-            <Download class="h-4 w-4" />
-            {{ isSyncingCloud ? '恢复中' : '确认覆盖并恢复' }}
           </button>
         </div>
       </div>
@@ -547,250 +470,26 @@
         <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
           <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p class="text-sm text-muted">作品分享</p>
+              <p class="text-sm text-muted">作品分享与朋友点单</p>
               <p class="mt-1 text-sm leading-6 text-cream/80">
-                用 JSON 备份或发给朋友，也可以登录账号后同步到 CloudBase 云端。
+                导出当前作品长图，或管理“朋友想喝”分享链接。
               </p>
             </div>
           </div>
-          <div class="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_auto_auto]">
-            <label class="space-y-2 text-sm text-muted">
-              <span>云端账号</span>
-              <input
-                v-model.trim="cloudAccountName"
-                data-testid="cloud-account-name"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
-                placeholder="例如 baibai"
-              />
-            </label>
-            <label class="space-y-2 text-sm text-muted">
-              <span>云端密码</span>
-              <input
-                v-model="cloudPassword"
-                data-testid="cloud-account-password"
-                class="w-full rounded-md border border-gold/20 bg-obsidian px-3 py-3 text-cream outline-none focus:ring-2 focus:ring-gold"
-                placeholder="输入账号密码"
-                type="password"
-                @keydown.enter.prevent="loginCloudAccount"
-              />
-            </label>
-            <button
-              data-testid="cloud-account-login"
-              class="mt-auto inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              :disabled="isSyncingCloud"
-              @click="loginCloudAccount"
-            >
-              <Upload class="h-4 w-4" />
-              {{ works.cloudAccount.accountName ? '切换账号' : '登录/创建' }}
-            </button>
-            <button
-              class="mt-auto inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-              type="button"
-              :disabled="!works.cloudAccount.accountName || isSyncingCloud"
-              @click="logoutCloudAccount"
-            >
-              退出
-            </button>
-          </div>
-          <p class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
-            {{
-              works.cloudAccount.accountName
-                ? `当前云端账号：${works.cloudAccount.accountName}`
-                : '还未登录云端账号。账号不存在时会自动创建。'
-            }}
-          </p>
-          <div
-            data-testid="cloud-summary-panel"
-            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4"
+          <a
+            data-testid="works-account-data-entry"
+            class="mt-4 flex flex-col gap-2 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3 transition hover:border-gold/30 sm:flex-row sm:items-center sm:justify-between"
+            href="#/profile/data"
           >
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-gold">CloudBase</p>
-                <p class="mt-1 text-sm font-semibold text-cream">云端备份</p>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-if="works.hasRestoreCheckpoint"
-                  data-testid="cloud-restore-undo"
-                  class="rounded-md border border-wine/70 px-3 py-2 text-sm text-cream transition hover:bg-wine/20 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  :disabled="isSyncingCloud"
-                  @click="undoCloudRestore"
-                >
-                  撤销本次恢复
-                </button>
-                <button
-                  data-testid="cloud-summary-refresh"
-                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  :disabled="!works.cloudAccount.accountName || isCheckingCloud || isSyncingCloud"
-                  @click="() => refreshCloudSummary()"
-                >
-                  {{ isCheckingCloud ? '查询中' : '查询云端' }}
-                </button>
-              </div>
-            </div>
-            <p class="mt-3 text-sm leading-6 text-cream/85">
+            <span class="text-sm text-cream">
               {{
                 works.cloudAccount.accountName
-                  ? works.cloudSnapshot.message
-                  : '登录云端账号后，会自动查询备份时间和数据范围。'
+                  ? `当前云端账号：${works.cloudAccount.accountName}`
+                  : '尚未登录云端账号'
               }}
-            </p>
-            <template v-if="cloudSnapshotSummary">
-              <p class="mt-3 text-sm font-semibold text-cream">
-                {{ cloudSnapshotSummary.works }} 个作品 ·
-                {{ cloudSnapshotSummary.previewPhotos }} 张预览图 ·
-                {{ cloudSnapshotSummary.originalPhotos }} 张原图
-              </p>
-              <p class="mt-2 text-sm leading-6 text-muted">
-                酒柜 {{ cloudSnapshotSummary.pantry }} · 收藏 {{ cloudSnapshotSummary.favorites }} ·
-                课程 {{ cloudSnapshotSummary.academy }} · 每日推荐
-                {{ cloudSnapshotSummary.dailyPick }} · 自定义酒单
-                {{ cloudSnapshotSummary.customCocktails }} · 自定义风味酒
-                {{ cloudSnapshotSummary.customFlavorLiquors }} · 自定义饮料
-                {{ cloudSnapshotSummary.customBeverages }}
-              </p>
-              <p class="mt-2 text-xs leading-5 text-muted">
-                云端备份：{{
-                  formatCloudDate(works.cloudSnapshot.snapshot?.backupCreatedAt || '')
-                }}；最近检查：{{ formatCloudDate(works.cloudSnapshot.checkedAt) }}
-              </p>
-            </template>
-          </div>
-          <div
-            v-if="showPhotoBackupPanel"
-            data-testid="work-photo-backup-panel"
-            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
-          >
-            <p class="text-sm font-semibold text-cream">照片备份队列</p>
-            <p class="mt-1 text-sm text-muted">{{ works.photoBackup.message }}</p>
-            <div v-if="works.photoBackup.issues.length" class="mt-3 space-y-2">
-              <div
-                v-for="issue in works.photoBackup.issues"
-                :key="`${issue.workId}:${issue.revision}`"
-                class="flex flex-col gap-3 rounded-md border border-gold/10 bg-obsidian/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-cream">{{ issue.workName }}</p>
-                  <p class="mt-1 text-xs text-muted">
-                    {{ photoBackupKindLabel(issue.kinds) }} ·
-                    {{ issue.status === 'failed' ? '上传失败' : '等待上传' }}
-                  </p>
-                  <p v-if="issue.errorMessage" class="mt-1 text-xs leading-5 text-cream/75">
-                    {{ issue.errorMessage }}
-                  </p>
-                </div>
-                <button
-                  data-testid="work-photo-backup-item-retry"
-                  class="shrink-0 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  :disabled="
-                    !works.cloudAccount.accountName ||
-                    works.photoBackup.status === 'retrying' ||
-                    isSyncingCloud
-                  "
-                  @click="retryPhotoBackupIssue(issue.workId)"
-                >
-                  {{ issue.status === 'failed' ? '重试此张' : '立即上传' }}
-                </button>
-              </div>
-            </div>
-          </div>
-          <div
-            v-if="works.photoRestore.status !== 'idle'"
-            data-testid="work-photo-restore-panel"
-            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
-          >
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p class="text-sm font-semibold text-cream">照片预览恢复</p>
-                <p class="mt-1 text-sm text-muted">{{ works.photoRestore.message }}</p>
-              </div>
-              <div class="flex gap-2">
-                <button
-                  v-if="works.photoRestore.status === 'restoring'"
-                  data-testid="work-photo-restore-pause"
-                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold"
-                  type="button"
-                  @click="works.pausePhotoRestore"
-                >
-                  暂停
-                </button>
-                <button
-                  v-if="
-                    works.photoRestore.status === 'paused' || works.photoRestore.status === 'error'
-                  "
-                  data-testid="work-photo-restore-retry"
-                  class="rounded-md border border-gold/30 px-3 py-2 text-sm text-gold"
-                  type="button"
-                  @click="retryPhotoRestore"
-                >
-                  继续/重试
-                </button>
-              </div>
-            </div>
-            <div class="mt-3 h-2 overflow-hidden rounded-full bg-cream/10">
-              <div
-                class="h-full rounded-full bg-gold transition-all"
-                :style="{ width: photoRestorePercent }"
-              />
-            </div>
-            <p class="mt-2 text-xs text-muted">
-              {{ works.photoRestore.completed }}/{{ works.photoRestore.total }}
-            </p>
-            <div
-              v-if="works.photoRestore.failures.length"
-              data-testid="work-photo-restore-failures"
-              class="mt-3 space-y-2"
-            >
-              <div
-                v-for="failure in works.photoRestore.failures"
-                :key="failure.workId"
-                class="flex flex-col gap-3 rounded-md border border-gold/10 bg-obsidian/45 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div class="min-w-0">
-                  <p class="truncate text-sm font-semibold text-cream">
-                    {{ workNameById(failure.workId) }}
-                  </p>
-                  <p class="mt-1 text-xs leading-5 text-cream/75">{{ failure.errorMessage }}</p>
-                </div>
-                <button
-                  data-testid="work-photo-restore-item-retry"
-                  class="shrink-0 rounded-md border border-gold/30 px-3 py-2 text-sm text-gold disabled:cursor-not-allowed disabled:opacity-50"
-                  type="button"
-                  :disabled="works.photoRestore.status === 'restoring'"
-                  @click="retryPhotoRestoreIssue(failure.workId)"
-                >
-                  重试此张
-                </button>
-              </div>
-            </div>
-          </div>
-          <div
-            class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-3"
-            data-testid="auto-cloud-backup-panel"
-          >
-            <label class="flex cursor-pointer items-start justify-between gap-4">
-              <span>
-                <span class="block text-sm font-semibold text-cream">自动备份</span>
-                <span class="mt-1 block text-sm leading-6 text-muted">
-                  打开作品页时检查上次云端备份，超过 1 天会先询问再轻量同步账号数据。
-                </span>
-              </span>
-              <input
-                data-testid="auto-cloud-backup-toggle"
-                class="mt-1 h-5 w-5 accent-gold"
-                type="checkbox"
-                :checked="works.autoBackup.enabled"
-                @change="toggleAutoBackup"
-              />
-            </label>
-            <p class="mt-3 rounded-md bg-obsidian/45 px-3 py-2 text-sm text-cream">
-              {{ autoBackupStatusText }}
-            </p>
-          </div>
+            </span>
+            <span class="text-sm text-gold">前往账号与数据 →</span>
+          </a>
           <div
             ref="drinkRequestPanelEl"
             class="mt-4 rounded-lg border border-gold/15 bg-obsidian/35 px-4 py-4"
@@ -917,59 +616,19 @@
           </div>
           <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div class="text-sm leading-6 text-muted">
-              账号数据保存在 CloudBase，作品原图与预览图保存在私有
-              OSS。新电脑首次登录会自动恢复全部预览图，原图按需下载。
+              长图会使用当前筛选结果。账号登录、云端备份、恢复及 JSON 数据管理已移至“我的 /
+              账号与数据”。
             </div>
             <div class="flex flex-wrap gap-3">
-              <button
-                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                :disabled="!works.cloudAccount.accountName || isSyncingCloud"
-                @click="pushWorksToCloud"
-              >
-                <Upload class="h-4 w-4" />
-                {{ isSyncingCloud ? '同步中' : '上传到云端' }}
-              </button>
-              <button
-                data-testid="cloud-restore-start"
-                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                :disabled="!works.cloudAccount.accountName || isSyncingCloud"
-                @click="loadWorksFromCloud"
-              >
-                <Download class="h-4 w-4" />
-                从云端恢复
-              </button>
-              <button
-                class="inline-flex items-center justify-center gap-2 rounded-md border border-gold/30 px-4 py-3 text-sm text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-50"
-                type="button"
-                :disabled="!works.totalCount"
-                @click="exportWorks"
-              >
-                <Download class="h-4 w-4" />
-                导出 JSON
-              </button>
               <button
                 class="inline-flex items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream disabled:cursor-not-allowed disabled:opacity-50"
                 type="button"
                 :disabled="!filteredWorks.length || isExportingLongImage"
-                @click="exportLongImages"
+                @click="requestLongImageExport"
               >
                 <Download class="h-4 w-4" />
                 {{ isExportingLongImage ? '生成中' : '导出长图' }}
               </button>
-              <label
-                class="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-gold px-4 py-3 text-sm font-semibold text-obsidian transition hover:bg-cream"
-              >
-                <Upload class="h-4 w-4" />
-                导入 JSON
-                <input
-                  class="sr-only"
-                  type="file"
-                  accept="application/json,.json"
-                  @change="importWorks"
-                />
-              </label>
             </div>
           </div>
           <p
@@ -978,18 +637,6 @@
           >
             {{ shareMessage }}
           </p>
-          <div class="mt-4 rounded-lg border px-4 py-3" :class="cloudSyncStatusClass" role="status">
-            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p class="text-xs uppercase tracking-[0.2em] text-gold">最近操作</p>
-                <p class="mt-1 text-sm font-semibold text-cream">{{ cloudSyncStatusLabel }}</p>
-              </div>
-              <p v-if="cloudSyncTimeText" class="text-xs text-muted">
-                {{ cloudSyncTimeText }}
-              </p>
-            </div>
-            <p class="mt-2 text-sm leading-6 text-cream/85">{{ works.cloudSync.message }}</p>
-          </div>
         </div>
 
         <div class="rounded-lg border border-gold/15 bg-walnut/70 p-5">
@@ -1230,14 +877,13 @@ import {
   X,
 } from 'lucide-vue-next'
 
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SectionHeading from '@/components/common/SectionHeading.vue'
 import StateBlock from '@/components/common/StateBlock.vue'
 import { allIngredients, cocktails } from '@/data/cocktails'
 import {
-  exportWorkRecords,
   formatWorkIngredients,
   useWorkStore,
-  type CloudRestorePreview,
   type WorkIngredientGroups,
   type WorkRecord,
   type WorkRecordInput,
@@ -1291,8 +937,6 @@ const isAddingFlavorLiquor = ref(false)
 const isAddingBeverage = ref(false)
 const formError = ref('')
 const shareMessage = ref('')
-const cloudAccountName = ref(works.cloudAccount.accountName)
-const cloudPassword = ref('')
 const editingWorkId = ref<string | null>(null)
 const isExportingLongImage = ref(false)
 const isSyncingCloud = ref(false)
@@ -1300,8 +944,6 @@ const isPreparingPhoto = ref(false)
 const pendingPhoto = ref<PreparedWorkPhoto | null>(null)
 const isPhotoRemoved = ref(false)
 const autoBackupPrompt = ref(false)
-const cloudRestorePreview = ref<CloudRestorePreview | null>(null)
-const cloudRestoreError = ref('')
 const isDrinkRequestSyncing = ref(false)
 const drinkRequestMessage = ref('')
 const drinkRequests = ref<DrinkRequest[]>([])
@@ -1321,6 +963,20 @@ const workFormEl = ref<HTMLFormElement | null>(null)
 const drinkRequestPanelEl = ref<HTMLElement | null>(null)
 const saveDialog = ref<{ kind: 'success' | 'error'; title: string; message: string } | null>(null)
 const saveDialogTitleId = 'work-save-dialog-title'
+type ConfirmDialogState = {
+  eyebrow: string
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+  alternativeLabel: string
+  pendingLabel: string
+  tone: 'default' | 'danger'
+  action: () => void | Promise<void>
+  alternativeAction?: () => void | Promise<void>
+}
+const confirmDialog = ref<ConfirmDialogState | null>(null)
+const isConfirming = ref(false)
 const getToday = () => new Date().toISOString().slice(0, 10)
 const createIngredientGroups = (): WorkIngredientGroups => ({
   baseLiquors: ['', '', '', ''],
@@ -1344,10 +1000,6 @@ const form = reactive<WorkForm>({
   mood: '',
   selfReview: '',
   notes: '',
-})
-const photoRestorePercent = computed(() => {
-  if (!works.photoRestore.total) return '0%'
-  return `${Math.min(100, Math.round((works.photoRestore.completed / works.photoRestore.total) * 100))}%`
 })
 const workFilters = reactive<WorkFilterState>({
   startDate: '',
@@ -1426,94 +1078,6 @@ const selectedBaseLiquorCount = computed(
 const filteredWorks = computed(() => filterWorkRecords(works.latestItems, workFilters))
 const averageRatingText = computed(() => (works.averageRating ? `${works.averageRating}` : '-'))
 const latestDateText = computed(() => works.latestItems[0]?.madeAt.slice(5) ?? '-')
-const cloudSyncStatusLabel = computed(() => {
-  if (works.cloudSync.status === 'syncing') return '同步中'
-  if (works.cloudSync.status === 'success') return '同步成功'
-  if (works.cloudSync.status === 'error') return '同步失败'
-  return '云端状态'
-})
-const cloudSyncStatusClass = computed(() => {
-  if (works.cloudSync.status === 'syncing') return 'border-gold/35 bg-gold/10'
-  if (works.cloudSync.status === 'success') return 'border-cream/20 bg-cream/10'
-  if (works.cloudSync.status === 'error') return 'border-wine/60 bg-wine/20'
-  return 'border-gold/15 bg-obsidian/45'
-})
-const cloudSyncTimeText = computed(() => {
-  if (!works.cloudSync.updatedAt) return ''
-  return `最后更新 ${new Date(works.cloudSync.updatedAt).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`
-})
-const autoBackupLastBackupText = computed(() => {
-  if (!works.autoBackup.lastBackupAt) return '还没有云端备份记录。'
-  return `上次备份 ${new Date(works.autoBackup.lastBackupAt).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`
-})
-const autoBackupStatusText = computed(() =>
-  works.autoBackup.enabled
-    ? `自动备份已开启，${autoBackupLastBackupText.value}`
-    : '自动备份已关闭，仍可手动上传到云端。',
-)
-const isCheckingCloud = computed(() => works.cloudSnapshot.status === 'checking')
-const cloudSnapshotSummary = computed(() => works.cloudSnapshot.snapshot?.summary ?? null)
-const showPhotoBackupPanel = computed(
-  () =>
-    works.photoBackup.issues.length > 0 ||
-    works.photoBackup.status === 'retrying' ||
-    works.photoBackup.status === 'error',
-)
-const photoBackupKindLabel = (kinds: Array<'original' | 'preview'>) => {
-  if (kinds.includes('original') && kinds.includes('preview')) return '原图与预览图'
-  if (kinds.includes('original')) return '原图'
-  return '预览图'
-}
-const workNameById = (workId: string) =>
-  works.items.find((item) => item.id === workId)?.cocktailName || '未命名作品'
-const formatCloudDate = (value: string) => {
-  if (!value) return '暂无记录'
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-const cloudRestoreRows = computed(() => {
-  if (!cloudRestorePreview.value) return []
-  const { localSummary, cloudSummary } = cloudRestorePreview.value
-  return [
-    { label: '作品', local: localSummary.works, cloud: cloudSummary.works },
-    { label: '预览照片', local: localSummary.previewPhotos, cloud: cloudSummary.previewPhotos },
-    { label: '原图', local: localSummary.originalPhotos, cloud: cloudSummary.originalPhotos },
-    { label: '酒柜', local: localSummary.pantry, cloud: cloudSummary.pantry },
-    { label: '收藏', local: localSummary.favorites, cloud: cloudSummary.favorites },
-    { label: '课程进度', local: localSummary.academy, cloud: cloudSummary.academy },
-    { label: '每日推荐', local: localSummary.dailyPick, cloud: cloudSummary.dailyPick },
-    {
-      label: '自定义酒单',
-      local: localSummary.customCocktails,
-      cloud: cloudSummary.customCocktails,
-    },
-    {
-      label: '自定义风味酒',
-      local: localSummary.customFlavorLiquors,
-      cloud: cloudSummary.customFlavorLiquors,
-    },
-    {
-      label: '自定义饮料',
-      local: localSummary.customBeverages,
-      cloud: cloudSummary.customBeverages,
-    },
-  ]
-})
 const formatDrinkRequestIngredients = (groups: WorkIngredientGroups) =>
   [
     groups.baseLiquors.length ? `基酒：${groups.baseLiquors.join('、')}` : '',
@@ -1709,25 +1273,6 @@ const removeSelectedPhoto = () => {
   isPhotoRemoved.value = true
 }
 
-const exportWorks = () => {
-  shareMessage.value = ''
-  if (!works.totalCount) {
-    shareMessage.value = '当前还没有可导出的作品。'
-    return
-  }
-
-  const blob = new Blob([exportWorkRecords(works.items)], { type: 'application/json' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `twilight-mixbook-works-${getToday()}.json`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
-  shareMessage.value = `已导出 ${works.totalCount} 条作品。`
-}
-
 const resetWorkFilters = () => {
   Object.assign(workFilters, {
     startDate: '',
@@ -1737,17 +1282,27 @@ const resetWorkFilters = () => {
   })
 }
 
-const exportLongImages = async () => {
-  shareMessage.value = ''
-  if (!filteredWorks.value.length) {
-    shareMessage.value = '当前没有可导出的作品。'
-    return
-  }
-  if (!hasActiveWorkFilters(workFilters) && !window.confirm('当前导出为全部，确定要导出？')) {
-    return
-  }
+const cancelConfirmDialog = () => {
+  if (isConfirming.value) return
+  confirmDialog.value = null
+}
 
-  const includeSelfReview = window.confirm('长图是否包含复盘内容？')
+const runPendingConfirm = async (action?: () => void | Promise<void>) => {
+  if (!action || isConfirming.value) return
+  const currentDialog = confirmDialog.value
+  isConfirming.value = true
+  try {
+    await action()
+    if (confirmDialog.value === currentDialog) confirmDialog.value = null
+  } finally {
+    isConfirming.value = false
+  }
+}
+
+const runConfirmAction = () => runPendingConfirm(confirmDialog.value?.action)
+const runConfirmAlternative = () => runPendingConfirm(confirmDialog.value?.alternativeAction)
+
+const exportLongImages = async (includeSelfReview: boolean) => {
   isExportingLongImage.value = true
   try {
     const pageCount = await exportWorkLongImages(
@@ -1763,55 +1318,41 @@ const exportLongImages = async () => {
   }
 }
 
-const loginCloudAccount = async () => {
-  shareMessage.value = ''
-  isSyncingCloud.value = true
-  try {
-    const preview = await works.previewCloudAccount(cloudAccountName.value, cloudPassword.value)
-    const sourceText =
-      preview.status === 'new'
-        ? `云端账号「${preview.session.accountName}」尚无数据，确认后会创建新账号。`
-        : `云端账号「${preview.session.accountName}」现有 ${preview.recordCount} 个作品。`
-    const confirmed = window.confirm(
-      `${sourceText}\n\n切换后将以云端账号数据为准，覆盖本机当前账号的作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置。是否继续？`,
-    )
-    if (!confirmed) {
-      shareMessage.value = '已取消切换，本地账号数据未改变。'
-      return
-    }
-
-    await works.activateCloudAccount(preview)
-    cloudAccountName.value = works.cloudAccount.accountName
-    cloudPassword.value = ''
-    shareMessage.value = works.cloudSync.message
-    await refreshCloudSummary(false)
-    await loadDrinkRequestPanel()
-  } catch {
-    shareMessage.value = works.cloudSync.message
-  } finally {
-    isSyncingCloud.value = false
+const requestLongImageOptions = () => {
+  confirmDialog.value = {
+    eyebrow: 'Export',
+    title: '选择长图内容',
+    message: '请选择导出的长图是否包含每个作品的复盘内容。',
+    confirmLabel: '包含复盘',
+    cancelLabel: '取消导出',
+    alternativeLabel: '不含复盘',
+    pendingLabel: '生成中',
+    tone: 'default',
+    action: () => exportLongImages(true),
+    alternativeAction: () => exportLongImages(false),
   }
 }
 
-const logoutCloudAccount = () => {
-  works.logoutCloudAccount()
-  cloudAccountName.value = ''
-  cloudPassword.value = ''
-  shareMessage.value = works.cloudSync.message
-  drinkShare.value = { enabled: false, token: '', url: '', requestCount: 0, updatedAt: '' }
-  drinkRequests.value = []
-  newDrinkRequestPrompt.value = null
-  drinkRequestMessage.value = ''
-  cloudRestorePreview.value = null
-}
-
-const refreshCloudSummary = async (announce = true) => {
-  if (!works.cloudAccount.accountName || isCheckingCloud.value) return
-  try {
-    await works.refreshCloudSnapshot()
-    if (announce) shareMessage.value = works.cloudSnapshot.message
-  } catch {
-    if (announce) shareMessage.value = works.cloudSnapshot.message
+const requestLongImageExport = () => {
+  shareMessage.value = ''
+  if (!filteredWorks.value.length) {
+    shareMessage.value = '当前没有可导出的作品。'
+    return
+  }
+  if (hasActiveWorkFilters(workFilters)) {
+    requestLongImageOptions()
+    return
+  }
+  confirmDialog.value = {
+    eyebrow: 'Export',
+    title: '导出全部作品',
+    message: `当前没有设置筛选，将导出全部 ${filteredWorks.value.length} 个作品。是否继续？`,
+    confirmLabel: '继续选择内容',
+    cancelLabel: '取消导出',
+    alternativeLabel: '',
+    pendingLabel: '处理中',
+    tone: 'default',
+    action: requestLongImageOptions,
   }
 }
 
@@ -1836,19 +1377,6 @@ const pushWorksToCloud = async () => {
 const checkAutoBackupPrompt = () => {
   if (isSyncingCloud.value) return
   autoBackupPrompt.value = works.shouldPromptAutoCloudBackup()
-}
-
-const toggleAutoBackup = (event: Event) => {
-  const enabled = (event.target as HTMLInputElement).checked
-  works.setAutoBackupEnabled(enabled)
-  shareMessage.value = enabled
-    ? '自动备份已开启。打开作品页时超过 1 天会先询问再上传。'
-    : '自动备份已关闭。'
-  if (enabled) {
-    checkAutoBackupPrompt()
-    return
-  }
-  autoBackupPrompt.value = false
 }
 
 const dismissAutoBackupPrompt = () => {
@@ -1913,15 +1441,8 @@ const resetDrinkShareLink = async () => {
   }
 }
 
-const disableDrinkShareLink = async () => {
+const closeDrinkShareLink = async () => {
   drinkRequestMessage.value = ''
-  if (
-    !window.confirm(
-      `关闭后当前链接立即失效，并永久删除该链接下全部 ${drinkRequests.value.length} 条点单，是否继续？`,
-    )
-  ) {
-    return
-  }
   isDrinkRequestSyncing.value = true
   try {
     await disableDrinkRequestShare()
@@ -1939,7 +1460,21 @@ const disableDrinkShareLink = async () => {
   }
 }
 
-const deleteDrinkRequestItem = async (request: DrinkRequest) => {
+const disableDrinkShareLink = () => {
+  confirmDialog.value = {
+    eyebrow: 'Danger Zone',
+    title: '关闭朋友点单链接',
+    message: `关闭后当前链接会立即失效，并永久删除该链接下全部 ${drinkRequests.value.length} 条点单。`,
+    confirmLabel: '关闭并删除',
+    cancelLabel: '保留链接',
+    alternativeLabel: '',
+    pendingLabel: '关闭中',
+    tone: 'danger',
+    action: closeDrinkShareLink,
+  }
+}
+
+const removeDrinkRequest = async (request: DrinkRequest) => {
   drinkRequestMessage.value = ''
   isDrinkRequestSyncing.value = true
   try {
@@ -1959,87 +1494,17 @@ const deleteDrinkRequestItem = async (request: DrinkRequest) => {
   }
 }
 
-const loadWorksFromCloud = async () => {
-  shareMessage.value = ''
-  cloudRestoreError.value = ''
-  if (!works.cloudAccount.accountName) {
-    shareMessage.value = '请先登录云端账号。'
-    return
-  }
-  isSyncingCloud.value = true
-  try {
-    cloudRestorePreview.value = await works.prepareCloudRestore()
-  } catch {
-    shareMessage.value = works.cloudSync.message
-  } finally {
-    isSyncingCloud.value = false
-  }
-}
-
-const cancelCloudRestore = () => {
-  cloudRestorePreview.value = null
-  cloudRestoreError.value = ''
-  shareMessage.value = '已取消恢复，本地账号数据未改变。'
-}
-
-const confirmCloudRestore = async () => {
-  const preview = cloudRestorePreview.value
-  if (!preview) return
-  isSyncingCloud.value = true
-  try {
-    await works.restorePreparedCloudData(preview)
-    cloudRestorePreview.value = null
-    shareMessage.value = works.cloudSync.message
-  } catch (error) {
-    const message = error instanceof Error ? error.message : works.cloudSync.message
-    shareMessage.value = message
-    cloudRestoreError.value = message
-  } finally {
-    isSyncingCloud.value = false
-  }
-}
-
-const undoCloudRestore = async () => {
-  isSyncingCloud.value = true
-  try {
-    await works.undoLastCloudRestore()
-    shareMessage.value = works.cloudSync.message
-  } catch (error) {
-    shareMessage.value = error instanceof Error ? error.message : works.cloudSync.message
-  } finally {
-    isSyncingCloud.value = false
-  }
-}
-
-const retryPhotoRestore = async () => {
-  try {
-    await works.restorePhotoPreviews()
-  } catch {
-    shareMessage.value = works.photoRestore.message
-  }
-}
-
-const retryPhotoBackupIssue = async (workId: string) => {
-  if (!works.cloudAccount.accountName) {
-    shareMessage.value = '请先登录云端账号，再重试照片备份。'
-    return
-  }
-  isSyncingCloud.value = true
-  try {
-    await works.retryPhotoBackup(workId)
-    shareMessage.value = works.cloudSync.message
-  } catch {
-    shareMessage.value = works.photoBackup.message
-  } finally {
-    isSyncingCloud.value = false
-  }
-}
-
-const retryPhotoRestoreIssue = async (workId: string) => {
-  try {
-    await works.retryPhotoRestore(workId)
-  } catch {
-    shareMessage.value = works.photoRestore.message
+const deleteDrinkRequestItem = (request: DrinkRequest) => {
+  confirmDialog.value = {
+    eyebrow: 'Confirm',
+    title: '删除朋友点单',
+    message: `确定删除点单「${request.cocktailName}」吗？删除后无法恢复。`,
+    confirmLabel: '确认删除',
+    cancelLabel: '取消',
+    alternativeLabel: '',
+    pendingLabel: '删除中',
+    tone: 'danger',
+    action: () => removeDrinkRequest(request),
   }
 }
 
@@ -2057,27 +1522,6 @@ const downloadOriginalPhoto = async (item: WorkRecord) => {
   } catch (error) {
     shareMessage.value = error instanceof Error ? error.message : '原图下载失败，请稍后重试。'
   }
-}
-
-const importWorks = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
-
-  const reader = new FileReader()
-  reader.addEventListener('load', () => {
-    const content = typeof reader.result === 'string' ? reader.result : ''
-    const result = works.importFromJson(content)
-    shareMessage.value =
-      result.importedCount > 0
-        ? `已导入 ${result.importedCount} 条作品，跳过 ${result.skippedCount} 条重复或无效记录。`
-        : '没有导入新作品，请确认 JSON 文件来自暮调作品导出。'
-  })
-  reader.addEventListener('error', () => {
-    shareMessage.value = '读取 JSON 文件失败，请重新选择文件。'
-  })
-  reader.readAsText(file)
-  input.value = ''
 }
 
 const resetForm = () => {
@@ -2228,7 +1672,7 @@ const submit = async () => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : '照片云备份失败，请稍后重试。'
-    photoBackupWarning = `作品已保存在本机，照片云备份暂未完成：${message}。稍后可点击“上传到云端”重试。`
+    photoBackupWarning = `作品已保存在本机，照片云备份暂未完成：${message}。稍后可前往“账号与数据”重试备份。`
   }
 
   if (!isKnownCocktailName(cocktailName)) {
@@ -2250,7 +1694,6 @@ const submit = async () => {
 onMounted(() => {
   checkAutoBackupPrompt()
   void works.refreshPhotoBackupIssues().catch(() => undefined)
-  if (works.cloudAccount.accountName) void refreshCloudSummary(false)
   void loadDrinkRequestPanel()
   if (works.cloudAccount.accountName && works.items.some((item) => item.photoPreviewObjectKey)) {
     void works.restorePhotoPreviews()

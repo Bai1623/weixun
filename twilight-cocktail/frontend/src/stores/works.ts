@@ -678,7 +678,7 @@ const cloudSnapshotMessage = (relation: WorkCloudSnapshotRelation) => {
   if (relation === 'empty') return '云端账号目前没有备份数据。'
   if (relation === 'same-base') return '已检查云端，本机基于当前云端备份。'
   if (relation === 'cloud-changed') return '云端已有其他设备更新的备份，请先查看后再操作。'
-  return '已发现云端备份，但本机没有可验证的同步基线。'
+  return '已发现云端备份，但本机没有可验证的备份版本记录。'
 }
 
 const createMetadataRecord = (record: WorkRecord): WorkRecord => ({
@@ -1431,7 +1431,7 @@ export const useWorkStore = defineStore('works', {
       }
     },
     async pushAllToCloud(photoWorkIds: string[] = []): Promise<number> {
-      this.setCloudSync('syncing', '正在轻量同步账号数据到 CloudBase 云端...')
+      this.setCloudSync('syncing', '正在备份账号数据到 CloudBase 云端...')
       try {
         await this.refreshCloudSnapshot()
         if (
@@ -1487,7 +1487,7 @@ export const useWorkStore = defineStore('works', {
         }
         this.setCloudSync(
           'success',
-          `已同步账号数据到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，照片使用 OSS 备份）。`,
+          `已将账号数据备份到 CloudBase 云端（作品 ${this.items.length} 条，变更 ${patch.worksChanged.length + patch.worksDeleted.length} 条，照片使用 OSS 备份）。`,
         )
         if (
           this.photoBackup.issues.length ||

@@ -3,7 +3,7 @@
     <SectionHeading
       eyebrow="Profile"
       title="我的"
-      description="当前版本使用匿名本地身份保存收藏、酒柜和课程进度。"
+      description="查看个人数据概览，管理云端账号、备份与恢复。"
     />
     <div class="ui-panel p-5">
       <p class="text-xs text-muted">匿名用户</p>
@@ -27,13 +27,20 @@
         <p class="mt-2 font-display text-3xl">{{ works.totalCount }}</p>
       </RouterLink>
     </div>
-    <button
-      class="ui-button-secondary w-fit border-wine/70 px-5 py-3 text-sm text-cream hover:bg-wine/20"
-      type="button"
-      @click="clearLocal"
+    <RouterLink
+      data-testid="account-data-entry"
+      class="ui-panel ui-card-interactive flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between"
+      to="/profile/data"
     >
-      清除本地数据
-    </button>
+      <span>
+        <span class="block text-xs uppercase tracking-[0.2em] text-gold">Account & Data</span>
+        <span class="mt-2 block font-display text-2xl text-cream">账号与数据</span>
+        <span class="mt-2 block text-sm leading-6 text-muted">
+          登录或切换云端账号，检查备份、备份到云端、从云端恢复及管理本机数据。
+        </span>
+      </span>
+      <span class="shrink-0 text-sm text-gold">进入管理 →</span>
+    </RouterLink>
     <p class="text-sm leading-6 text-muted">
       数据来源说明：首轮原型使用本地审核 Mock 数据，后续阶段会接入结构化数据库、来源字段和校对时间。
     </p>
@@ -55,9 +62,4 @@ const favorites = useFavoriteStore()
 const pantry = usePantryStore()
 const academy = useAcademyStore()
 const works = useWorkStore()
-
-const clearLocal = () => {
-  localStorage.clear()
-  window.location.reload()
-}
 </script>

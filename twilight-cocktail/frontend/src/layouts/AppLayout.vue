@@ -11,7 +11,7 @@
         </RouterLink>
         <div class="hidden items-center gap-2 md:flex">
           <RouterLink v-for="item in navItems" :key="item.to" v-slot="{ isActive }" :to="item.to">
-            <span class="nav-link" :class="{ 'nav-link--active': isActive }">
+            <span class="nav-link" :class="{ 'nav-link--active': isItemActive(item.to, isActive) }">
               {{ item.label }}
             </span>
           </RouterLink>
@@ -20,9 +20,9 @@
     </header>
 
     <main class="app-main w-full px-5 py-8 md:px-8 md:py-10 xl:px-10">
-      <RouterView v-slot="{ Component, route }">
+      <RouterView v-slot="{ Component, route: routeInfo }">
         <Transition name="router-page" mode="out-in">
-          <div :key="route.fullPath" class="page-transition-frame">
+          <div :key="routeInfo.fullPath" class="page-transition-frame">
             <Suspense>
               <component :is="Component" />
               <template #fallback>
@@ -41,7 +41,10 @@
     <nav class="mobile-nav fixed inset-x-0 bottom-0 z-40 px-3 py-2 md:hidden">
       <div class="grid grid-cols-5 gap-1">
         <RouterLink v-for="item in mobileItems" :key="item.to" v-slot="{ isActive }" :to="item.to">
-          <span class="mobile-nav-link" :class="{ 'mobile-nav-link--active': isActive }">
+          <span
+            class="mobile-nav-link"
+            :class="{ 'mobile-nav-link--active': isItemActive(item.to, isActive) }"
+          >
             {{ item.label }}
           </span>
         </RouterLink>
@@ -51,7 +54,11 @@
 </template>
 
 <script setup lang="ts">
-import { RouterLink, RouterView } from 'vue-router'
+import { RouterLink, RouterView, useRoute } from 'vue-router'
+
+const route = useRoute()
+const isItemActive = (path: string, isActive: boolean) =>
+  isActive || (path === '/profile' && route.path.startsWith('/profile/'))
 
 const navItems = [
   { label: '首页', to: '/home' },

@@ -850,7 +850,7 @@ describe('cloud works service', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
     await expect(fetchCloudAppData()).rejects.toThrow(
-      '无法连接云函数。若登录正常但同步失败，请重新部署新版 twilightWorks 云函数后再试。',
+      '无法连接云函数。若登录正常但备份失败，请重新部署新版 twilightWorks 云函数后再试。',
     )
   })
 

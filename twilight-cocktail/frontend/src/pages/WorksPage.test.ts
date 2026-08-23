@@ -1,8 +1,9 @@
-import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { enableAutoUnmount, flushPromises, mount, RouterLinkStub } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import WorksPage from './WorksPage.vue'
+import AccountDataPage from './AccountDataPage.vue'
 import { useWorkStore } from '@/stores/works'
 import * as cloudWorks from '@/services/cloudWorks'
 import * as cloudDrinkRequests from '@/services/cloudDrinkRequests'
@@ -11,6 +12,9 @@ import { addCustomWorkCocktailOption } from '@/utils/workFormOptions'
 
 enableAutoUnmount(afterEach)
 vi.setConfig({ testTimeout: 15000 })
+
+const mountAccountDataPage = () =>
+  mount(AccountDataPage, { global: { stubs: { RouterLink: RouterLinkStub } } })
 
 describe('WorksPage', () => {
   beforeEach(() => {
@@ -349,7 +353,7 @@ describe('WorksPage', () => {
   })
 
   it('toggles automatic cloud backup from the sharing panel', async () => {
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
     const works = useWorkStore()
 
     await wrapper.get('[data-testid="auto-cloud-backup-toggle"]').setValue(true)
@@ -396,7 +400,7 @@ describe('WorksPage', () => {
       .spyOn(works, 'refreshCloudSnapshot')
       .mockResolvedValue(works.cloudSnapshot.snapshot)
 
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
     await flushPromises()
 
     expect(refresh).toHaveBeenCalledTimes(1)
@@ -459,7 +463,7 @@ describe('WorksPage', () => {
     const restore = vi.spyOn(works, 'restorePreparedCloudData').mockResolvedValue(17)
     const undo = vi.spyOn(works, 'undoLastCloudRestore').mockResolvedValue(3)
     const nativeConfirm = vi.spyOn(window, 'confirm')
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
     await flushPromises()
 
     await wrapper.get('[data-testid="cloud-restore-start"]').trigger('click')
@@ -518,7 +522,7 @@ describe('WorksPage', () => {
     vi.spyOn(works, 'restorePreparedCloudData').mockRejectedValue(
       new Error('云端备份在确认期间发生了变化，请重新检查后再恢复。'),
     )
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
     await flushPromises()
 
     await wrapper.get('[data-testid="cloud-restore-start"]').trigger('click')
@@ -576,8 +580,8 @@ describe('WorksPage', () => {
     }
     const previewAccount = vi.spyOn(works, 'previewCloudAccount').mockResolvedValue(preview)
     const activateAccount = vi.spyOn(works, 'activateCloudAccount').mockResolvedValue(1)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    const wrapper = mount(WorksPage)
+    const nativeConfirm = vi.spyOn(window, 'confirm')
+    const wrapper = mountAccountDataPage()
 
     await wrapper.get('[data-testid="cloud-account-name"]').setValue('target')
     await wrapper.get('[data-testid="cloud-account-password"]').setValue('secret')
@@ -585,13 +589,17 @@ describe('WorksPage', () => {
     await flushPromises()
 
     expect(previewAccount).toHaveBeenCalledWith('target', 'secret')
-    expect(confirm.mock.calls[0]?.[0]).toContain(
+    expect(wrapper.get('[data-testid="app-confirm-dialog"]').text()).toContain(
       '作品和照片、酒柜、收藏、课程进度、每日推荐、自定义材料及自动备份设置',
     )
+    expect(nativeConfirm).not.toHaveBeenCalled()
     expect(activateAccount).not.toHaveBeenCalled()
     expect(works.items[0].cocktailName).toBe('当前本地作品')
 
+    await wrapper.get('[aria-label="关闭确认窗口"]').trigger('click')
     await wrapper.get('[data-testid="cloud-account-login"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="app-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(activateAccount).toHaveBeenCalledWith(preview)
@@ -608,7 +616,7 @@ describe('WorksPage', () => {
       message: '正在恢复全部作品预览图（2/5）...',
     }
     const pause = vi.spyOn(works, 'pausePhotoRestore')
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
 
     expect(wrapper.get('[data-testid="work-photo-restore-panel"]').text()).toContain('2/5')
     await wrapper.get('[data-testid="work-photo-restore-pause"]').trigger('click')
@@ -695,7 +703,7 @@ describe('WorksPage', () => {
       failures: [],
     })
 
-    const wrapper = mount(WorksPage)
+    const wrapper = mountAccountDataPage()
     await flushPromises()
 
     expect(wrapper.get('[data-testid="work-photo-backup-panel"]').text()).toContain('待上传暮色')
@@ -791,7 +799,7 @@ describe('WorksPage', () => {
       )
       expect(works.autoBackup.lastBackupAt).toBe('2026-08-07T10:00:00.000Z')
       expect(wrapper.text()).toContain(
-        '已同步账号数据到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
+        '已将账号数据备份到 CloudBase 云端（作品 1 条，变更 1 条，照片使用 OSS 备份）。',
       )
     } finally {
       vi.useRealTimers()
@@ -859,6 +867,8 @@ describe('WorksPage', () => {
     await wrapper.get('[data-testid="drink-request-summary"]').trigger('click')
 
     await wrapper.get('[data-testid="drink-request-delete"]').trigger('click')
+    expect(wrapper.get('[data-testid="app-confirm-dialog"]').text()).toContain('删除朋友点单')
+    await wrapper.get('[data-testid="app-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(cloudDrinkRequests.deleteDrinkRequest).toHaveBeenCalledWith('req-1')
@@ -866,8 +876,11 @@ describe('WorksPage', () => {
     await flushPromises()
 
     expect(wrapper.text()).toContain('https://example.com/#/want/share-token')
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
+    expect(wrapper.get('[data-testid="app-confirm-dialog"]').text()).toContain(
+      '永久删除该链接下全部 1 条点单',
+    )
+    await wrapper.get('[data-testid="app-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(cloudDrinkRequests.disableDrinkRequestShare).toHaveBeenCalled()
@@ -907,21 +920,23 @@ describe('WorksPage', () => {
       },
     ])
     const disable = vi.spyOn(cloudDrinkRequests, 'disableDrinkRequestShare').mockResolvedValue()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const nativeConfirm = vi.spyOn(window, 'confirm')
     vi.spyOn(useWorkStore(), 'refreshCloudSnapshot').mockResolvedValue(null)
     const wrapper = mount(WorksPage)
     await flushPromises()
 
     await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
 
-    expect(confirm).toHaveBeenCalledWith(
-      '关闭后当前链接立即失效，并永久删除该链接下全部 1 条点单，是否继续？',
+    expect(wrapper.get('[data-testid="app-confirm-dialog"]').text()).toContain(
+      '永久删除该链接下全部 1 条点单',
     )
+    expect(nativeConfirm).not.toHaveBeenCalled()
+    await wrapper.get('[aria-label="关闭确认窗口"]').trigger('click')
     expect(disable).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain('https://example.com/#/want/share-token')
 
-    confirm.mockReturnValue(true)
     await wrapper.get('[data-testid="drink-share-disable"]').trigger('click')
+    await wrapper.get('[data-testid="app-confirm-submit"]').trigger('click')
     await flushPromises()
 
     expect(disable).toHaveBeenCalledTimes(1)
