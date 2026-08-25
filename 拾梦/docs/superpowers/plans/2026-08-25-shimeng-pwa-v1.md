@@ -221,7 +221,7 @@ Expected: tests PASS, build exits 0, commit contains only `拾梦` project files
 - Produces `DreamRecord`, `MediaAsset`, `AppSettings`, `StorageWriteError`, `createDraftDream(id, now)`, `createDreamRepository(db)`, `createMediaRepository(db)`, `createSettingsRepository(db)`.
 - All repositories consume `IDBPDatabase<ShimengDb>` from `openShimengDb()`.
 
-- [ ] **Step 1: Write repository round-trip and cascade-delete tests**
+- [x] **Step 1: Write repository round-trip and cascade-delete tests**
 
 ```ts
 const dream = createDraftDream('dream-1', new Date('2026-08-25T00:00:00Z'))
@@ -232,13 +232,13 @@ expect(await dreams.get(dream.id)).toBeUndefined()
 expect(await media.listByDream(dream.id)).toEqual([])
 ```
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/dreams/data/dreamRepository.test.ts src/features/media/data/mediaRepository.test.ts src/features/settings/data/settingsRepository.test.ts`.
 
 Expected: FAIL because the models and repositories are not defined.
 
-- [ ] **Step 3: Define exact domain types and defaults**
+- [x] **Step 3: Define exact domain types and defaults**
 
 ```ts
 export type DreamMood = 'calm' | 'joyful' | 'mysterious' | 'sad' | 'anxious' | 'fearful' | 'surreal' | 'neutral'
@@ -248,7 +248,7 @@ export type DreamClarity = 1 | 2 | 3 | 4 | 5
 
 `createDraftDream` returns `status: 'draft'`, `mood: 'neutral'`, `clarity: 3`, `lucid: false`, empty arrays, and `coverSeed` equal to the ID.
 
-- [ ] **Step 4: Implement database and repository contracts**
+- [x] **Step 4: Implement database and repository contracts**
 
 ```ts
 interface ShimengDb extends DBSchema {
@@ -262,7 +262,7 @@ interface ShimengDb extends DBSchema {
 
 Map IndexedDB `QuotaExceededError` to `StorageWriteError('本机存储空间不足，请先导出备份或删除较大的录音')`; preserve the original error as `cause`. Repository tests assert this exact mapping and that a failed write is not returned as success.
 
-- [ ] **Step 5: Verify and commit persistence**
+- [x] **Step 5: Verify and commit persistence**
 
 ```bash
 npm test -- src/features/dreams/data/dreamRepository.test.ts src/features/media/data/mediaRepository.test.ts src/features/settings/data/settingsRepository.test.ts
