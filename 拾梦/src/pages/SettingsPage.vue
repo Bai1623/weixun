@@ -1,25 +1,177 @@
 <template>
-  <section>
+  <section class="settings-page">
     <p class="eyebrow">Your quiet space</p>
     <h1 class="page-heading">设置</h1>
     <p class="page-intro">管理本地数据、备份与可选的 AI 功能。</p>
 
     <div class="settings-list glass-card">
       <div class="settings-item">
-        <span>本地存储</span>
-        <small>尚无梦境数据</small>
+        <div>
+          <span>本地存储</span>
+          <small>梦境与录音只保存在当前浏览器</small>
+        </div>
+        <span class="status-dot">本机</span>
       </div>
       <div class="settings-item">
-        <span>备份与恢复</span>
-        <small>将在后续步骤启用</small>
-      </div>
-      <div class="settings-item">
-        <span>AI 整理与生图</span>
-        <small>关闭 · 需要你主动配置</small>
+        <div>
+          <span>AI 整理与生图</span>
+          <small>关闭 · 需要你主动配置服务端点</small>
+        </div>
       </div>
     </div>
+
+    <section class="backup-card glass-card" aria-labelledby="backup-title">
+      <header>
+        <div>
+          <p class="eyebrow">Local backup</p>
+          <h2 id="backup-title">备份与恢复</h2>
+        </div>
+        <ShieldCheck :size="22" aria-hidden="true" />
+      </header>
+      <p>完整备份会包含梦境文字、录音与 AI 图片，可保存到你选择的位置。</p>
+      <small>{{ lastBackupCopy }}</small>
+
+      <div v-if="!showExportWarning" class="backup-actions">
+        <button type="button" class="primary-button" aria-label="导出完整备份" @click="showExportWarning = true">
+          <Download :size="17" aria-hidden="true" />
+          导出完整备份
+        </button>
+        <label class="quiet-button import-button">
+          <Upload :size="17" aria-hidden="true" />
+          选择备份恢复
+          <input type="file" accept=".zip,application/zip" @change="inspectSelectedBackup" />
+        </label>
+      </div>
+
+      <div v-else class="export-warning" role="alert">
+        <p>备份未加密，请妥善保管。任何拿到文件的人都可能读取其中的梦境与录音。</p>
+        <div>
+          <button type="button" class="text-button" @click="showExportWarning = false">取消</button>
+          <button
+            type="button"
+            class="primary-button"
+            aria-label="确认导出备份"
+            :disabled="busy"
+            @click="exportBackup"
+          >
+            {{ busy ? '正在打包…' : '确认导出' }}
+          </button>
+        </div>
+      </div>
+
+      <p v-if="message" class="settings-message" role="status">{{ message }}</p>
+      <p v-if="error" class="settings-error" role="alert">{{ error }}</p>
+    </section>
+
+    <RestorePreviewDialog
+      v-if="inspection"
+      :inspection="inspection"
+      :busy="busy"
+      @cancel="inspection = null"
+      @confirm="confirmRestore"
+    />
   </section>
 </template>
+
+<script setup lang="ts">
+import { computed, onMounted, ref } from 'vue'
+import { Download, ShieldCheck, Upload } from '@lucide/vue'
+import type { IDBPDatabase } from 'idb'
+
+import { openShimengDb, type ShimengDb } from '@/core/persistence/db'
+import RestorePreviewDialog from '@/features/backup/components/RestorePreviewDialog.vue'
+import type { BackupInspection } from '@/features/backup/model/backup'
+import { createBackup, inspectBackup, restoreBackup } from '@/features/backup/services/backupService'
+import { createSettingsRepository } from '@/features/settings/data/settingsRepository'
+import type { AppSettings } from '@/features/settings/model/settings'
+
+const defaultSettings: AppSettings = {
+  schemaVersion: 1,
+  onboardingCompleted: false,
+  reducedMotionOverride: 'system',
+  aiEndpoint: null,
+  lastBackupAt: null,
+}
+
+const settings = ref<AppSettings>({ ...defaultSettings })
+const inspection = ref<BackupInspection | null>(null)
+const showExportWarning = ref(false)
+const busy = ref(false)
+const message = ref<string | null>(null)
+const error = ref<string | null>(null)
+let database: IDBPDatabase<ShimengDb> | undefined
+
+const lastBackupCopy = computed(() => {
+  if (!settings.value.lastBackupAt) return '还没有导出过备份'
+  return `上次备份：${new Date(settings.value.lastBackupAt).toLocaleString('zh-CN')}`
+})
+
+async function getDatabase() {
+  database ??= await openShimengDb()
+  return database
+}
+
+onMounted(async () => {
+  const repository = createSettingsRepository(await getDatabase())
+  settings.value = (await repository.get()) ?? { ...defaultSettings }
+})
+
+async function exportBackup() {
+  busy.value = true
+  error.value = null
+  message.value = null
+  try {
+    const db = await getDatabase()
+    const archive = await createBackup(db)
+    const url = URL.createObjectURL(archive)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `拾梦备份-${new Date().toISOString().slice(0, 10)}.zip`
+    link.click()
+    URL.revokeObjectURL(url)
+
+    const updated = { ...settings.value, lastBackupAt: new Date().toISOString() }
+    await createSettingsRepository(db).put(updated)
+    settings.value = updated
+    showExportWarning.value = false
+    message.value = '完整备份已导出'
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '备份导出失败，请稍后再试'
+  } finally {
+    busy.value = false
+  }
+}
+
+async function inspectSelectedBackup(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  error.value = null
+  message.value = null
+  try {
+    inspection.value = await inspectBackup(file)
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '无法读取这个备份文件'
+  }
+}
+
+async function confirmRestore() {
+  if (!inspection.value) return
+  busy.value = true
+  error.value = null
+  try {
+    const report = await restoreBackup(await getDatabase(), inspection.value)
+    inspection.value = null
+    message.value = `已恢复 ${report.imported} 个梦，跳过 ${report.skipped} 个相同记录`
+  } catch (cause) {
+    error.value = cause instanceof Error ? cause.message : '恢复失败，本机原有内容没有被清空'
+  } finally {
+    busy.value = false
+  }
+}
+</script>
 
 <style scoped>
 .settings-list {
@@ -40,13 +192,121 @@
   border-bottom: 0;
 }
 
+.settings-item > div {
+  display: grid;
+  gap: 0.3rem;
+}
+
 .settings-item span {
   font-family: var(--font-display);
 }
 
 .settings-item small {
+  display: block;
   color: var(--color-ink-muted);
   font-size: 0.7rem;
   text-align: right;
+}
+
+.status-dot {
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  color: #45665d;
+  background: rgb(125 163 151 / 18%);
+  font-family: var(--font-body) !important;
+  font-size: 0.62rem;
+}
+
+.backup-card {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+  padding: 1.2rem;
+}
+
+.backup-card > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.backup-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.backup-card > p,
+.backup-card > small {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.backup-card > small {
+  font-size: 0.64rem;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.import-button {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.import-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.export-warning {
+  padding: 0.9rem;
+  border-radius: 1rem;
+  background: rgb(215 169 189 / 25%);
+}
+
+.export-warning p {
+  margin: 0;
+  color: #713b49;
+  font-size: 0.7rem;
+  line-height: 1.6;
+}
+
+.export-warning > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.text-button {
+  padding: 0.6rem;
+  border: 0;
+  background: transparent;
+}
+
+.settings-message,
+.settings-error {
+  padding: 0.65rem 0.8rem;
+  border-radius: 0.8rem;
+}
+
+.settings-message {
+  color: #45665d !important;
+  background: rgb(125 163 151 / 16%);
+}
+
+.settings-error {
+  color: #713b49 !important;
+  background: rgb(215 169 189 / 25%);
 }
 </style>

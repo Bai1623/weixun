@@ -533,17 +533,17 @@ Expected: tests PASS and delete remains reversible for eight seconds.
 - Produces `createBackup(db): Promise<Blob>`, `inspectBackup(blob): Promise<BackupInspection>`, `restoreBackup(db, inspection): Promise<RestoreReport>`.
 - `BackupInspection` contains valid dreams/media, warnings and counts; `RestoreReport` contains imported, skipped and conflictCopies.
 
-- [ ] **Step 1: Write round-trip, invalid-file and conflict tests**
+- [x] **Step 1: Write round-trip, invalid-file and conflict tests**
 
 Create one dream plus a three-byte audio Blob, export, inspect, restore into a fresh test DB, and compare text and bytes. Invalid `schemaVersion`, missing media and malformed JSON fail before any write. A same-ID different record gets a new ID and tag `恢复副本`.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/backup/services/backupService.test.ts src/pages/SettingsPage.test.ts`.
 
 Expected: FAIL because backup services and settings actions are missing.
 
-- [ ] **Step 3: Implement the archive contract**
+- [x] **Step 3: Implement the archive contract**
 
 Use fflate to write and read:
 
@@ -555,11 +555,11 @@ media/{assetId}.{extension}
 
 `manifest.json` has `schemaVersion: 1`, `exportedAt`, `dreamCount`, `mediaCount`. Derive extensions from a known MIME allowlist. Inspection validates all records in memory before opening a write transaction.
 
-- [ ] **Step 4: Implement restore preview and settings actions**
+- [x] **Step 4: Implement restore preview and settings actions**
 
 Show an unencrypted-backup warning before download. Import opens `RestorePreviewDialog` with counts and warnings; only `确认恢复` writes. After successful export, save `lastBackupAt`.
 
-- [ ] **Step 5: Verify and commit backup/restore**
+- [x] **Step 5: Verify and commit backup/restore**
 
 ```bash
 npm test -- src/features/backup src/pages/SettingsPage.test.ts
