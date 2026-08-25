@@ -49,6 +49,44 @@
       <p v-if="aiError" class="settings-error" role="alert">{{ aiError }}</p>
     </section>
 
+    <section class="device-card glass-card" aria-labelledby="device-title">
+      <header>
+        <div>
+          <p class="eyebrow">This device</p>
+          <h2 id="device-title">本机空间与体验</h2>
+        </div>
+        <Database :size="22" aria-hidden="true" />
+      </header>
+      <dl v-if="storageSummary" class="storage-grid">
+        <div><dt>已使用</dt><dd>{{ formatBytes(storageSummary.usedBytes) }}</dd></div>
+        <div><dt>可用配额</dt><dd>{{ formatBytes(storageSummary.quotaBytes) }}</dd></div>
+        <div><dt>梦境</dt><dd>{{ storageSummary.dreamCount }}</dd></div>
+        <div><dt>录音 / 图片</dt><dd>{{ storageSummary.audioCount }} / {{ storageSummary.imageCount }}</dd></div>
+      </dl>
+      <p class="device-note">{{ persistenceCopy }}</p>
+
+      <label class="motion-setting">
+        <span>动态效果</span>
+        <select v-model="motionDraft" aria-label="动态效果设置" @change="saveMotionPreference">
+          <option value="system">跟随系统</option>
+          <option value="reduce">减少动态</option>
+          <option value="allow">保留动态</option>
+        </select>
+      </label>
+
+      <button
+        v-if="install.canInstall.value"
+        type="button"
+        class="quiet-button"
+        aria-label="安装拾梦到桌面"
+        @click="install.requestInstall"
+      >
+        <Smartphone :size="17" aria-hidden="true" />
+        安装到桌面
+      </button>
+      <p v-else-if="install.showIosInstructions.value" class="device-note">Safari：分享 → 添加到主屏幕</p>
+    </section>
+
     <section class="backup-card glass-card" aria-labelledby="backup-title">
       <header>
         <div>
@@ -104,7 +142,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { Download, ShieldCheck, Upload } from '@lucide/vue'
+import { Database, Download, ShieldCheck, Smartphone, Upload } from '@lucide/vue'
 import type { IDBPDatabase } from 'idb'
 
 import { openShimengDb, type ShimengDb } from '@/core/persistence/db'
@@ -113,10 +151,20 @@ import RestorePreviewDialog from '@/features/backup/components/RestorePreviewDia
 import type { BackupInspection } from '@/features/backup/model/backup'
 import { createBackup, inspectBackup, restoreBackup } from '@/features/backup/services/backupService'
 import { useSettingsStore } from '@/features/settings/stores/settings'
+import type { ReducedMotionOverride } from '@/features/settings/model/settings'
+import { useInstallPrompt } from '@/pwa/installPrompt'
+import {
+  estimateStorage,
+  persistenceStatus,
+  type StorageSummary,
+} from '@/pwa/storagePersistence'
 
 const settingsStore = useSettingsStore()
 const settings = computed(() => settingsStore.settings)
+const install = useInstallPrompt()
 const aiEndpointDraft = ref('')
+const motionDraft = ref<ReducedMotionOverride>('system')
+const storageSummary = ref<StorageSummary | null>(null)
 const aiMessage = ref<string | null>(null)
 const aiError = ref<string | null>(null)
 const inspection = ref<BackupInspection | null>(null)
@@ -130,6 +178,12 @@ const lastBackupCopy = computed(() => {
   if (!settings.value.lastBackupAt) return '还没有导出过备份'
   return `上次备份：${new Date(settings.value.lastBackupAt).toLocaleString('zh-CN')}`
 })
+const persistenceCopy = computed(() => {
+  if (persistenceStatus.value === 'granted') return '浏览器已尽力为拾梦保留本机数据。'
+  if (persistenceStatus.value === 'denied') return '浏览器未授予持久存储，请定期导出备份。'
+  if (persistenceStatus.value === 'unsupported') return '当前浏览器不支持持久存储请求，请定期导出备份。'
+  return '数据保存在当前浏览器中；重要梦境建议定期备份。'
+})
 
 async function getDatabase() {
   database ??= await openShimengDb()
@@ -139,7 +193,23 @@ async function getDatabase() {
 onMounted(async () => {
   await settingsStore.load()
   aiEndpointDraft.value = settings.value.aiEndpoint ?? ''
+  motionDraft.value = settings.value.reducedMotionOverride
+  try {
+    storageSummary.value = await estimateStorage()
+  } catch {
+    storageSummary.value = null
+  }
 })
+
+async function saveMotionPreference() {
+  await settingsStore.update({ reducedMotionOverride: motionDraft.value })
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 MB'
+  const megabytes = bytes / 1024 / 1024
+  return `${megabytes < 10 ? megabytes.toFixed(1) : Math.round(megabytes)} MB`
+}
 
 async function saveAiEndpoint() {
   aiMessage.value = null
@@ -321,6 +391,91 @@ async function confirmRestore() {
 .ai-settings form .primary-button {
   justify-self: start;
   margin-top: 0.25rem;
+}
+
+.device-card {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.2rem;
+  padding: 1.2rem;
+}
+
+.device-card > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+
+.device-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.storage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin: 0;
+  border: 1px solid var(--color-line);
+  border-radius: 0.9rem;
+  overflow: hidden;
+}
+
+.storage-grid div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.7rem;
+}
+
+.storage-grid div:nth-child(even) {
+  border-left: 1px solid var(--color-line);
+}
+
+.storage-grid div:nth-child(n + 3) {
+  border-top: 1px solid var(--color-line);
+}
+
+.storage-grid dt {
+  color: var(--color-ink-muted);
+  font-size: 0.58rem;
+}
+
+.storage-grid dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 0.82rem;
+}
+
+.device-note {
+  margin: 0;
+  color: var(--color-ink-muted);
+  font-size: 0.64rem;
+  line-height: 1.55;
+}
+
+.motion-setting {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+}
+
+.motion-setting select {
+  padding: 0.45rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.65rem;
+  color: var(--color-night-soft);
+  background: rgb(255 255 255 / 42%);
+}
+
+.device-card > .quiet-button {
+  justify-self: start;
 }
 
 .backup-card > header {

@@ -1,10 +1,11 @@
-import { onBeforeUnmount, ref } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 import { openShimengDb, StorageWriteError } from '@/core/persistence/db'
 import type { DreamRecord } from '@/features/dreams/model/dream'
 import { useDreamsStore } from '@/features/dreams/stores/dreams'
 import { createMediaRepository } from '@/features/media/data/mediaRepository'
 import type { MediaAsset } from '@/features/media/model/media'
+import { setRecorderState } from '@/pwa/reloadSafety'
 
 import { createRecorderSession, type RecorderSession, type SavedRecording } from '../services/mediaRecorder'
 
@@ -31,6 +32,7 @@ export function useDreamRecorder() {
   const previewUrl = ref<string | null>(null)
   const pendingRecording = ref<SavedRecording | null>(null)
   let session: RecorderSession | undefined
+  const stopSafetyWatch = watch(state, setRecorderState, { immediate: true })
 
   function replacePreview(blob?: Blob) {
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
@@ -148,6 +150,8 @@ export function useDreamRecorder() {
   onBeforeUnmount(() => {
     session?.cancel()
     if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+    stopSafetyWatch()
+    setRecorderState('idle')
   })
 
   return {

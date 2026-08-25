@@ -1,6 +1,8 @@
 import type { RouteRecordRaw } from 'vue-router'
 import { createRouter, createWebHashHistory } from 'vue-router'
 
+import { useSettingsStore } from '@/features/settings/stores/settings'
+
 export const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
   {
@@ -36,7 +38,21 @@ export const routes: RouteRecordRaw[] = [
   { path: '/:pathMatch(.*)*', redirect: '/home' },
 ]
 
-export default createRouter({
+export function resolveOnboardingNavigation(routeName: unknown, onboardingCompleted: boolean) {
+  if (!onboardingCompleted && routeName !== 'onboarding') return { name: 'onboarding' }
+  if (onboardingCompleted && routeName === 'onboarding') return { name: 'home' }
+  return undefined
+}
+
+const router = createRouter({
   history: createWebHashHistory(import.meta.env.BASE_URL),
   routes,
 })
+
+router.beforeEach(async (to) => {
+  const settings = useSettingsStore()
+  if (!settings.loaded) await settings.load()
+  return resolveOnboardingNavigation(to.name, settings.settings.onboardingCompleted)
+})
+
+export default router

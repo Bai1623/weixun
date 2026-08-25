@@ -3,6 +3,14 @@
     <div class="ambient-light ambient-light--moon" aria-hidden="true" />
     <div class="ambient-light ambient-light--blush" aria-hidden="true" />
 
+    <aside v-if="needRefresh" class="update-notice" role="status">
+      <span>{{ updateBlocked ? '请先等待草稿或录音保存完成' : '拾梦有一份新版本' }}</span>
+      <div>
+        <button type="button" class="text-button" @click="dismissUpdate">稍后</button>
+        <button type="button" class="primary-button" aria-label="安全更新拾梦" @click="applyUpdate">更新</button>
+      </div>
+    </aside>
+
     <header class="app-header">
       <RouterLink class="brand" to="/home" data-testid="brand" aria-label="拾梦首页">
         <span class="brand__moon" aria-hidden="true" />
@@ -30,6 +38,17 @@
 
 <script setup lang="ts">
 import { Archive, House, PenLine, Settings } from '@lucide/vue'
+import { ref } from 'vue'
+
+import { canReloadSafely } from '@/pwa/reloadSafety'
+import { registerServiceWorker } from '@/pwa/registerServiceWorker'
+
+const { needRefresh, acceptUpdate, dismissUpdate } = registerServiceWorker(canReloadSafely)
+const updateBlocked = ref(false)
+
+async function applyUpdate() {
+  updateBlocked.value = !(await acceptUpdate())
+}
 
 const navItems = [
   { label: '梦河', to: '/home', icon: House },
@@ -65,6 +84,43 @@ const navItems = [
   opacity: 0.12;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.23'/%3E%3C/svg%3E");
   content: '';
+}
+
+.update-notice {
+  position: fixed;
+  z-index: 8;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  right: 0.75rem;
+  left: 0.75rem;
+  display: flex;
+  width: min(calc(100% - 1.5rem), 30rem);
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin: auto;
+  padding: 0.65rem 0.7rem 0.65rem 0.9rem;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 1rem;
+  color: white;
+  background: rgb(21 24 39 / 92%);
+  box-shadow: var(--shadow-soft);
+  font-size: 0.68rem;
+}
+
+.update-notice > div {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.update-notice .text-button {
+  border: 0;
+  color: rgb(255 255 255 / 72%);
+  background: transparent;
+}
+
+.update-notice .primary-button {
+  min-height: 2.3rem;
+  padding: 0.45rem 0.75rem;
 }
 
 .ambient-light {
@@ -203,10 +259,16 @@ const navItems = [
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .primary-nav__item,
-  .page-enter-active,
-  .page-leave-active {
+  :global(html:not([data-motion='allow'])) .primary-nav__item,
+  :global(html:not([data-motion='allow'])) .page-enter-active,
+  :global(html:not([data-motion='allow'])) .page-leave-active {
     transition: none;
   }
+}
+
+:global(html[data-motion='reduce']) .primary-nav__item,
+:global(html[data-motion='reduce']) .page-enter-active,
+:global(html[data-motion='reduce']) .page-leave-active {
+  transition: none;
 }
 </style>

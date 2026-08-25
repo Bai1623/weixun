@@ -1,5 +1,7 @@
 import { getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
 
+import { setDraftDirty } from '@/pwa/reloadSafety'
+
 import type { DreamRecord } from '../model/dream'
 
 export function useDraftAutosave(
@@ -17,13 +19,16 @@ export function useDraftAutosave(
 
     pending = false
     isSaving.value = true
+    let saved = false
     try {
       await save(record.value)
       error.value = null
+      saved = true
     } catch {
       error.value = '保存失败，内容仍保留在当前页面'
     } finally {
       isSaving.value = false
+      if (saved && !pending) setDraftDirty(false)
     }
   }
 
@@ -33,6 +38,7 @@ export function useDraftAutosave(
       if (!current || !previous) return
 
       pending = true
+      setDraftDirty(true)
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = undefined
@@ -53,8 +59,8 @@ export function useDraftAutosave(
   function dispose() {
     if (timer) clearTimeout(timer)
     timer = undefined
-    pending = false
     stop()
+    void persist()
   }
 
   if (getCurrentScope()) onScopeDispose(dispose)

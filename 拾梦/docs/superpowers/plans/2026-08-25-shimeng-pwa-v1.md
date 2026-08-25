@@ -707,27 +707,27 @@ Expected: tests PASS; with no endpoint there are no network requests and offline
 - Produces `requestPersistentStorage(): Promise<PersistenceStatus>`, `estimateStorage(): Promise<StorageSummary>`, `useInstallPrompt()`, and `registerServiceWorker(canReload): UpdateController`.
 - `canReload()` is false while a draft is dirty or recorder state is not `idle | ready`.
 
-- [ ] **Step 1: Write onboarding, install and update-gating tests**
+- [x] **Step 1: Write onboarding, install and update-gating tests**
 
 Assert first launch redirects from `/home` to `/onboarding`; accepting saves settings and routes home. Android `beforeinstallprompt` is invoked only on click. iOS without that event displays `分享 → 添加到主屏幕`. `onNeedRefresh` exposes refresh but does not call updater while `canReload()` is false.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/pwa src/pages/OnboardingPage.test.ts src/router/routes.test.ts`.
 
 Expected: FAIL because install/storage/update helpers are missing.
 
-- [ ] **Step 3: Implement manifest and local SVG icon**
+- [x] **Step 3: Implement manifest and local SVG icon**
 
 Configure `VitePWA({ registerType: 'prompt' })`, name/short name `拾梦`, `display: 'standalone'`, theme `#151827`, background `#eef0f3`, start URL `./#/home`, and SVG icons with `sizes: 'any'`. The icon uses one crescent, one narrow door and two water ripples with a consistent stroke; no remote assets or fonts.
 
 Use `workbox: { cleanupOutdatedCaches: true, navigateFallback: 'index.html', runtimeCaching: [] }`. Only compiled app-shell assets enter the precache; no rule may runtime-cache AI requests, IndexedDB content, media Blobs or exported files.
 
-- [ ] **Step 4: Implement onboarding, persistence and safe update**
+- [x] **Step 4: Implement onboarding, persistence and safe update**
 
 Call `navigator.storage.persist()` after onboarding explanation. Store `granted | denied | unsupported` for session display. Use `navigator.storage.estimate()` plus IndexedDB counts to show used bytes, quota, dream count, audio count and image count. Settings exposes `system | reduce | allow`; `system` follows `prefers-reduced-motion`, while the other values explicitly override it. Register SW only in production. On refresh acceptance, flush autosave and finish/cancel recording before `updateServiceWorker(true)`.
 
-- [ ] **Step 5: Verify and commit PWA behavior**
+- [x] **Step 5: Verify and commit PWA behavior**
 
 ```bash
 npm test -- src/pwa src/pages/OnboardingPage.test.ts src/router/routes.test.ts
