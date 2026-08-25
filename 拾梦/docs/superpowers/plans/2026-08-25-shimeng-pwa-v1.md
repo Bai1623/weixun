@@ -75,7 +75,7 @@
 - Produces routes `/onboarding`、`/home`、`/record/:id?`、`/dream/:id`、`/archive`、`/settings`。
 - Produces CSS tokens `--color-night`、`--color-mist`、`--color-moon`、`--color-blush`、`--safe-bottom`。
 
-- [ ] **Step 1: Create package and tool configuration**
+- [x] **Step 1: Create package and tool configuration**
 
 Use `apply_patch` to create `package.json` with these exact scripts and dependency versions:
 
@@ -99,7 +99,7 @@ Use `apply_patch` to create `package.json` with these exact scripts and dependen
     "@vitejs/plugin-vue": "^6.0.1",
     "fflate": "^0.8.3",
     "idb": "^8.0.3",
-    "lucide-vue-next": "^0.468.0",
+    "@lucide/vue": "^1.34.0",
     "pinia": "^3.0.3",
     "vite": "^7.1.12",
     "vite-plugin-pwa": "^1.1.0",
@@ -135,7 +135,7 @@ webServer: {
 }
 ```
 
-- [ ] **Step 2: Install dependencies and capture the lockfile**
+- [x] **Step 2: Install dependencies and capture the lockfile**
 
 Run:
 
@@ -146,7 +146,7 @@ npm install
 
 Expected: exit 0 and `package-lock.json` exists.
 
-- [ ] **Step 3: Write failing router and shell tests**
+- [x] **Step 3: Write failing router and shell tests**
 
 ```ts
 expect(routes.map((route) => route.path)).toEqual([
@@ -156,13 +156,13 @@ expect(routes.map((route) => route.path)).toEqual([
 
 `AppLayout.test.ts` mounts router stubs and asserts brand `拾梦`, a `<main>`, and bottom links named `梦河`、`记录`、`档案`、`设置`.
 
-- [ ] **Step 4: Run tests and verify the expected failure**
+- [x] **Step 4: Run tests and verify the expected failure**
 
 Run `npm test -- src/router/routes.test.ts src/layouts/AppLayout.test.ts`.
 
 Expected: FAIL because `router/index.ts` and `AppLayout.vue` do not exist.
 
-- [ ] **Step 5: Implement route table, shell and visual tokens**
+- [x] **Step 5: Implement route table, shell and visual tokens**
 
 ```ts
 export const routes: RouteRecordRaw[] = [
@@ -191,7 +191,7 @@ button, a, input, textarea, select { min-height: 44px; }
 
 Each initial page renders its real heading and one-line empty/loading copy; later tasks replace the body without changing routes.
 
-- [ ] **Step 6: Verify and commit the foundation**
+- [x] **Step 6: Verify and commit the foundation**
 
 ```bash
 npm test -- src/router/routes.test.ts src/layouts/AppLayout.test.ts
