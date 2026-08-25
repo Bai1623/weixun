@@ -290,7 +290,7 @@ Expected: repository tests PASS and TypeScript build exits 0.
 - Produces store actions `load()`、`openDraft(id?)`、`saveDraft(record)`、`publish(record)`、`updateSaved(record)`.
 - Produces `useDraftAutosave(recordRef, save, 400)` with `flush()` and `dispose()`.
 
-- [ ] **Step 1: Write failing store and autosave UI tests**
+- [x] **Step 1: Write failing store and autosave UI tests**
 
 ```ts
 await wrapper.get('textarea[name="rawText"]').setValue('我沿着水面走向一扇门')
@@ -303,13 +303,13 @@ expect(saveDraft).toHaveBeenCalledTimes(1)
 Also assert refresh/loading restores the draft and `保存梦境` changes status to `saved` without requiring a title.
 Mock a repository `StorageWriteError` and assert the textarea keeps its content while a persistent `保存失败，内容仍保留在当前页面` warning is shown.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/dreams/stores/dreams.test.ts src/pages/RecordPage.test.ts`.
 
 Expected: FAIL because store, composable and editor do not exist.
 
-- [ ] **Step 3: Implement store orchestration and autosave**
+- [x] **Step 3: Implement store orchestration and autosave**
 
 Store state is `savedDreams: DreamRecord[]` and `activeDraft: DreamRecord | null`; repositories remain persistence owners. `publish` rejects only when both original text and recordings are empty:
 
@@ -319,11 +319,11 @@ if (!record.rawText.trim() && record.audioAssetIds.length === 0) {
 }
 ```
 
-- [ ] **Step 4: Implement editor fields and RecordPage**
+- [x] **Step 4: Implement editor fields and RecordPage**
 
 Render named controls `rawText`、`dreamedAt`、`mood`、`clarity`、`lucid`、`tags`、`favorite`. Split tags on Chinese/English commas, trim, deduplicate, and remove empty values. Keep save visible above the safe-area inset.
 
-- [ ] **Step 5: Verify and commit the editor**
+- [x] **Step 5: Verify and commit the editor**
 
 ```bash
 npm test -- src/features/dreams/stores/dreams.test.ts src/pages/RecordPage.test.ts
