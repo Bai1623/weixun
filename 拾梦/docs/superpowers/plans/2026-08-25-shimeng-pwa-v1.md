@@ -471,7 +471,7 @@ Expected: tests PASS and all fake media tracks receive `stop()`.
 - Produces `filterDreams(dreams, filters): DreamRecord[]` and store actions `toggleFavorite(id)`、`scheduleDelete(id, 8000)`、`undoDelete(id)`.
 - `DreamFilters` emits one immutable `DreamFiltersValue` containing query, moods, clarity, lucid-only and favorite-only.
 
-- [ ] **Step 1: Write filter and delayed-delete tests**
+- [x] **Step 1: Write filter and delayed-delete tests**
 
 Search title, original text, summary and tags case-insensitively. With fake timers, assert repository deletion occurs at 8000ms, not 7999ms, and `undoDelete` cancels it.
 
@@ -482,13 +482,13 @@ vi.advanceTimersByTime(1)
 expect(deleteWithMedia).toHaveBeenCalledWith('dream-1')
 ```
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/dreams/search/filterDreams.test.ts src/pages/DreamDetailPage.test.ts src/pages/ArchivePage.test.ts`.
 
 Expected: FAIL because filter and final pages are not implemented.
 
-- [ ] **Step 3: Implement filtering and month grouping**
+- [x] **Step 3: Implement filtering and month grouping**
 
 Normalize with `toLocaleLowerCase('zh-CN')`; every active filter is conjunctive. Group with local `YYYY年M月` labels and order groups descending.
 
@@ -502,11 +502,11 @@ export interface DreamFiltersValue {
 }
 ```
 
-- [ ] **Step 4: Implement detail and archive actions**
+- [x] **Step 4: Implement detail and archive actions**
 
 Detail renders original text, optional summary, metadata, recordings, favorite, edit and delete. The undo toast reads `梦境已移入雾中` and keeps `撤销` visible for eight seconds.
 
-- [ ] **Step 5: Verify and commit archive/detail**
+- [x] **Step 5: Verify and commit archive/detail**
 
 ```bash
 npm test -- src/features/dreams/search src/pages/DreamDetailPage.test.ts src/pages/ArchivePage.test.ts

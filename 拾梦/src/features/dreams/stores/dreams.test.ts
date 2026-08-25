@@ -1,5 +1,5 @@
 import { createPinia, setActivePinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { StorageWriteError } from '@/core/persistence/db'
 
@@ -39,6 +39,11 @@ describe('dreams store', () => {
     repository.getDrafts.mockResolvedValue([])
     repository.get.mockResolvedValue(undefined)
     repository.put.mockResolvedValue(undefined)
+    repository.deleteWithMedia.mockResolvedValue(undefined)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('loads saved dreams and restores the most recent draft after refresh', async () => {
@@ -100,5 +105,34 @@ describe('dreams store', () => {
     await expect(store.saveDraft(draft)).rejects.toBe(failure)
     expect(store.activeDraft?.rawText).toBe('不能丢失的梦境文字')
     expect(store.storageError).toBe('保存失败，内容仍保留在当前页面')
+  })
+
+  it('waits eight seconds before permanently deleting a dream and its media', async () => {
+    vi.useFakeTimers()
+    const saved = savedDream('saved-1', '会消失的梦')
+    const store = useDreamsStore()
+    store.savedDreams = [saved]
+
+    store.scheduleDelete(saved.id, 8_000)
+    expect(store.savedDreams).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(7_999)
+    expect(repository.deleteWithMedia).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(repository.deleteWithMedia).toHaveBeenCalledWith(saved.id)
+  })
+
+  it('restores a scheduled dream when deletion is undone', async () => {
+    vi.useFakeTimers()
+    const saved = savedDream('saved-1', '回来的梦')
+    const store = useDreamsStore()
+    store.savedDreams = [saved]
+
+    store.scheduleDelete(saved.id, 8_000)
+    store.undoDelete(saved.id)
+    await vi.advanceTimersByTimeAsync(8_000)
+
+    expect(repository.deleteWithMedia).not.toHaveBeenCalled()
+    expect(store.savedDreams).toEqual([saved])
   })
 })

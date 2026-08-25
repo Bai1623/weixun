@@ -6,6 +6,7 @@ import { createDreamRepository, type DreamRepository } from '../data/dreamReposi
 import { createDraftDream, type DreamRecord } from '../model/dream'
 
 let repositoryPromise: Promise<DreamRepository> | undefined
+const deletionTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function getDreamRepository(): Promise<DreamRepository> {
   repositoryPromise ??= openShimengDb().then(createDreamRepository)
@@ -28,6 +29,7 @@ export const useDreamsStore = defineStore('dreams', {
     savedDreams: [] as DreamRecord[],
     activeDraft: null as DreamRecord | null,
     storageError: null as string | null,
+    pendingDeletions: {} as Record<string, DreamRecord>,
     loaded: false,
   }),
   actions: {
@@ -126,6 +128,54 @@ export const useDreamsStore = defineStore('dreams', {
       }
       this.storageError = null
       return saved
+    },
+    async toggleFavorite(id: string): Promise<DreamRecord | undefined> {
+      const dream = this.savedDreams.find((record) => record.id === id)
+      if (!dream) return undefined
+      return this.updateSaved({ ...dream, favorite: !dream.favorite })
+    },
+    scheduleDelete(id: string, delay = 8_000): void {
+      const dream = this.savedDreams.find((record) => record.id === id)
+      if (!dream) return
+
+      const existingTimer = deletionTimers.get(id)
+      if (existingTimer) clearTimeout(existingTimer)
+      this.savedDreams = this.savedDreams.filter((record) => record.id !== id)
+      this.pendingDeletions = { ...this.pendingDeletions, [id]: dream }
+
+      const timer = setTimeout(async () => {
+        deletionTimers.delete(id)
+        try {
+          const repository = await getDreamRepository()
+          await repository.deleteWithMedia(id)
+          const remaining = { ...this.pendingDeletions }
+          delete remaining[id]
+          this.pendingDeletions = remaining
+        } catch {
+          const pending = this.pendingDeletions[id]
+          if (pending) this.savedDreams = [pending, ...this.savedDreams]
+          const remaining = { ...this.pendingDeletions }
+          delete remaining[id]
+          this.pendingDeletions = remaining
+          this.storageError = '删除失败，梦境仍保留在本机'
+        }
+      }, delay)
+      deletionTimers.set(id, timer)
+    },
+    undoDelete(id: string): void {
+      const timer = deletionTimers.get(id)
+      if (timer) clearTimeout(timer)
+      deletionTimers.delete(id)
+
+      const dream = this.pendingDeletions[id]
+      if (!dream) return
+      this.savedDreams = [dream, ...this.savedDreams].sort(
+        (first, second) =>
+          second.dreamedAt.localeCompare(first.dreamedAt) || second.createdAt.localeCompare(first.createdAt),
+      )
+      const remaining = { ...this.pendingDeletions }
+      delete remaining[id]
+      this.pendingDeletions = remaining
     },
   },
 })
