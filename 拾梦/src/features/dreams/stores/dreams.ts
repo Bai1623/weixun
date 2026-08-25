@@ -40,9 +40,10 @@ export const useDreamsStore = defineStore('dreams', {
     },
     async openDraft(id?: string): Promise<DreamRecord> {
       const repository = await getDreamRepository()
+      const requestedId = id?.trim() || undefined
 
-      if (id) {
-        const existing = await repository.get(id)
+      if (requestedId) {
+        const existing = await repository.get(requestedId)
         if (existing) {
           this.activeDraft = existing
           return existing
@@ -51,7 +52,7 @@ export const useDreamsStore = defineStore('dreams', {
         return this.activeDraft
       }
 
-      const draft = createDraftDream(id ?? crypto.randomUUID(), new Date())
+      const draft = createDraftDream(requestedId ?? crypto.randomUUID(), new Date())
       this.activeDraft = draft
 
       try {

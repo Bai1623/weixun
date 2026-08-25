@@ -350,7 +350,7 @@ Expected: tests PASS; a text-only dream can be saved and reloaded.
 - Consumes `DreamRecord`.
 - Produces `createCoverScene(record): CoverScene`, `renderDreamCover(canvas, scene, size): void`, and `<DreamCover :dream :decorative="boolean" />`.
 
-- [ ] **Step 1: Write deterministic-scene tests**
+- [x] **Step 1: Write deterministic-scene tests**
 
 ```ts
 expect(createCoverScene(dream)).toEqual(createCoverScene(structuredClone(dream)))
@@ -360,13 +360,13 @@ expect(createCoverScene({ ...dream, id: 'other', coverSeed: 'other' }).stars)
 
 Also assert `fearful` selects the dark palette and clarity 1 has higher fog opacity than clarity 5.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/dreams/cover/coverScene.test.ts src/pages/HomePage.test.ts`.
 
 Expected: FAIL because cover modules and final HomePage are absent.
 
-- [ ] **Step 3: Implement seeded parameters and Canvas layers**
+- [x] **Step 3: Implement seeded parameters and Canvas layers**
 
 Use a local string hash plus Mulberry32 PRNG. `CoverScene` contains palette colors, `fogOpacity`, `light`, `stars`, `ripples`, and `grainSeed`. Draw gradient sky/water, blurred light, horizon haze, stars, ripples, then low-opacity grain. Do not fetch image assets.
 
@@ -382,11 +382,11 @@ export interface CoverScene {
 }
 ```
 
-- [ ] **Step 4: Implement DreamCover, DreamCard and HomePage**
+- [x] **Step 4: Implement DreamCover, DreamCard and HomePage**
 
 Use `ResizeObserver` to redraw canvas at device pixel ratio. Home shows an honest empty state when no saved dreams exist; otherwise order by `dreamedAt` then `createdAt` descending. A missing title displays `未命名的梦`, never generated prose.
 
-- [ ] **Step 5: Verify and commit covers**
+- [x] **Step 5: Verify and commit covers**
 
 ```bash
 npm test -- src/features/dreams/cover/coverScene.test.ts src/pages/HomePage.test.ts

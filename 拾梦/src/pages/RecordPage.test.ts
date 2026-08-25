@@ -59,6 +59,7 @@ describe('RecordPage', () => {
     const wrapper = await mountRecordPage()
     const textarea = wrapper.get('textarea[name="rawText"]')
 
+    expect(storeHolder.current.openDraft).toHaveBeenCalledWith(undefined)
     expect(wrapper.find('[name="dreamedAt"]').exists()).toBe(true)
     expect(wrapper.find('[name="mood"]').exists()).toBe(true)
     expect(wrapper.find('[name="clarity"]').exists()).toBe(true)

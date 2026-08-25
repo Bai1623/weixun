@@ -54,6 +54,15 @@ describe('dreams store', () => {
     expect(store.activeDraft).toEqual(draft)
   })
 
+  it('creates a non-empty ID when an optional route parameter is blank', async () => {
+    const store = useDreamsStore()
+
+    const draft = await store.openDraft('')
+
+    expect(draft.id).not.toBe('')
+    expect(repository.put).toHaveBeenCalledWith(draft)
+  })
+
   it('publishes a titleless text dream and removes its draft state', async () => {
     const draft = {
       ...createDraftDream('draft-1', new Date('2026-08-25T01:00:00.000Z')),

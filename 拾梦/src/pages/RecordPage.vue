@@ -50,7 +50,8 @@ async function initialize() {
   openError.value = null
   try {
     await store.load()
-    const routeId = typeof route.params.id === 'string' ? route.params.id : undefined
+    const routeId =
+      typeof route.params.id === 'string' && route.params.id.trim() ? route.params.id : undefined
     await store.openDraft(routeId)
   } catch {
     if (!store.activeDraft) openError.value = '本地草稿暂时无法创建，请检查浏览器存储空间。'
