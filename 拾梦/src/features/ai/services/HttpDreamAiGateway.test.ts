@@ -17,9 +17,12 @@ describe('HttpDreamAiGateway', () => {
   })
 
   it('posts organized dream JSON to the configured server endpoint', async () => {
-    const fetcher = vi.fn().mockResolvedValue(
-      jsonResponse({ title: '雾里的门', summary: '沿水远行', mood: 'mysterious', keywords: ['水面', '门'] }),
-    )
+    const fetcher = vi.fn(function (this: unknown) {
+      expect(this).toBe(globalThis)
+      return Promise.resolve(
+        jsonResponse({ title: '雾里的门', summary: '沿水远行', mood: 'mysterious', keywords: ['水面', '门'] }),
+      )
+    })
     const gateway = new HttpDreamAiGateway('https://dream.example/api/', fetcher)
 
     await expect(gateway.organizeDream(organizeInput, new AbortController().signal)).resolves.toEqual({

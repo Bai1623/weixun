@@ -21,7 +21,7 @@ describe('AiActionPanel', () => {
   it('keeps offline features honest when no AI endpoint is configured', () => {
     const wrapper = mount(AiActionPanel, {
       props: { dream, endpoint: null },
-      global: { plugins: [createPinia()] },
+      global: { plugins: [createPinia()], stubs: { Teleport: true } },
     })
 
     expect(wrapper.text()).toContain('尚未配置 AI 服务')
@@ -31,7 +31,7 @@ describe('AiActionPanel', () => {
   it('makes zero requests when the user cancels the data consent dialog', async () => {
     const wrapper = mount(AiActionPanel, {
       props: { dream, endpoint: 'https://dream.example' },
-      global: { plugins: [createPinia()] },
+      global: { plugins: [createPinia()], stubs: { Teleport: true } },
     })
 
     await wrapper.get('button[aria-label="AI 整理梦境"]').trigger('click')
@@ -47,7 +47,7 @@ describe('AiActionPanel', () => {
     const saveDream = vi.fn(async (record) => record)
     const wrapper = mount(AiActionPanel, {
       props: { dream, endpoint: 'https://dream.example', saveDream },
-      global: { plugins: [createPinia()] },
+      global: { plugins: [createPinia()], stubs: { Teleport: true } },
     })
 
     await wrapper.get('button[aria-label="AI 整理梦境"]').trigger('click')
@@ -69,7 +69,7 @@ describe('AiActionPanel', () => {
     const saveDream = vi.fn(async (record) => record)
     const wrapper = mount(AiActionPanel, {
       props: { dream, endpoint: 'https://dream.example', saveDream },
-      global: { plugins: [createPinia()] },
+      global: { plugins: [createPinia()], stubs: { Teleport: true } },
     })
 
     await wrapper.get('button[aria-label="AI 整理梦境"]').trigger('click')

@@ -755,7 +755,7 @@ Expected: tests PASS and production build contains manifest and service worker.
 - Consumes all prior public routes and visible labels.
 - Produces a reproducible QA checklist and clean release build; no new product scope.
 
-- [ ] **Step 1: Write E2E tests for accepted flows**
+- [x] **Step 1: Write E2E tests for accepted flows**
 
 ```ts
 test('creates, edits, favorites, searches and deletes a local dream', async ({ page }) => {
@@ -768,7 +768,7 @@ test('creates, edits, favorites, searches and deletes a local dream', async ({ p
 
 Add separate tests for backup/media restore, offline core flow, and zero AI calls before consent. Create data through visible UI. The offline test first loads the production preview, waits for `navigator.serviceWorker.ready`, then switches the context offline and reloads. At 360×800 assert `document.documentElement.scrollWidth === 360`.
 
-- [ ] **Step 2: Run E2E and capture concrete failures**
+- [x] **Step 2: Run E2E and capture concrete failures**
 
 ```bash
 npx playwright install chromium
@@ -777,15 +777,15 @@ npm run test:e2e
 
 Expected: each failure maps to a named accepted flow; fix only those failures and the defined accessibility issues.
 
-- [ ] **Step 3: Fix verified integration and accessibility failures**
+- [x] **Step 3: Fix verified integration and accessibility failures**
 
 Every icon-only control gets an accessible name; labels connect to controls; focus rings remain visible; normal text meets WCAG AA contrast; dialogs trap focus and restore it on close. Do not add unrelated features or redesign accepted screens.
 
-- [ ] **Step 4: Write the manual mobile checklist**
+- [x] **Step 4: Write the manual mobile checklist**
 
 `docs/qa/v1-mobile-checklist.md` lists pass/fail checks for Android Chrome and iPhone Safari/Add to Home Screen: safe areas, keyboard, microphone permission, playback after restart, backup download/import, reduced motion, install instructions, storage warning and update while editing.
 
-- [ ] **Step 5: Run the complete verification suite**
+- [x] **Step 5: Run the complete verification suite**
 
 ```bash
 npm run lint
@@ -798,7 +798,7 @@ rg -n "TODO|TBD|console\.log|API_KEY|sk-[A-Za-z0-9]" src public e2e docs package
 
 Expected: lint, unit tests, build and E2E exit 0; scan shows no unfinished markers, debug logs or embedded secrets.
 
-- [ ] **Step 6: Commit the verified V1**
+- [x] **Step 6: Commit the verified V1**
 
 ```bash
 git add e2e docs/qa src public package.json package-lock.json vite.config.ts playwright.config.ts

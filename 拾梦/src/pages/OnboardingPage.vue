@@ -60,11 +60,7 @@ async function completeOnboarding() {
   busy.value = true
   error.value = null
   try {
-    try {
-      await requestPersistentStorage()
-    } catch {
-      // Browsers may reject this optional request; the app remains local-first without it.
-    }
+    void requestPersistentStorage().catch(() => undefined)
     await settings.update({ onboardingCompleted: true })
     await router.push('/home')
   } catch {

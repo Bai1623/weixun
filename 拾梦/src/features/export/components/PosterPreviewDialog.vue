@@ -1,6 +1,13 @@
 <template>
   <div class="poster-backdrop">
-    <section class="poster-dialog" role="dialog" aria-modal="true" aria-label="梦境长图预览">
+    <section
+      ref="dialog"
+      class="poster-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="梦境长图预览"
+      @keydown="trapFocus"
+    >
       <header>
         <div>
           <p class="eyebrow">Poster preview</p>
@@ -32,7 +39,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { Download, X } from '@lucide/vue'
 
 import type { DreamRecord } from '@/features/dreams/model/dream'
@@ -44,8 +51,13 @@ const blobs = ref<Blob[]>([])
 const urls = ref<string[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
+const dialog = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
 
 onMounted(async () => {
+  previouslyFocused = document.activeElement as HTMLElement | null
+  await nextTick()
+  dialog.value?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
   try {
     blobs.value = await renderDreamPosters(props.dream, props.mode)
     urls.value = blobs.value.map((blob) => URL.createObjectURL(blob))
@@ -67,7 +79,30 @@ function downloadAll() {
   })
 }
 
-onBeforeUnmount(() => urls.value.forEach((url) => URL.revokeObjectURL(url)))
+function trapFocus(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+    return
+  }
+  if (event.key !== 'Tab' || !dialog.value) return
+  const controls = [...dialog.value.querySelectorAll<HTMLElement>('button:not(:disabled), [href]')]
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (!first || !last) return
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+onBeforeUnmount(() => {
+  urls.value.forEach((url) => URL.revokeObjectURL(url))
+  previouslyFocused?.focus()
+})
 </script>
 
 <style scoped>

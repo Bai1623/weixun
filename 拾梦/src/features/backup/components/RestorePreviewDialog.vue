@@ -1,6 +1,13 @@
 <template>
   <div class="dialog-backdrop" role="presentation">
-    <section class="restore-dialog glass-card" role="dialog" aria-modal="true" aria-labelledby="restore-title">
+    <section
+      ref="dialog"
+      class="restore-dialog glass-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="restore-title"
+      @keydown="trapFocus"
+    >
       <p class="eyebrow">Restore preview</p>
       <h2 id="restore-title">先看看将恢复什么</h2>
       <p>将恢复 {{ inspection.counts.dreams }} 个梦和 {{ inspection.counts.media }} 个媒体文件</p>
@@ -25,10 +32,42 @@
 </template>
 
 <script setup lang="ts">
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+
 import type { BackupInspection } from '../model/backup'
 
 defineProps<{ inspection: BackupInspection; busy?: boolean }>()
 const emit = defineEmits<{ confirm: []; cancel: [] }>()
+const dialog = ref<HTMLElement | null>(null)
+let previouslyFocused: HTMLElement | null = null
+
+function trapFocus(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('cancel')
+    return
+  }
+  if (event.key !== 'Tab' || !dialog.value) return
+  const controls = [...dialog.value.querySelectorAll<HTMLElement>('button:not(:disabled)')]
+  const first = controls[0]
+  const last = controls[controls.length - 1]
+  if (!first || !last) return
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+onMounted(async () => {
+  previouslyFocused = document.activeElement as HTMLElement | null
+  await nextTick()
+  dialog.value?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
+})
+
+onBeforeUnmount(() => previouslyFocused?.focus())
 </script>
 
 <style scoped>

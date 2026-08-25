@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, shallowRef } from 'vue'
 import { Database, Download, ShieldCheck, Smartphone, Upload } from '@lucide/vue'
 import type { IDBPDatabase } from 'idb'
 
@@ -167,7 +167,7 @@ const motionDraft = ref<ReducedMotionOverride>('system')
 const storageSummary = ref<StorageSummary | null>(null)
 const aiMessage = ref<string | null>(null)
 const aiError = ref<string | null>(null)
-const inspection = ref<BackupInspection | null>(null)
+const inspection = shallowRef<BackupInspection | null>(null)
 const showExportWarning = ref(false)
 const busy = ref(false)
 const message = ref<string | null>(null)
