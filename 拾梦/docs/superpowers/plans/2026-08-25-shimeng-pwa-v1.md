@@ -585,17 +585,17 @@ Expected: tests PASS and backup bytes round-trip without loss.
 - Consumes `DreamRecord`, `MediaRepository`, `createCoverScene`, `renderDreamCover`.
 - Produces `layoutPosterText(ctx, text, width, options): PosterPage[]` and `renderDreamPosters(dream): Promise<Blob[]>`.
 
-- [ ] **Step 1: Write wrapping and pagination tests**
+- [x] **Step 1: Write wrapping and pagination tests**
 
 Use deterministic mocked `measureText`. Assert short text creates one page, long Chinese text creates multiple pages, no line exceeds content width, and font size never falls below 28px at 1080px export width.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/export`.
 
 Expected: FAIL because poster layout and preview do not exist.
 
-- [ ] **Step 3: Implement poster layout and rendering**
+- [x] **Step 3: Implement poster layout and rendering**
 
 ```ts
 export interface PosterPage {
@@ -607,11 +607,11 @@ export interface PosterPage {
 
 Export at 1080px width. Use an AI image when present, otherwise render the offline cover. First page includes title/date/mood/tags; subsequent pages repeat a small `拾梦` mark and page number. `导出摘要` uses summary; full export paginates original text.
 
-- [ ] **Step 4: Implement preview and download**
+- [x] **Step 4: Implement preview and download**
 
 Preview every page. One page downloads `拾梦-{date}-{title}.png`; multiple pages download numbered PNGs after one confirmation. Revoke preview object URLs on close.
 
-- [ ] **Step 5: Verify and commit poster export**
+- [x] **Step 5: Verify and commit poster export**
 
 ```bash
 npm test -- src/features/export

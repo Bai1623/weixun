@@ -54,6 +54,28 @@
         <LocalAudioPlayer v-for="assetId in dream.audioAssetIds" :key="assetId" :asset-id="assetId" />
       </section>
 
+      <section class="poster-actions glass-card" aria-labelledby="poster-title">
+        <div>
+          <h2 id="poster-title">把梦留成一张长图</h2>
+          <p>仅导出画面与文字，不包含录音和隐私说明。</p>
+        </div>
+        <div>
+          <button type="button" class="quiet-button" aria-label="导出完整长图" @click="posterMode = 'full'">
+            <ImageDown :size="17" aria-hidden="true" />
+            导出全文
+          </button>
+          <button
+            v-if="dream.summary"
+            type="button"
+            class="quiet-button"
+            aria-label="导出摘要长图"
+            @click="posterMode = 'summary'"
+          >
+            导出摘要
+          </button>
+        </div>
+      </section>
+
       <footer class="detail-actions">
         <RouterLink class="quiet-button" :to="`/record/${dream.id}`" aria-label="编辑梦境">
           <PenLine :size="17" aria-hidden="true" />
@@ -64,6 +86,13 @@
           删除
         </button>
       </footer>
+
+      <PosterPreviewDialog
+        v-if="posterMode"
+        :dream="dream"
+        :mode="posterMode"
+        @close="posterMode = null"
+      />
     </template>
 
     <div v-else-if="pendingDream" class="mist-state glass-card">
@@ -80,15 +109,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { Heart, PenLine, Trash2, Undo2 } from '@lucide/vue'
+import { Heart, ImageDown, PenLine, Trash2, Undo2 } from '@lucide/vue'
 
 import DreamCover from '@/features/dreams/components/DreamCover.vue'
 import { useDreamsStore } from '@/features/dreams/stores/dreams'
+import PosterPreviewDialog from '@/features/export/components/PosterPreviewDialog.vue'
+import type { PosterMode } from '@/features/export/services/posterService'
 import LocalAudioPlayer from '@/features/media/components/LocalAudioPlayer.vue'
 
 const route = useRoute()
 const store = useDreamsStore()
 const loading = ref(true)
+const posterMode = ref<PosterMode | null>(null)
 const dreamId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
 const dream = computed(() => store.savedDreams.find((record) => record.id === dreamId.value))
 const pendingDream = computed(() => store.pendingDeletions[dreamId.value])
@@ -279,6 +311,36 @@ onMounted(async () => {
   justify-content: space-between;
   gap: 1rem;
   margin-top: 2rem;
+}
+
+.poster-actions {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.1rem;
+}
+
+.poster-actions h2,
+.poster-actions p {
+  margin: 0;
+}
+
+.poster-actions h2 {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.poster-actions p {
+  margin-top: 0.25rem;
+  color: var(--color-ink-muted);
+  font-size: 0.66rem;
+}
+
+.poster-actions > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
 }
 
 .delete-button {
