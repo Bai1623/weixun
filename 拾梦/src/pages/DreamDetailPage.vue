@@ -54,6 +54,12 @@
         <LocalAudioPlayer v-for="assetId in dream.audioAssetIds" :key="assetId" :asset-id="assetId" />
       </section>
 
+      <AiActionPanel
+        :dream="dream"
+        :endpoint="settingsStore.settings.aiEndpoint"
+        :save-dream="saveAiDream"
+      />
+
       <section class="poster-actions glass-card" aria-labelledby="poster-title">
         <div>
           <h2 id="poster-title">把梦留成一张长图</h2>
@@ -111,14 +117,18 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Heart, ImageDown, PenLine, Trash2, Undo2 } from '@lucide/vue'
 
+import AiActionPanel from '@/features/ai/components/AiActionPanel.vue'
 import DreamCover from '@/features/dreams/components/DreamCover.vue'
+import type { DreamRecord } from '@/features/dreams/model/dream'
 import { useDreamsStore } from '@/features/dreams/stores/dreams'
 import PosterPreviewDialog from '@/features/export/components/PosterPreviewDialog.vue'
 import type { PosterMode } from '@/features/export/services/posterService'
 import LocalAudioPlayer from '@/features/media/components/LocalAudioPlayer.vue'
+import { useSettingsStore } from '@/features/settings/stores/settings'
 
 const route = useRoute()
 const store = useDreamsStore()
+const settingsStore = useSettingsStore()
 const loading = ref(true)
 const posterMode = ref<PosterMode | null>(null)
 const dreamId = computed(() => (typeof route.params.id === 'string' ? route.params.id : ''))
@@ -151,9 +161,13 @@ function undoDelete() {
   store.undoDelete(dreamId.value)
 }
 
+async function saveAiDream(record: DreamRecord) {
+  return store.updateSaved(record)
+}
+
 onMounted(async () => {
   try {
-    await store.load()
+    await Promise.all([store.load(), settingsStore.load()])
   } finally {
     loading.value = false
   }

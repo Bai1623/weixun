@@ -643,17 +643,17 @@ Expected: tests PASS and long text never uses unreadably small font.
 - Produces `DreamAiGateway` methods `organizeDream`、`transcribeAudio`、`generateDreamImage`.
 - HTTP routes are `POST {endpoint}/organize` JSON, `POST {endpoint}/transcribe` multipart field `audio`, and `POST {endpoint}/image` JSON returning an image Blob.
 
-- [ ] **Step 1: Write unconfigured, canceled, timeout and success tests**
+- [x] **Step 1: Write unconfigured, canceled, timeout and success tests**
 
 Assert an empty endpoint renders `尚未配置 AI 服务`; canceling consent makes zero fetch calls; organize timeout is 45 seconds; image/transcription timeout is 120 seconds; malformed mood or non-image response is rejected without mutating the dream.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/ai`.
 
 Expected: FAIL because gateway and AI UI are not defined.
 
-- [ ] **Step 3: Define and validate gateway contracts**
+- [x] **Step 3: Define and validate gateway contracts**
 
 ```ts
 export interface DreamAiGateway {
@@ -665,13 +665,13 @@ export interface DreamAiGateway {
 
 Validate response keys, lengths, mood union, keyword array and image MIME. Allow HTTPS endpoints, plus HTTP only for `localhost` and `127.0.0.1` development.
 
-- [ ] **Step 4: Implement consent and non-destructive application**
+- [x] **Step 4: Implement consent and non-destructive application**
 
 Consent enumerates `梦境正文与已选元数据`、`所选录音` or `摘要、情绪与关键词`. Organize returns a candidate preview; applying updates title/summary/mood/keywords but never `rawText`. Transcription inserts candidate text only after confirmation. AI image saves a new `MediaAsset`, then updates `aiImageAssetId`; remove the old AI image only after the new one persists.
 
 `恢复氛围封面` clears `aiImageAssetId` only after explicit confirmation and then deletes the former AI image asset. `清除 AI 整理` clears title、summary、keywords and `aiUpdatedAt` without changing original text or user-entered metadata.
 
-- [ ] **Step 5: Verify and commit AI boundaries**
+- [x] **Step 5: Verify and commit AI boundaries**
 
 ```bash
 npm test -- src/features/ai src/pages/DreamDetailPage.test.ts src/pages/SettingsPage.test.ts

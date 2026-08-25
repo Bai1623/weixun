@@ -12,6 +12,9 @@ const storeHolder = vi.hoisted(() => ({ current: undefined as unknown }))
 vi.mock('@/features/dreams/stores/dreams', () => ({
   useDreamsStore: () => storeHolder.current,
 }))
+vi.mock('@/features/settings/stores/settings', () => ({
+  useSettingsStore: () => ({ settings: { aiEndpoint: null }, load: vi.fn(async () => undefined) }),
+}))
 
 async function mountDetail(dream: DreamRecord) {
   const store = reactive({
@@ -22,6 +25,7 @@ async function mountDetail(dream: DreamRecord) {
       const found = store.savedDreams.find((record) => record.id === id)
       if (found) found.favorite = !found.favorite
     }),
+    updateSaved: vi.fn(async (record: DreamRecord) => record),
     scheduleDelete: vi.fn((id: string) => {
       const found = store.savedDreams.find((record) => record.id === id)
       if (found) store.pendingDeletions[id] = found
@@ -47,7 +51,7 @@ async function mountDetail(dream: DreamRecord) {
   const wrapper = mount(DreamDetailPage, {
     global: {
       plugins: [router],
-      stubs: { DreamCover: true, LocalAudioPlayer: true },
+      stubs: { AiActionPanel: true, DreamCover: true, LocalAudioPlayer: true },
     },
   })
   await flushPromises()

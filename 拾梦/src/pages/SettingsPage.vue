@@ -15,10 +15,39 @@
       <div class="settings-item">
         <div>
           <span>AI 整理与生图</span>
-          <small>关闭 · 需要你主动配置服务端点</small>
+          <small>{{ settings.aiEndpoint ? '已连接自定义服务端点' : '关闭 · 需要你主动配置服务端点' }}</small>
         </div>
+        <span class="status-dot">{{ settings.aiEndpoint ? '可用' : '可选' }}</span>
       </div>
     </div>
+
+    <section class="ai-settings glass-card" aria-labelledby="ai-settings-title">
+      <header>
+        <div>
+          <p class="eyebrow">Private gateway</p>
+          <h2 id="ai-settings-title">AI 服务地址</h2>
+        </div>
+      </header>
+      <p>填写你信任的服务端地址。拾梦只调用其整理、转写和生图接口，不在浏览器保存 API Key。</p>
+      <form @submit.prevent="saveAiEndpoint">
+        <label for="ai-endpoint">HTTPS 地址</label>
+        <input
+          id="ai-endpoint"
+          v-model="aiEndpointDraft"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="https://your-dream-gateway.example"
+          aria-describedby="ai-endpoint-help"
+        />
+        <small id="ai-endpoint-help">本地开发可使用 localhost；留空保存即可关闭 AI。</small>
+        <button type="submit" class="primary-button" aria-label="保存 AI 服务地址" :disabled="busy">
+          保存服务地址
+        </button>
+      </form>
+      <p v-if="aiMessage" class="settings-message" role="status">{{ aiMessage }}</p>
+      <p v-if="aiError" class="settings-error" role="alert">{{ aiError }}</p>
+    </section>
 
     <section class="backup-card glass-card" aria-labelledby="backup-title">
       <header>
@@ -79,21 +108,17 @@ import { Download, ShieldCheck, Upload } from '@lucide/vue'
 import type { IDBPDatabase } from 'idb'
 
 import { openShimengDb, type ShimengDb } from '@/core/persistence/db'
+import { validateAiEndpoint } from '@/features/ai/services/HttpDreamAiGateway'
 import RestorePreviewDialog from '@/features/backup/components/RestorePreviewDialog.vue'
 import type { BackupInspection } from '@/features/backup/model/backup'
 import { createBackup, inspectBackup, restoreBackup } from '@/features/backup/services/backupService'
-import { createSettingsRepository } from '@/features/settings/data/settingsRepository'
-import type { AppSettings } from '@/features/settings/model/settings'
+import { useSettingsStore } from '@/features/settings/stores/settings'
 
-const defaultSettings: AppSettings = {
-  schemaVersion: 1,
-  onboardingCompleted: false,
-  reducedMotionOverride: 'system',
-  aiEndpoint: null,
-  lastBackupAt: null,
-}
-
-const settings = ref<AppSettings>({ ...defaultSettings })
+const settingsStore = useSettingsStore()
+const settings = computed(() => settingsStore.settings)
+const aiEndpointDraft = ref('')
+const aiMessage = ref<string | null>(null)
+const aiError = ref<string | null>(null)
 const inspection = ref<BackupInspection | null>(null)
 const showExportWarning = ref(false)
 const busy = ref(false)
@@ -112,9 +137,23 @@ async function getDatabase() {
 }
 
 onMounted(async () => {
-  const repository = createSettingsRepository(await getDatabase())
-  settings.value = (await repository.get()) ?? { ...defaultSettings }
+  await settingsStore.load()
+  aiEndpointDraft.value = settings.value.aiEndpoint ?? ''
 })
+
+async function saveAiEndpoint() {
+  aiMessage.value = null
+  aiError.value = null
+  try {
+    const candidate = aiEndpointDraft.value.trim()
+    const aiEndpoint = candidate ? validateAiEndpoint(candidate) : null
+    await settingsStore.update({ aiEndpoint })
+    aiEndpointDraft.value = aiEndpoint ?? ''
+    aiMessage.value = aiEndpoint ? 'AI 服务地址已保存' : 'AI 功能已关闭'
+  } catch (cause) {
+    aiError.value = cause instanceof Error ? cause.message : 'AI 服务地址保存失败'
+  }
+}
 
 async function exportBackup() {
   busy.value = true
@@ -130,9 +169,7 @@ async function exportBackup() {
     link.click()
     URL.revokeObjectURL(url)
 
-    const updated = { ...settings.value, lastBackupAt: new Date().toISOString() }
-    await createSettingsRepository(db).put(updated)
-    settings.value = updated
+    await settingsStore.update({ lastBackupAt: new Date().toISOString() })
     showExportWarning.value = false
     message.value = '完整备份已导出'
   } catch (cause) {
@@ -222,6 +259,68 @@ async function confirmRestore() {
   gap: 0.9rem;
   margin-top: 1.2rem;
   padding: 1.2rem;
+}
+
+.ai-settings {
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 1.2rem;
+  padding: 1.2rem;
+}
+
+.ai-settings h2,
+.ai-settings p {
+  margin: 0;
+}
+
+.ai-settings h2 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.ai-settings > p:not(.settings-message, .settings-error) {
+  color: var(--color-ink-muted);
+  font-size: 0.72rem;
+  line-height: 1.65;
+}
+
+.ai-settings form {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.ai-settings label {
+  color: var(--color-night-soft);
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+}
+
+.ai-settings input {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--color-line);
+  border-radius: 0.85rem;
+  color: var(--color-night);
+  background: rgb(255 255 255 / 44%);
+  outline: none;
+}
+
+.ai-settings input:focus {
+  border-color: rgb(141 82 103 / 42%);
+  box-shadow: 0 0 0 3px rgb(215 169 189 / 14%);
+}
+
+.ai-settings form small {
+  color: var(--color-ink-muted);
+  font-size: 0.62rem;
+  line-height: 1.5;
+}
+
+.ai-settings form .primary-button {
+  justify-self: start;
+  margin-top: 0.25rem;
 }
 
 .backup-card > header {
