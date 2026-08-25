@@ -16,6 +16,8 @@
       <p>{{ openError || '暂时无法打开记录页，请稍后再试。' }}</p>
       <button type="button" class="quiet-button" @click="initialize">重新尝试</button>
     </div>
+
+    <DreamRecorder v-if="draft" :dream="draft" @update:dream="draft = $event" />
   </section>
 </template>
 
@@ -27,6 +29,7 @@ import DreamEditor from '@/features/dreams/components/DreamEditor.vue'
 import { useDraftAutosave } from '@/features/dreams/composables/useDraftAutosave'
 import type { DreamRecord } from '@/features/dreams/model/dream'
 import { useDreamsStore } from '@/features/dreams/stores/dreams'
+import DreamRecorder from '@/features/media/components/DreamRecorder.vue'
 
 const route = useRoute()
 const router = useRouter()

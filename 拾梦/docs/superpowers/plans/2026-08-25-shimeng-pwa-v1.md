@@ -414,17 +414,17 @@ Expected: tests PASS and HomePage renders empty and populated states.
 - Consumes `MediaRepository.put`, `MediaRepository.get`, and active `DreamRecord.id`.
 - Produces `chooseRecorderMimeType(MediaRecorder): string | undefined` and states `idle | requesting | recording | paused | saving | ready | error`.
 
-- [ ] **Step 1: Write MIME selection and permission-failure tests**
+- [x] **Step 1: Write MIME selection and permission-failure tests**
 
 Preference order is `audio/webm;codecs=opus`、`audio/mp4`、`audio/webm`; undefined lets the browser choose. Reject `getUserMedia` with `NotAllowedError` and assert the editor stays present with `没有麦克风权限，仍可继续文字记录`.
 
-- [ ] **Step 2: Run tests and verify the expected failure**
+- [x] **Step 2: Run tests and verify the expected failure**
 
 Run `npm test -- src/features/media/services/mediaRecorder.test.ts src/features/media/components/DreamRecorder.test.ts`.
 
 Expected: FAIL because recording services are undefined.
 
-- [ ] **Step 3: Implement recorder state and resource cleanup**
+- [x] **Step 3: Implement recorder state and resource cleanup**
 
 ```ts
 export interface SavedRecording {
@@ -436,13 +436,13 @@ export interface SavedRecording {
 
 Collect `dataavailable` chunks, stop every stream track after completion/cancel/error, save only non-empty blobs, and revoke playback object URLs on replacement or unmount.
 
-- [ ] **Step 4: Persist recordings and connect both pages**
+- [x] **Step 4: Persist recordings and connect both pages**
 
 On save, create a `MediaAsset` ID, persist the Blob, append the ID to `DreamRecord.audioAssetIds`, then save the dream. `LocalAudioPlayer` resolves the Blob and renders `<audio controls>`.
 
 If media persistence throws `StorageWriteError`, keep the completed Blob in component memory until the user retries or discards it, do not append an asset ID, and show `录音尚未保存，请先释放空间或导出备份`.
 
-- [ ] **Step 5: Verify and commit recording**
+- [x] **Step 5: Verify and commit recording**
 
 ```bash
 npm test -- src/features/media
